@@ -4,17 +4,29 @@ import path from 'path';
 import os from 'os';
 import { UserAccount, UserRole, UserPermissions, getDefaultPermissionsForRole, AuditLogEntry, LicenseInfo, SystemSecurityPolicy } from '../src/types';
 
-// Storage paths
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Runtime security state lives outside the application release.
+// On RHEL/systemd this is /var/lib/splunk-doctor so upgrades do not erase users,
+// sessions, audit logs, or the signing key. Non-root/test runs remain self-contained.
+function resolveStateDir(): string {
+  const configured = process.env.SPLUNK_DOCTOR_STATE_DIR?.trim();
+  if (configured) return configured;
+  if (process.env.NODE_ENV === 'test') return path.join(process.cwd(), 'data');
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return '/var/lib/splunk-doctor';
+  return path.join(process.cwd(), 'data');
+}
+
+const DATA_DIR = resolveStateDir();
 const DB_PATH = path.join(DATA_DIR, 'security-db.json');
 const SECRET_KEY_PATH = path.join(DATA_DIR, 'master-signing.key');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
+function ensureStateDir(): void {
   try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+    try { fs.chmodSync(DATA_DIR, 0o700); } catch (_) {}
   } catch (_) {}
 }
+
+ensureStateDir();
 
 // Master Signing Key for HMAC Tokens & License Signatures
 function getOrCreateMasterKey(): string {
@@ -26,7 +38,12 @@ function getOrCreateMasterKey(): string {
   }
   const newKey = crypto.randomBytes(48).toString('hex');
   try {
-    fs.writeFileSync(SECRET_KEY_PATH, newKey, { mode: 0o600 });
+    ensureStateDir();
+    const tempPath = SECRET_KEY_PATH + '.tmp-' + process.pid + '-' + Date.now();
+    fs.writeFileSync(tempPath, newKey, { encoding: 'utf8', mode: 0o600 });
+    fs.chmodSync(tempPath, 0o600);
+    fs.renameSync(tempPath, SECRET_KEY_PATH);
+    try { fs.chmodSync(SECRET_KEY_PATH, 0o600); } catch (_) {}
   } catch (_) {}
   return newKey;
 }
@@ -424,7 +441,12 @@ export function getSecurityStore(): SecurityStore {
 export function saveSecurityStore(): void {
   if (!memoryStore) return;
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(memoryStore, null, 2), 'utf8');
+    ensureStateDir();
+    const tempPath = DB_PATH + '.tmp-' + process.pid + '-' + Date.now();
+    fs.writeFileSync(tempPath, JSON.stringify(memoryStore, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.chmodSync(tempPath, 0o600);
+    fs.renameSync(tempPath, DB_PATH);
+    try { fs.chmodSync(DB_PATH, 0o600); } catch (_) {}
   } catch (_) {}
 }
 
