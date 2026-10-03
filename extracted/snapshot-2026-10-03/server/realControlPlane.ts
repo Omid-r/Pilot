@@ -343,6 +343,101 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     try { ok(res, healthFindings()); } catch (e: any) { fail(res, 500, e.message); }
   });
 
+  app.get('/api/real/os/preflight', auth, (_req,res) => {
+    const os=readOsRelease();
+    const tools={ipmitool:Boolean(commandSync('which',['ipmitool'])),curl:Boolean(commandSync('which',['curl'])),redfish:Boolean(commandSync('which',['redfishtool']))};
+    const images=artifactSearch(/\\.(iso|img)$/i);
+    ok(res,{os,kernel:os.release||os.VERSION_ID||'',selinux:commandSync('getenforce'),bmcTools:tools,osImages:images});
+  });
+
+  app.post('/api/real/os/install', auth, async (req,res) => {
+    if(!isRoot()) return fail(res,403,'OS provisioning requires root.');
+    const provider=String(req.body?.provider||'').toLowerCase();
+    const bmcHost=String(req.body?.bmcHost||'').trim();
+    const bmcUser=String(req.body?.bmcUser||'').trim();
+    const bmcPassword=String(req.body?.bmcPassword||'');
+    const isoPath=String(req.body?.isoPath||'').trim();
+    const osId=String(req.body?.osId||'');
+    if(!provider||!bmcHost||!bmcUser||!bmcPassword||!isoPath||!osId)
+      return fail(res,400,'provider, bmcHost, bmcUser, bmcPassword, isoPath and osId are required for real OS provisioning.');
+    if(!fs.existsSync(isoPath)) return fail(res,404,'Requested OS ISO/image was not found on the controller.');
+    if(provider==='ipmi'){
+      const ipmitool=commandSync('which',['ipmitool']);
+      if(!ipmitool)return fail(res,501,'ipmitool is not installed/staged in the offline environment.');
+      const boot=await command('ipmitool',['-I','lanplus','-H',bmcHost,'-U',bmcUser,'-P',bmcPassword,'chassis','bootdev','cdrom','options=persistent,efiboot'],{timeoutMs:30000});
+      if(boot.code!==0)return fail(res,502,'BMC boot-device configuration failed.',boot);
+      const power=await command('ipmitool',['-I','lanplus','-H',bmcHost,'-U',bmcUser,'-P',bmcPassword,'chassis','power','cycle'],{timeoutMs:30000});
+      if(power.code!==0)return fail(res,502,'BMC power-cycle failed.',power);
+      return ok(res,{provider,host:bmcHost,osId,isoPath,message:'IPMI boot target and power cycle completed. OS installation now depends on the attached virtual/physical media and unattended installer profile.',requiresInstallerProfile:true});
+    }
+    if(provider==='redfish'){
+      const curl=commandSync('which',['curl']);
+      if(!curl)return fail(res,501,'curl is required for Redfish provisioning.');
+      return fail(res,501,'Redfish provisioning requires a BMC-specific Virtual Media/Boot payload for this hardware. No generic payload is generated.');
+    }
+    return fail(res,400,'Unsupported OS provisioning provider.');
+  });
+
+  app.post('/api/real/runtime/install', auth, async (req,res) => {
+    if(!isRoot()) return fail(res,403,'Runtime installation requires root.');
+    const host=String(req.body?.host||'').trim();
+    const sshUser=String(req.body?.sshUser||'root').trim();
+    const sshPort=Number(req.body?.sshPort||22);
+    const scriptPath=path.join(process.cwd(),'scripts','install-container-engine-offline.sh');
+    if(!fs.existsSync(scriptPath)) return fail(res,404,'Offline container-engine installer is missing.');
+    const script=fs.readFileSync(scriptPath,'utf8');
+    if(!host || host==='127.0.0.1' || host==='localhost' || host===firstNonLoopbackIPv4()){
+      const result=await command('bash',['-s'],{timeoutMs:240000,input:script});
+      if(result.code!==0)return fail(res,500,'Local runtime installation failed.',result);
+      return ok(res,{host:'local',output:result.stdout||result.stderr,verified:true});
+    }
+    const remote=await remoteExec(host,sshUser,sshPort,script);
+    if(remote.code!==0)return fail(res,502,'Remote runtime installation failed.',remote);
+    return ok(res,{host,sshUser,sshPort,output:remote.stdout||remote.stderr,verified:true});
+  });
+
+  app.post('/api/real/deploy/remote-splunk', auth, async (req,res) => {
+    if(!isRoot()) return fail(res,403,'Remote Splunk deployment requires root on the controller.');
+    const host=String(req.body?.host||'').trim();
+    const sshUser=String(req.body?.sshUser||'root').trim();
+    const sshPort=Number(req.body?.sshPort||22);
+    const version=String(req.body?.version||'').trim();
+    const adminPassword=String(req.body?.adminPassword||'');
+    const pass4SymmKey=String(req.body?.pass4SymmKey||'');
+    if(!host||!version||adminPassword.length<12||pass4SymmKey.length<12)
+      return fail(res,400,'host, version, adminPassword and pass4SymmKey are required.');
+    const artifacts=artifactSearch(/splunk.*\\.(rpm|tgz|tar\\.gz)$/i);
+    if(!artifacts.length)return fail(res,404,'No licensed Splunk artifact is staged on the controller.');
+    const artifact=artifacts.find(x=>x.toLowerCase().includes(version.replace(/[^0-9.]/g,'')))||artifacts[0];
+    const base64=fs.readFileSync(artifact).toString('base64');
+    const filename=path.basename(artifact).replace(/[^a-zA-Z0-9._-]/g,'_');
+    const config={
+      web:8000,rest:8089,tcp:9997,
+      webConf:'[settings]\\nhttpport = 8000\\nserver.socket_host = 0.0.0.0\\nstartwebserver = 1\\nmgmtHostPort = 127.0.0.1:8089\\n',
+      serverConf:`[general]\\nserverName = ${host.replace(/[^a-zA-Z0-9_.-]/g,'-')}\\nmgmtHostPort = 127.0.0.1:8089\\npass4SymmKey = ${pass4SymmKey}\\n`,
+      inputConf:'[default]\\nhost = splunk-node\\n\\n[splunktcp://9997]\\ndisabled = 0\\n',
+      userSeed:`[user_info]\\nUSERNAME = admin\\nPASSWORD = ${adminPassword}\\n`
+    };
+    const remoteScript=[
+      'set -euo pipefail',
+      'mkdir -p /var/tmp/splunk-doctor-deploy /opt/splunk',
+      `echo '${base64}' | base64 -d > /var/tmp/splunk-doctor-deploy/${filename}`,
+      /\\.rpm$/i.test(filename) ? `dnf --disablerepo='*' -y install /var/tmp/splunk-doctor-deploy/${filename}` : `tar -xzf /var/tmp/splunk-doctor-deploy/${filename} -C /opt --strip-components=1`,
+      `mkdir -p /opt/splunk/etc/system/local`,
+      `printf '%s' '${Buffer.from(config.webConf).toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/web.conf`,
+      `printf '%s' '${Buffer.from(config.serverConf).toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/server.conf`,
+      `printf '%s' '${Buffer.from(config.inputConf).toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/inputs.conf`,
+      `printf '%s' '${Buffer.from(config.userSeed).toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/user-seed.conf`,
+      `chmod 600 /opt/splunk/etc/system/local/user-seed.conf`,
+      `/opt/splunk/bin/splunk start --accept-license --answer-yes --no-prompt --run-as-root`,
+      `/opt/splunk/bin/splunk status`,
+      `rm -f /var/tmp/splunk-doctor-deploy/${filename}`
+    ].join('\\n');
+    const remote=await remoteExec(host,sshUser,sshPort,remoteScript);
+    const okRun=remote.code===0 && /splunkd is running|splunkweb is running/i.test(remote.stdout||remote.stderr||'');
+    return res.status(okRun?200:502).json({success:okRun,host,version,artifact,output:remote.stdout||remote.stderr,verified:okRun});
+  });
+
   app.post('/api/real/hardening/apply', auth, async (req, res) => {
     if (!isRoot()) return fail(res, 403, 'Hardening apply requires root privileges.');
     const selected = new Set<string>(Array.isArray(req.body?.controls) ? req.body.controls.map(String) : []);
