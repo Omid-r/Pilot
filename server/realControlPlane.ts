@@ -440,6 +440,29 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     res.status(healthy?200:500).json({success:healthy,healthy,logs,checkedAt:new Date().toISOString()});
   });
 
+  app.get('/api/real/splunk/status', auth, async (req,res) => {
+    const requested=String(req.query?.targetDir||'').trim();
+    const candidate=requested && path.isAbsolute(requested) ? requested : null;
+    const home=(candidate && fs.existsSync(path.join(candidate,'bin','splunk')))?candidate:findSplunkHome();
+    if(!home) return ok(res,{installed:false,running:false,targetDir:candidate||null,status:'Splunk binary not found.'});
+    const r=await command(path.join(home,'bin','splunk'),['status'],{timeoutMs:15000,cwd:home});
+    const text=(r.stdout||r.stderr||'').toString();
+    const running=r.code===0 && /splunkd is running|splunkweb is running/i.test(text);
+    return ok(res,{installed:true,running,targetDir:home,status:text,exitCode:r.code});
+  });
+
+  app.get('/api/real/splunk/btool', auth, async (req,res) => {
+    const requested=String(req.query?.targetDir||'').trim();
+    const candidate=requested && path.isAbsolute(requested) ? requested : null;
+    const home=(candidate && fs.existsSync(path.join(candidate,'bin','splunk')))?candidate:findSplunkHome();
+    if(!home) return fail(res,404,'Splunk binary not found.');
+    const r=await command(path.join(home,'bin','splunk'),['btool','check'],{timeoutMs:30000,cwd:home});
+    const text=(r.stdout||r.stderr||'').toString();
+    const errors=text.split('
+').filter((line:string)=>/error|invalid|failed/i.test(line)).map((message:string)=>({message}));
+    return res.status(r.code===0?200:500).json({success:r.code===0,errors,raw:text,exitCode:r.code,targetDir:home});
+  });
+
   app.post('/api/real/splunk/control', auth, async (req,res) => {
     const action=String(req.body?.action||'');
     if(!['start','stop','restart'].includes(action)) return fail(res,400,'action must be start, stop or restart');
