@@ -78,34 +78,25 @@ jobs:
 
           root = Path("extracted/snapshot-2026-10-03")
 
-          # Runtime security state must never be committed back into source control.
+          # Never publish runtime credentials/state.
           for p in [root / "data" / "security-db.json", root / "data" / "master-signing.key"]:
               if p.exists():
                   p.unlink()
 
-          # Remove real webhook/token material while preserving the application structure.
-          patterns = [
-              (re.compile(r'https://hooks\\.slack\\.com/services/[A-Z0-9_\\-/]+', re.I),
-               'https://hooks.slack.com/services/REDACTED/OFFLINE/WEBHOOK'),
-              (re.compile(r'Bearer\\s+[A-Za-z0-9._~+/-]{20,}', re.I),
-               'Bearer REDACTED'),
-              (re.compile(r'(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*["\\\'][^"\\\']+["\\\']'),
-               r'\\1: "REDACTED"'),
-          ]
+          webhook = re.compile(r"https://hooks[.]slack[.]com/services/[A-Za-z0-9_/-]+")
+          bearer = re.compile(r"Bearer\s+[A-Za-z0-9._~+/-]{20,}", re.I)
 
-          text_ext = {".ts",".tsx",".js",".jsx",".mjs",".cjs",".json",".yml",".yaml",".md",".sh",".py",".env",".example"}
           changed = []
-
           for p in root.rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in text_ext:
+              if not p.is_file():
                   continue
               try:
                   s = p.read_text(encoding="utf-8")
-              except UnicodeDecodeError:
+              except (UnicodeDecodeError, OSError):
                   continue
               old = s
-              for pat, repl in patterns:
-                  s = pat.sub(repl, s)
+              s = webhook.sub("https://hooks.slack.com/services/REDACTED/OFFLINE/WEBHOOK", s)
+              s = bearer.sub("Bearer REDACTED", s)
               if s != old:
                   p.write_text(s, encoding="utf-8")
                   changed.append(str(p))
@@ -114,6 +105,12 @@ jobs:
           for p in changed:
               print(p)
           PY
+
+          # Verify that no Slack webhook remains in the publish tree.
+          if grep -RInE 'https://hooks[.]slack[.]com/services/[A-Za-z0-9_/-]+' extracted/snapshot-2026-10-03 --exclude='*.map' --exclude='*.min.js'; then
+            echo "ERROR: Slack webhook still present after sanitization."
+            exit 1
+          fi
 
       - name: Publish extracted snapshot for analysis
         if: always()
