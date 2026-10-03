@@ -194,14 +194,19 @@ export const HeartbeatMonitoringMatrix: React.FC<HeartbeatMonitoringMatrixProps>
   });
 
   const activeDiagramNode = nodes.find(n => n.id === selectedNodeForDiagram) || nodes[0];
-  const activeNodeIO = NODE_IO_TOPOLOGIES[activeDiagramNode?.id] || {
-    inputs: [
-      { id: 'def-in', name: 'Default Component Stream', type: 'FILE_MONITOR', targetPathOrPort: '/var/log/*.log', eps: activeDiagramNode?.eventsPerSec || 0, status: activeDiagramNode?.status === 'DISCONNECTED_SILENT' ? 'STALLED' : 'ACTIVE_FLOW', detailsFa: 'فایل‌های لاگ و جریان‌های محلی' }
-    ],
-    outputs: [
-      { id: 'def-out', targetHost: 'idx-cluster-peer-01.corp.internal', port: 9997, protocol: 'SPLUNK_COOKED_TLS', status: activeDiagramNode?.status === 'DISCONNECTED_SILENT' ? 'BLOCKED_TIMEOUT' : 'CONNECTED', latencyMs: activeDiagramNode?.pingMs || 0, queuePercent: activeDiagramNode?.queueUtilizationPct || 0 }
-    ]
-  };
+  const liveOpenPorts = activeDiagramNode?.activePipelines || [];
+  const activeNodeIO: NodePipelineIO = activeDiagramNode ? {
+    inputs: liveOpenPorts.map((port, index) => ({
+      id: `live-in-${index}`,
+      name: port,
+      type: 'TCP_LISTEN' as const,
+      targetPathOrPort: port,
+      eps: 0,
+      status: 'ACTIVE_FLOW' as const,
+      detailsFa: 'وضعیت این مسیر فقط از اسکن زنده استخراج شده است.'
+    })),
+    outputs: []
+  } : { inputs: [], outputs: [] };
 
   const totalEPS = nodes.reduce((sum, n) => sum + (n.status !== 'DISCONNECTED_SILENT' ? n.eventsPerSec : 0), 0);
   const activeNodesCount = nodes.filter(n => n.status === 'ONLINE_ACTIVE').length;
@@ -272,31 +277,13 @@ export const HeartbeatMonitoringMatrix: React.FC<HeartbeatMonitoringMatrixProps>
     ]);
   };
 
-  const handleExecuteRemediationStep = (stepNumber: number) => {
-    if (!remediationModalNode) return;
-    const profile = ROLE_REMEDIATION_WORKFLOWS[remediationModalNode.componentRole] || ROLE_REMEDIATION_WORKFLOWS.universal_forwarder;
-    const currentStepConfig = profile.steps.find(s => s.step === stepNumber);
-
-    setIsExecutingFix(true);
-    setTimeout(() => {
-      if (currentStepConfig) {
-        setRemediationLogs(prev => [
-          ...prev,
-          `\n>>> [EXECUTING STEP ${stepNumber}: ${currentStepConfig.titleEn}]`,
-          `$ ${currentStepConfig.commandSnippet}`,
-          ...currentStepConfig.simulatedOutput
-        ]);
-      }
-
-      if (stepNumber >= 5) {
-        // Automatically restore and recover the node
-        onRecoverAllNodes();
-        setTroubleshootStep(6);
-      } else {
-        setTroubleshootStep(stepNumber + 1);
-      }
-      setIsExecutingFix(false);
-    }, 700);
+  const handleExecuteRemediationStep = (_stepNumber: number) => {
+    setRemediationLogs(prev => [...prev,
+      isFa
+        ? 'اجرای remediation ساختگی غیرفعال است؛ برای اجرای واقعی باید command از backend کنترل‌پلین صادر شود.'
+        : 'Synthetic remediation is disabled; real remediation must be dispatched through the control plane.'
+    ]);
+    setIsExecutingFix(false);
   };
 
   const activeRemediationProfile: NodeRoleRemediationProfile | null = remediationModalNode
@@ -321,7 +308,7 @@ export const HeartbeatMonitoringMatrix: React.FC<HeartbeatMonitoringMatrixProps>
               </h2>
               <span className="sirene-badge text-[11px] font-mono px-3 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/25">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block mr-1 ml-1"></span>
-                Poll: 1s Active
+                Live refresh: 5s
               </span>
             </div>
             <p className="text-xs text-slate-400 max-w-3xl leading-relaxed">
@@ -355,20 +342,20 @@ export const HeartbeatMonitoringMatrix: React.FC<HeartbeatMonitoringMatrixProps>
               </button>
             </div>
 
-            {/* Quick Outage Simulations for Different Roles */}
+            {/* Test controls are disabled in live mode */}
             <div className="flex items-center gap-1 bg-[#07090e] p-1 rounded-full border border-white/[0.08] shadow-inner">
-              <span className="text-[10px] text-slate-400 font-mono px-2">{isFa ? 'تست قطع:' : 'Sim:'}</span>
+              <span className="text-[10px] text-slate-500 font-mono px-2">{isFa ? 'حالت تست:' : 'Test:'}</span>
               <button
-                onClick={() => onSimulateDisconnect('node-uf-app-01')}
-                className="px-2.5 py-0.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-amber-300 text-[11px] font-semibold flex items-center gap-1 transition"
+                disabled={true}
+                className="opacity-50 cursor-not-allowed px-2.5 py-0.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-amber-300 text-[11px] font-semibold flex items-center gap-1 transition"
                 title="تست قطع عمدی Universal Forwarder"
               >
                 <FileText className="w-3 h-3" />
                 <span>UF</span>
               </button>
               <button
-                onClick={() => onSimulateDisconnect('node-hf-gateway-01')}
-                className="px-2.5 py-0.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-blue-300 text-[11px] font-semibold flex items-center gap-1 transition"
+                disabled={true}
+                className="opacity-50 cursor-not-allowed px-2.5 py-0.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-blue-300 text-[11px] font-semibold flex items-center gap-1 transition"
                 title="تست قطع عمدی Heavy Forwarder"
               >
                 <Zap className="w-3 h-3" />
@@ -401,7 +388,7 @@ export const HeartbeatMonitoringMatrix: React.FC<HeartbeatMonitoringMatrixProps>
             </div>
 
             <button
-              onClick={onRecoverAllNodes}
+              disabled={true}
               className="px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-95 text-slate-950 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.35)] flex items-center gap-2 transition"
             >
               <RefreshCw className="w-3.5 h-3.5" />
