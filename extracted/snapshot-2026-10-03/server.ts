@@ -3635,7 +3635,8 @@ async function startServer() {
       });
     }
 
-    const { indexerHost = '10.18.32.74', indexerPort = 9997, dryRun = false } = req.body;
+    const { indexerHost, indexerPort = 9997, dryRun = false } = req.body;
+    if (!dryRun && (!indexerHost || !fs.existsSync(path.join(splunkHome,'bin/splunk')))) return res.status(400).json({success:false,error:'A real indexerHost and Splunk binary are required.'});
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
     const logs: string[] = [];
 
@@ -3729,7 +3730,9 @@ index = _thefishbucket
       logs.push(`[+] (DRY RUN) Would disable listen 9997 and restart splunkd.`);
     }
 
-    logs.push(`[+] Heavy Forwarder Fix Routine completed successfully!`);
+    const status=fs.existsSync(path.join(splunkHome,'bin/splunk')) ? await runCommand(`SPLUNK_HOME="${splunkHome}" "${path.join(splunkHome,'bin/splunk')}" status`) : null;
+    if (!dryRun && status && status.code!==0) return res.status(500).json({success:false,error:'Splunk status verification failed after HF fix.',logs});
+    logs.push(`[+] Heavy Forwarder Fix Routine completed.`);
     res.json({
       success: true,
       dryRun,
@@ -3757,6 +3760,7 @@ index = _thefishbucket
     }
 
     const { listenPort = 9997, dryRun = false } = req.body;
+    if (!dryRun && !fs.existsSync(path.join(splunkHome,'bin/splunk'))) return res.status(400).json({success:false,error:'Real Splunk binary is required for live indexer remediation.'});
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
     const logs: string[] = [];
 
@@ -3830,7 +3834,8 @@ disabled = 0
       logs.push(`[+] (DRY RUN) Would restart splunkd on Indexer.`);
     }
 
-    logs.push(`[+] Indexer Fix Routine completed successfully!`);
+    if (!dryRun) { const st=await runCommand(`SPLUNK_HOME="${splunkHome}" "${path.join(splunkHome,'bin','splunk')}" status`); if(st.code!==0)return res.status(500).json({success:false,error:'Splunk status verification failed after indexer fix.',logs}); }
+    logs.push(`[+] Indexer Fix Routine completed.`);
     res.json({
       success: true,
       dryRun,
