@@ -25,6 +25,60 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      - name: Materialize source from uploaded ZIP
+        if: github.event.head_commit.message != 'chore: sync snapshot from uploaded ZIP'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_PATH='splunk-cluster-doctor-&-architecture-studio.zip'
+          APP_ROOT='extracted/snapshot-2026-10-03'
+          test -f "$ZIP_PATH"
+          rm -rf /tmp/pilot-zip-source
+          mkdir -p /tmp/pilot-zip-source/unpacked
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import shutil
+
+          zip_path = Path('splunk-cluster-doctor-&-architecture-studio.zip')
+          out = Path('/tmp/pilot-zip-source/unpacked')
+          with ZipFile(zip_path) as zf:
+              zf.extractall(out)
+
+          candidates = []
+          for pkg in out.rglob('package.json'):
+              root = pkg.parent
+              if (root / 'server.ts').is_file() and (root / 'index.html').is_file():
+                  candidates.append(root)
+          if not candidates:
+              raise SystemExit('No ZIP root containing package.json, server.ts and index.html was found.')
+          if len(candidates) > 1:
+              print('Multiple candidate ZIP roots found:')
+              for item in candidates:
+                  print(item)
+          root = candidates[0]
+          target = Path('/tmp/pilot-zip-source/root')
+          target.mkdir(parents=True, exist_ok=True)
+          for item in root.iterdir():
+              dest = target / item.name
+              if item.is_dir():
+                  shutil.copytree(item, dest, dirs_exist_ok=True)
+              else:
+                  shutil.copy2(item, dest)
+          print(f'ZIP source root: {root}')
+          print(f'Materialized working root: {target}')
+          PY
+          rm -rf "$APP_ROOT"
+          mkdir -p "$APP_ROOT"
+          cp -a /tmp/pilot-zip-source/root/. "$APP_ROOT"/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A "$APP_ROOT"
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: sync snapshot from uploaded ZIP'
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+
       - name: Verify snapshot
         working-directory: ${{ env.APP_ROOT }}
         run: |
