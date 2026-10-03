@@ -57,6 +57,10 @@ for (const [path, method, body] of checks) {
   assert(result.data?.success === true || path === '/api/auth/me', path + ' did not return a successful real result');
 }
 
+const license = await call('/api/security/license-status', { token });
+assert(license.status === 200 && license.data?.success === true, 'license status endpoint failed');
+assert(license.data?.status === 'UNLICENSED', 'fresh runtime must not report a fabricated commercial license');
+
 const probe = await call('/api/real/node/probe', {
   method: 'POST',
   token,
