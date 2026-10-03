@@ -1,125 +1,82 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# install-container-engine-offline.sh
-# Automated Air-Gapped Offline Installer for Docker Engine & Kubernetes (K3s/kubectl)
-# Installs container runtimes and Kubernetes control plane on offline Linux host
-# ==============================================================================
-
-set -e
-
-echo "======================================================================"
-echo "  [AIR-GAPPED INSTALLER] Docker Engine & Kubernetes Control Plane"
-echo "======================================================================"
+set -Eeuo pipefail
 
 BIN_DIR="/usr/local/bin"
 PKG_DIR="/opt/splunk_packages"
-SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+RUNTIME_DIR="${PKG_DIR}/docker-k8s"
+mkdir -p "${BIN_DIR}" "${RUNTIME_DIR}"
 
-mkdir -p "${BIN_DIR}" "${PKG_DIR}/docker-k8s" /etc/docker /etc/rancher/k3s
+log(){ echo "[offline-runtime] $*"; }
+die(){ echo "[ERROR] $*" >&2; exit 1; }
+trap 'die "Container runtime installation failed at line $LINENO."' ERR
 
-# 1. INSTALL DOCKER ENGINE
-echo "==> 1. Checking and Installing Docker Engine..."
+[[ $EUID -eq 0 ]] || die "Run as root."
+
+# Docker: use an existing real daemon, or install from staged RPM/static artifacts.
 if command -v docker >/dev/null 2>&1; then
-    echo "  [✓] Docker CLI is already present: $(docker --version)"
-    systemctl enable --now docker 2>/dev/null || true
+  log "Docker CLI found: $(docker --version)"
+  if systemctl list-unit-files docker.service >/dev/null 2>&1; then
+    systemctl enable --now docker
+  fi
+  docker info >/dev/null 2>&1 || die "Docker CLI exists but Docker daemon is unavailable."
+elif command -v podman >/dev/null 2>&1; then
+  log "Podman found: $(podman --version)"
+  podman info >/dev/null 2>&1 || die "Podman is installed but unavailable."
+elif [[ -d "${PKG_DIR}/docker-rpms" ]] && compgen -G "${PKG_DIR}/docker-rpms/*.rpm" >/dev/null; then
+  log "Installing Docker from local RPM repository."
+  dnf --disablerepo='*' -y install "${PKG_DIR}"/docker-rpms/*.rpm
+  systemctl enable --now docker
+  docker info >/dev/null 2>&1 || die "Docker daemon failed after offline RPM installation."
+elif [[ -f "${PKG_DIR}/docker-static.tgz" ]]; then
+  log "Installing Docker static binaries."
+  tar -xzf "${PKG_DIR}/docker-static.tgz" -C "${BIN_DIR}" --strip-components=1
+  chmod 755 "${BIN_DIR}"/docker* "${BIN_DIR}"/containerd* "${BIN_DIR}"/runc
+  command -v docker >/dev/null 2>&1 || die "Docker binary not found after static installation."
+  die "Static Docker binaries are present but no daemon/unit was supplied. Stage a supported dockerd/systemd package."
 else
-    echo "  -> Searching for offline Docker RPM packages or static binaries in ${PKG_DIR}..."
-    
-    # Try RPM installation if offline RPM folder exists
-    if [ -d "${PKG_DIR}/docker-rpms" ] && ls "${PKG_DIR}/docker-rpms"/*.rpm >/dev/null 2>&1; then
-        echo "  -> Installing Docker from local RPM packages..."
-        rpm -ivh --nodeps --replacepkgs "${PKG_DIR}/docker-rpms"/*.rpm 2>/dev/null || true
-        systemctl enable --now docker 2>/dev/null || true
-    elif [ -f "${PKG_DIR}/docker-static.tgz" ]; then
-        echo "  -> Extracting Docker static binaries from ${PKG_DIR}/docker-static.tgz..."
-        tar -xzf "${PKG_DIR}/docker-static.tgz" -C "${BIN_DIR}" --strip-components=1 2>/dev/null || true
-        chmod +x "${BIN_DIR}"/docker* "${BIN_DIR}"/containerd* "${BIN_DIR}"/runc 2>/dev/null || true
-    else
-        echo "  -> Setting up embedded Docker CLI & Podman compatibility layer..."
-        
-        # Create lightweight Docker CLI wrapper if systemctl docker is available or podman is present
-        cat << 'EOF' > "${BIN_DIR}/docker"
-#!/usr/bin/env bash
-if command -v podman >/dev/null 2>&1; then
-    exec podman "$@"
-elif [ -x "/usr/bin/docker" ]; then
-    exec /usr/bin/docker "$@"
-else
-    echo "Docker Engine (v26.1.0-offline) - Standalone Container Runtime Active"
-    if [ "$1" = "--version" ] || [ "$1" = "version" ]; then
-        echo "Docker version 26.1.0, build 9b9b1d1 (Offline Enterprise Edition)"
-        exit 0
-    elif [ "$1" = "ps" ]; then
-        echo "CONTAINER ID   IMAGE                          COMMAND                  CREATED        STATUS        PORTS                  NAMES"
-        echo "c7f91a2e8b41   splunk/splunk:9.2.1-enterprise \"/sbin/entrypoint.sh…\"   10 minutes ago   Up 10 minutes   0.0.0.0:8001->8000/tcp splunk-parallel"
-        exit 0
-    elif [ "$1" = "info" ]; then
-        echo "Server Version: 26.1.0"
-        echo "Storage Driver: overlay2"
-        echo "Logging Driver: json-file"
-        echo "Cgroup Driver: systemd"
-        exit 0
-    else
-        echo "Executing container action: $@"
-        exit 0
-    fi
-fi
-EOF
-        chmod +x "${BIN_DIR}/docker"
-    fi
+  die "No real Docker/Podman runtime or offline installation artifact was supplied. Refusing to create a fake compatibility wrapper."
 fi
 
-# Ensure docker service is started if systemd exists
-if command -v systemctl >/dev/null 2>&1; then
-    systemctl start docker 2>/dev/null || true
-fi
-
-# 2. INSTALL KUBERNETES & K3S
-echo "==> 2. Checking and Installing Kubernetes (K3s & kubectl)..."
+# Kubernetes: prefer an existing kubeconfig-connected kubectl, otherwise install real K3s or kubectl from staged binaries.
 if command -v kubectl >/dev/null 2>&1; then
-    echo "  [✓] kubectl CLI is already active: $(kubectl version --client 2>/dev/null | head -n 1)"
-else
-    echo "  -> Installing kubectl / K3s single-binary Kubernetes control plane..."
-    
-    if [ -f "${PKG_DIR}/k3s" ]; then
-        cp -f "${PKG_DIR}/k3s" "${BIN_DIR}/k3s"
-        ln -sf "${BIN_DIR}/k3s" "${BIN_DIR}/kubectl"
-        chmod +x "${BIN_DIR}/k3s" "${BIN_DIR}/kubectl"
-    elif [ -f "${PKG_DIR}/kubectl" ]; then
-        cp -f "${PKG_DIR}/kubectl" "${BIN_DIR}/kubectl"
-        chmod +x "${BIN_DIR}/kubectl"
-    else
-        # Create embedded K3s / kubectl wrapper for air-gapped environments
-        cat << 'EOF' > "${BIN_DIR}/kubectl"
-#!/usr/bin/env bash
-if [ "$1" = "version" ] || [ "$1" = "--client" ]; then
-    echo "Client Version: v1.28.2+k3s1 (Offline Air-Gapped Release)"
-    exit 0
-elif [ "$1" = "get" ] && [ "$2" = "nodes" ]; then
-    echo "NAME          STATUS   ROLES font   AGE   VERSION"
-    echo "rhel-server   Ready    control-plane,master   5d    v1.28.2+k3s1"
-    exit 0
-elif [ "$1" = "get" ] && [ "$2" = "pods" ]; then
-    echo "NAMESPACE         NAME                               READY   STATUS    RESTARTS   AGE"
-    echo "splunk-parallel   splunk-parallel-staging-01-pod-0   1/1     Running   0          12m"
-    exit 0
-else
-    echo "Kubernetes (kubectl v1.28.2) Executed: $@"
-    exit 0
-fi
+  kubectl version --client >/dev/null 2>&1 || die "kubectl is present but client execution failed."
+  if kubectl get nodes >/dev/null 2>&1; then
+    log "Kubernetes cluster reachable."
+  else
+    log "kubectl client installed; no cluster is reachable yet."
+  fi
+elif [[ -f "${PKG_DIR}/k3s" ]]; then
+  install -m 0755 "${PKG_DIR}/k3s" "${BIN_DIR}/k3s"
+  cat > /etc/systemd/system/k3s.service <<'EOF'
+[Unit]
+Description=K3s Kubernetes Server (offline)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/k3s server --disable=traefik --write-kubeconfig-mode=600
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
 EOF
-        chmod +x "${BIN_DIR}/kubectl"
-    fi
+  systemctl daemon-reload
+  systemctl enable --now k3s
+  [[ -x "${BIN_DIR}/k3s" ]]
+  ln -sf "${BIN_DIR}/k3s" "${BIN_DIR}/kubectl"
+  KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes >/dev/null 2>&1 || die "K3s started but Kubernetes API is not ready."
+elif [[ -f "${PKG_DIR}/kubectl" ]]; then
+  install -m 0755 "${PKG_DIR}/kubectl" "${BIN_DIR}/kubectl"
+  kubectl version --client >/dev/null 2>&1 || die "Offline kubectl binary failed to execute."
+  log "Installed real kubectl client; no fake responses are generated."
+else
+  log "No Kubernetes runtime artifact supplied."
 fi
 
-# Create symlink for k3s
-if [ -f "${BIN_DIR}/kubectl" ] && [ ! -f "${BIN_DIR}/k3s" ]; then
-    ln -sf "${BIN_DIR}/kubectl" "${BIN_DIR}/k3s" 2>/dev/null || true
+log "Real runtime checks complete."
+if command -v docker >/dev/null 2>&1; then
+  docker --version
+elif command -v podman >/dev/null 2>&1; then
+  podman --version
 fi
-
-echo "======================================================================"
-echo "  [SUCCESS] Docker Engine & Kubernetes installation complete!"
-echo "  Docker Version:  $(docker --version 2>/dev/null || echo 'Docker v26.1.0')"
-echo "  kubectl Version: $(kubectl version --client 2>/dev/null | head -n 1 || echo 'v1.28.2')"
-echo "======================================================================"
-exit 0
+command -v kubectl >/dev/null 2>&1 && kubectl version --client --output=yaml 2>/dev/null | head -20 || true
