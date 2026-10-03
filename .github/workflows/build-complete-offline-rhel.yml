@@ -105,14 +105,35 @@ jobs:
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
+          ARCHIVE="release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz"
+          MANIFEST="release/final-archive-manifest.txt"
           sha256sum -c release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
-          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/dist/server.cjs'
-          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/node-runtime/bin/node'
-          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/node_modules/express/'
-          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/.*\.rpm'
-          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/.*\.rpm'
-          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl$'
-          if tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -Eq '(security-db\.json|master-signing\.key|bootstrap-admin-password)$'; then
+          tar -tzf "${ARCHIVE}" > "${MANIFEST}"
+          grep -q 'splunk-doctor/dist/server.cjs' "${MANIFEST}"
+          grep -q 'splunk-doctor/node-runtime/bin/node' "${MANIFEST}"
+          grep -q 'splunk-doctor/node_modules/express/' "${MANIFEST}"
+          grep -Eq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/.*\.rpm' "${MANIFEST}"
+          grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/.*\.rpm' "${MANIFEST}"
+          grep -q 'splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl
+      - name: Upload complete offline installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0-complete
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+          if-no-files-found: error
+ "${MANIFEST}"
+          if grep -Eq '(security-db\.json|master-signing\.key|bootstrap-admin-password)
+      - name: Upload complete offline installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0-complete
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+          if-no-files-found: error
+ "${MANIFEST}"; then
             exit 1
           fi
 
