@@ -49,7 +49,7 @@ connectionTimeout = 10`,
       {
         labelFa: 'بررسی وضعیت لیدر کلاستر جستجو (SHC Raft Status)',
         labelEn: 'Check SHC Captain Status',
-        cmd: '/opt/splunk/bin/splunk show shcluster-status --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk show shcluster-status --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       },
       {
         labelFa: 'بررسی لاگ‌های سرچ‌های Skip شده (Scheduler Telemetry)',
@@ -85,7 +85,7 @@ connectionTimeout = 10`,
         snippet: `[shclustering]
 disabled = false
 mgmt_uri = https://192.168.10.22:8089
-pass4SymmKey = ${SPLUNK_SHC_SECRET}
+pass4SymmKey = <SPLUNK_SHC_SECRET>
 shcluster_label = shc_tier_soc`,
         descriptionFa: 'عضویت در کلاستر سرچ‌هد و احراز هویت مشترک'
       }
@@ -94,7 +94,7 @@ shcluster_label = shc_tier_soc`,
       {
         labelFa: 'انتقال دستی کاپیتان کلاستر به این سرور',
         labelEn: 'Transfer SHC Captaincy',
-        cmd: '/opt/splunk/bin/splunk transfer shcluster-captain -mgmt_uri https://192.168.10.22:8089 --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk transfer shcluster-captain -mgmt_uri https://192.168.10.22:8089 --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       }
     ]
   },
@@ -130,18 +130,18 @@ shcluster_label = shc_tier_soc`,
 # 1. Install Splunk Enterprise on sh-node-03
 # 2. Join SHC Cluster:
 /opt/splunk/bin/splunk init shcluster-config \\
-  -auth admin:${SPLUNK_ADMIN_PASSWORD} \\
+  -auth admin:<SPLUNK_ADMIN_PASSWORD> \\
   -mgmt_uri https://192.168.10.23:8089 \\
   -replication_port 8191 \\
   -replication_factor 3 \\
   -conf_deploy_fetch_url https://192.168.10.15:8089 \\
-  -secret ${SPLUNK_SHC_SECRET} \\
+  -secret <SPLUNK_SHC_SECRET> \\
   -shcluster_label shc_tier_soc
 
 # 3. Add to Captain:
 /opt/splunk/bin/splunk add shcluster-member \\
   -current_member_uri https://192.168.10.21:8089 \\
-  -auth admin:${SPLUNK_ADMIN_PASSWORD}`,
+  -auth admin:<SPLUNK_ADMIN_PASSWORD>`,
         descriptionFa: 'اسکریپت کامل راه‌اندازی و الحاق سرچ‌هد سوم به کلاستر کاپیتان'
       }
     ],
@@ -184,7 +184,7 @@ shcluster_label = shc_tier_soc`,
         snippet: `[clustering]
 master_uri = https://192.168.10.10:8089
 mode = slave
-pass4SymmKey = ${SPLUNK_CLUSTER_SECRET}
+pass4SymmKey = <SPLUNK_CLUSTER_SECRET>
 
 [replication_port://9887]
 
@@ -253,7 +253,7 @@ maxDataSize = auto_high_volume`,
         snippet: `[clustering]
 master_uri = https://192.168.10.10:8089
 mode = slave
-pass4SymmKey = ${SPLUNK_CLUSTER_SECRET}`,
+pass4SymmKey = <SPLUNK_CLUSTER_SECRET>`,
         descriptionFa: 'عضویت کلاستر پیر در Cluster Master'
       }
     ],
@@ -261,7 +261,7 @@ pass4SymmKey = ${SPLUNK_CLUSTER_SECRET}`,
       {
         labelFa: 'بررسی وضعیت پایداری باکت‌های رپلیکیت شده (Bucket Status)',
         labelEn: 'List Bucket Replication State',
-        cmd: '/opt/splunk/bin/splunk list cluster-peers --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk list cluster-peers --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       }
     ]
   },
@@ -301,11 +301,11 @@ pass4SymmKey = ${SPLUNK_CLUSTER_SECRET}`,
   -mode slave \\
   -master_uri https://192.168.10.10:8089 \\
   -replication_port 9887 \\
-  -secret ${SPLUNK_CLUSTER_SECRET} \\
-  -auth admin:${SPLUNK_ADMIN_PASSWORD}
+  -secret <SPLUNK_CLUSTER_SECRET> \\
+  -auth admin:<SPLUNK_ADMIN_PASSWORD>
 
 # 2. Enable Ingestion Port:
-/opt/splunk/bin/splunk enable listen 9997 -auth admin:${SPLUNK_ADMIN_PASSWORD}
+/opt/splunk/bin/splunk enable listen 9997 -auth admin:<SPLUNK_ADMIN_PASSWORD>
 /opt/splunk/bin/splunk restart`,
         descriptionFa: 'دستورالعمل کامل نصب و اتصال ایندکسر سوم به کلاستر مستر'
       }
@@ -314,7 +314,7 @@ pass4SymmKey = ${SPLUNK_CLUSTER_SECRET}`,
       {
         labelFa: 'دستور تأیید اتصال ایندکسر سوم در Cluster Master',
         labelEn: 'Verify Node in Cluster Master',
-        cmd: '/opt/splunk/bin/splunk show cluster-status --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk show cluster-status --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       }
     ]
   },
@@ -443,7 +443,7 @@ useACK = true`,
 mode = master
 replication_factor = 3
 search_factor = 2
-pass4SymmKey = ${SPLUNK_CLUSTER_SECRET}
+pass4SymmKey = <SPLUNK_CLUSTER_SECRET>
 cluster_label = idx_cluster_production
 
 [indexer_discovery]
@@ -455,7 +455,7 @@ pass4SymmKey = EnterpriseSecretDiscovery2026`,
       {
         labelFa: 'بررسی وضعیت سلامت کلاستر ایندکسر و فرآیند Fixup باکت‌ها',
         labelEn: 'Show Cluster Health & Fixup Tasks',
-        cmd: '/opt/splunk/bin/splunk show cluster-status --verbose --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk show cluster-status --verbose --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       }
     ]
   },
@@ -496,7 +496,7 @@ restartSplunkd = true`,
       {
         labelFa: 'مشاهده لیست کلاینت‌های متصل به Deployment Server',
         labelEn: 'List Deployment Server Clients',
-        cmd: '/opt/splunk/bin/splunk list deploy-clients --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk list deploy-clients --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       }
     ]
   },
@@ -541,7 +541,7 @@ restartSplunkd = true`,
       {
         labelFa: 'دستور پوش کردن اپ‌ها به اعضای کلاستر سرچ‌هد',
         labelEn: 'Apply SHC Cluster Bundle',
-        cmd: '/opt/splunk/bin/splunk apply shcluster-bundle -target https://192.168.10.21:8089 --auth admin:${SPLUNK_ADMIN_PASSWORD}'
+        cmd: '/opt/splunk/bin/splunk apply shcluster-bundle -target https://192.168.10.21:8089 --auth admin:<SPLUNK_ADMIN_PASSWORD>'
       }
     ]
   },
