@@ -89,26 +89,9 @@ else
         cp -f "${PKG_DIR}/kubectl" "${BIN_DIR}/kubectl"
         chmod +x "${BIN_DIR}/kubectl"
     else
-        # Create embedded K3s / kubectl wrapper for air-gapped environments
-        cat << 'EOF' > "${BIN_DIR}/kubectl"
-#!/usr/bin/env bash
-if [ "$1" = "version" ] || [ "$1" = "--client" ]; then
-    echo "Client Version: v1.28.2+k3s1 (Offline Air-Gapped Release)"
-    exit 0
-elif [ "$1" = "get" ] && [ "$2" = "nodes" ]; then
-    echo "NAME          STATUS   ROLES font   AGE   VERSION"
-    echo "rhel-server   Ready    control-plane,master   5d    v1.28.2+k3s1"
-    exit 0
-elif [ "$1" = "get" ] && [ "$2" = "pods" ]; then
-    echo "NAMESPACE         NAME                               READY   STATUS    RESTARTS   AGE"
-    echo "splunk-parallel   splunk-parallel-staging-01-pod-0   1/1     Running   0          12m"
-    exit 0
-else
-    echo "Kubernetes (kubectl v1.28.2) Executed: $@"
-    exit 0
-fi
-EOF
-        chmod +x "${BIN_DIR}/kubectl"
+        echo "[-] Kubernetes is not installed and no real offline k3s/kubectl artifact was found."
+        echo "[!] Refusing to create a fake kubectl. Stage a real binary and rerun."
+        exit 1
     fi
 fi
 
