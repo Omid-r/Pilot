@@ -76,11 +76,20 @@ export function applyRemediationOption(
   else if (optId.startsWith('opt-pass')) {
     if (/pass4SymmKey\s*=\s*(changeme|default)/i.test(newText)) {
       const bytes = new Uint8Array(24);
-      globalThis.crypto?.getRandomValues(bytes);
+      if (!globalThis.crypto?.getRandomValues) {
+        throw new Error('Secure random generator is unavailable; refusing to create a shared cluster secret.');
+      }
+      globalThis.crypto.getRandomValues(bytes);
       const generatedKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
       newText = newText.replace(/pass4SymmKey\s*=\s*(changeme|default)/gi, 'pass4SymmKey = ' + generatedKey);
     } else if (!newText.includes('pass4SymmKey')) {
-      newText = newText.replace(/\[general\]/i, '[general]\npass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a');
+      const bytes = new Uint8Array(24);
+      if (!globalThis.crypto?.getRandomValues) {
+        throw new Error('Secure random generator is unavailable; refusing to create a shared cluster secret.');
+      }
+      globalThis.crypto.getRandomValues(bytes);
+      const generatedKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      newText = newText.replace(/\[general\]/i, '[general]\npass4SymmKey = ' + generatedKey);
     }
   }
   // 3. Modernize TLS Versions
