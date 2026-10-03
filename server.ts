@@ -526,7 +526,7 @@ async function startServer() {
   });
 
   // API: Direct execute interactive shell command from in-app Command Prompt console
-  app.post('/api/system/terminal/exec', async (req, res) => {
+  app.post('/api/system/terminal/exec', requireAuth, requireRoles('super_admin'), async (req, res) => {
     const { command, cwd = '/opt/splunk', toolId = 'command_prompt', toolNameFa = 'خط فرمان تعاملی', toolNameEn = 'Interactive Shell' } = req.body;
     if (!command || typeof command !== 'string') {
       return res.status(400).json({ error: 'Command string is required.' });
@@ -786,7 +786,7 @@ async function startServer() {
         hasSplunkAccess: isRoot || isSplunkUser || filePermissions.serverConf.readable,
         isRealServer: splunkDiscovery.detected,
         statusFa: !splunkDiscovery.detected 
-          ? 'اسپلانک در مسیرهای استاندارد (/opt/splunk یا /opt/splunkforwarder) روی این ماشین یافت نشد. داده‌های نمایش داده شده به صورت دمو و شبیه‌سازی شده هستند.'
+          ? 'اسپلانک در مسیرهای استاندارد روی این ماشین یافت نشد. فقط وضعیت واقعی سیستم و artifactهای موجود گزارش می‌شوند.'
           : !filePermissions.outputsConf.readable
             ? 'اسپلانک روی سرور شناسایی شد، اما دسترسی خواندن فایل‌های کانفیگ به دلیل عدم اجرای برنامه با مجوز root یا کاربر splunk مسدود است.'
             : 'اسپلانک واقعی و فایل‌های کانفیگ با موفقیت و دسترسی کامل خوانده شدند.',
@@ -3816,78 +3816,142 @@ PASSWORD = ${password}
   });
 
   // API: Single Tool Validation
-  app.post('/api/tools/validate', (req, res) => {
-    const { toolId } = req.body;
-    const tId = toolId || 'architect_overseer';
-    res.json({
-      toolId: tId,
-      status: 'healthy',
-      score: 100,
-      latencyMs: Math.floor(Math.random() * 8) + 4,
-      checks: [
-        {
-          nameFa: 'پاسخ‌دهی وب‌سرویس و درگاه محلی API',
-          nameEn: 'Web Service Endpoint Readiness',
-          status: 'pass',
-          detailFa: 'پردازش‌های مربوط به ابزار به درستی بارگذاری شده و به درخواست‌ها پاسخ می‌دهند.',
-          detailEn: 'Tool backend handlers operational and responding.'
-        },
-        {
-          nameFa: 'سینتکس و ساختار فایل‌های کانفیگ',
-          nameEn: 'Config Stanza Integrity & Syntax',
-          status: 'pass',
-          detailFa: 'فایل‌های استنزا فاقد هرگونه خطای ساختاری و مغایرت پارامتر هستند.',
-          detailEn: 'No stanza syntax collisions detected.'
-        },
-        {
-          nameFa: 'سطح دسترسی سیستم‌عامل و هسته لینوکس',
-          nameEn: 'OS & Linux Runtime Permissions',
-          status: 'pass',
-          detailFa: 'مجوزهای خواندن و نوشتن دایرکتوری‌های ایزوله تایید شد.',
-          detailEn: 'Read/write rights verified across runtime directories.'
+  const VALID_TOOL_IDS = [
+    'architect_overseer', 'autonomous_agent', 'ai_diagnostics', 'bento_overview',
+    'cluster_deployer', 'architecture_auditor', 'topology', 'management_nodes',
+    'docker_k8s', 'commercial_license', 'health_audit', 'live_logs', 'config_editor',
+    'doc_reference', 'heartbeat_radar', 'alert_manager', 'network_sources',
+    'component_agents', 'remote_gateway', 'package_center', 'backup_archive',
+    'network_toolbox', 'admin_security'
+  ];
+
+  async function validateToolReal(tId: string) {
+    const started = Date.now();
+    const checks: any[] = [];
+    const pass = (nameFa: string, nameEn: string, detailFa: string, detailEn: string) =>
+      checks.push({ nameFa, nameEn, status: 'pass', detailFa, detailEn });
+    const warn = (nameFa: string, nameEn: string, detailFa: string, detailEn: string) =>
+      checks.push({ nameFa, nameEn, status: 'warn', detailFa, detailEn });
+    const failCheck = (nameFa: string, nameEn: string, detailFa: string, detailEn: string) =>
+      checks.push({ nameFa, nameEn, status: 'fail', detailFa, detailEn });
+
+    const audit = getSystemAudit();
+    const splunkHome = audit.splunkHome.detected ? audit.splunkHome.path : null;
+    const hasSs = audit.tools.ss;
+    const hasIp = audit.tools.ip;
+    const hasFirewalld = audit.tools.firewallCmd;
+
+    switch (tId) {
+      case 'network_toolbox':
+      case 'network_sources':
+      case 'network_toolbox':
+        if (hasSs) pass('ss در دسترس است','ss available','ابزار واقعی ss روی سیستم موجود است.','The real ss utility is available.');
+        else failCheck('ss موجود نیست','ss unavailable','ss روی سیستم نصب/در PATH نیست.','ss is not installed/in PATH.');
+        if (hasIp) pass('ip در دسترس است','ip available','ابزار واقعی ip موجود است.','The real ip utility is available.');
+        else warn('ip موجود نیست','ip unavailable','iproute2/ip command در PATH نیست.','iproute2/ip is not available.');
+        break;
+
+      case 'health_audit':
+      case 'admin_security':
+        if (audit.user.isRoot) pass('دسترسی root','Root access','فرآیند با UID 0 اجرا شده است.','Process is running as UID 0.');
+        else failCheck('دسترسی root','Root access','این کنترل‌پلین root نیست.','Control plane is not running as root.');
+        if (/Enforcing/i.test(commandSync('getenforce'))) pass('SELinux','SELinux enforcing','SELinux در حالت Enforcing است.','SELinux is enforcing.');
+        else warn('SELinux','SELinux enforcing','SELinux enforcing فعال نیست.','SELinux is not enforcing.');
+        break;
+
+      case 'topology':
+      case 'config_editor':
+        if (splunkHome) {
+          pass('Splunk Home واقعی','Real Splunk Home',`Splunk در ${splunkHome} پیدا شد.`,`Splunk detected at ${splunkHome}.`);
+          if (audit.filePermissions.inputsConf.exists || audit.filePermissions.outputsConf.exists) pass('کانفیگ واقعی','Real configuration','حداقل یکی از inputs/outputs واقعی وجود دارد.','At least one real inputs/outputs configuration exists.');
+          else warn('فایل‌های topology','Topology configuration','inputs.conf/outputs.conf در local پیدا نشد.','No local inputs.conf/outputs.conf found.');
+        } else {
+          warn('Splunk نصب نیست','Splunk not installed','برای این ابزار نصب واقعی Splunk لازم است.','A real Splunk installation is required.');
         }
-      ],
-      summaryFa: 'ابزار کاملاً سالم است و به صورت فعال در حال کار می‌باشد.',
-      summaryEn: 'Tool is operating at 100% health in runtime.'
-    });
+        break;
+
+      case 'live_logs':
+        if (splunkHome && audit.filePermissions.splunkdLog.exists) pass('splunkd.log واقعی','Real splunkd.log','فایل لاگ واقعی Splunk موجود است.','The real Splunk log exists.');
+        else warn('لاگ Splunk موجود نیست','Splunk log unavailable','splunkd.log واقعی پیدا نشد.','A real splunkd.log was not found.');
+        break;
+
+      case 'docker_k8s':
+        if (commandSync('bash',['-lc','command -v podman']).trim()) pass('Podman','Podman installed','Podman واقعی در PATH موجود است.','Podman is installed and available.');
+        else if (commandSync('bash',['-lc','command -v docker']).trim()) pass('Docker','Docker installed','Docker واقعی در PATH موجود است.','Docker is installed and available.');
+        else if (commandSync('bash',['-lc','command -v kubectl']).trim()) pass('kubectl','kubectl installed','kubectl واقعی در PATH موجود است.','kubectl is installed and available.');
+        else warn('Runtime کانتینر','Container runtime','Podman/Docker/kubectl نصب نیست.','No Podman, Docker or kubectl is installed.');
+        break;
+
+      case 'cluster_deployer':
+      case 'package_center':
+        if (artifactSearch(/splunk.*\\.(rpm|tgz|tar\\.gz)$/i).length) pass('Splunk artifact','Splunk artifact','حداقل یک RPM/TGZ واقعی محلی پیدا شد.','A real local Splunk RPM/TGZ artifact was found.');
+        else warn('Splunk artifact','Splunk artifact','هیچ بسته واقعی Splunk در artifact store وجود ندارد.','No real Splunk package is staged.');
+        break;
+
+      case 'alert_manager':
+        if (hasFirewalld || hasSs) pass('Notification backend prerequisites','Notification backend prerequisites','زیرساخت محلی HTTP/socket برای اجرای provider test در دسترس است.','Local HTTP/socket prerequisites are available for provider tests.');
+        else warn('Notification provider','Notification provider','برای تست واقعی provider یک endpoint خارجی/داخلی باید پیکربندی شود.','A configured real notification endpoint is required for provider delivery.');
+        break;
+
+      case 'remote_gateway':
+        if (commandSync('bash',['-lc','command -v ssh']).trim()) pass('SSH client','SSH client','کلاینت ssh واقعی در دسترس است.','The real SSH client is available.');
+        else failCheck('SSH client','SSH client','ssh روی سرور نصب نیست.','ssh is not installed.');
+        break;
+
+      case 'management_nodes':
+      case 'component_agents':
+      case 'architecture_auditor':
+      case 'architect_overseer':
+      case 'autonomous_agent':
+      case 'ai_diagnostics':
+      case 'bento_overview':
+      case 'heartbeat_radar':
+      case 'backup_archive':
+      case 'doc_reference':
+      case 'commercial_license':
+        if (audit.tools.procfs && hasSs) pass('Runtime inspection','Runtime inspection','این ماژول می‌تواند وضعیت واقعی host را بخواند.','The module can inspect real host runtime state.');
+        else warn('Runtime inspection','Runtime inspection','برای اجرای کامل همه قابلیت‌ها ابزارهای سیستم/هدف لازم است.','Full operation requires the relevant host/target tools.');
+        if (tId === 'commercial_license') warn('لایسنس واقعی','Real license','این ابزار لایسنس تجاری واقعی Splunk تولید نمی‌کند؛ باید artifact معتبر ارائه شود.','This tool does not generate a real Splunk commercial license; supply a valid artifact.');
+        break;
+
+      default:
+        failCheck('Tool ID ناشناخته','Unknown tool ID',`ابزار ${tId} در registry وجود ندارد.`,`Tool ${tId} is not registered.`);
+    }
+
+    const status = checks.some(x => x.status === 'fail') ? 'warning' : checks.some(x => x.status === 'warn') ? 'warning' : 'healthy';
+    const score = Math.round((checks.filter(x => x.status === 'pass').length / Math.max(1, checks.length)) * 100);
+    return {
+      toolId: tId,
+      status,
+      score,
+      latencyMs: Date.now() - started,
+      checks,
+      summaryFa: status === 'healthy' ? 'کنترل‌های واقعی ابزار با موفقیت عبور کردند.' : 'ابزار فقط تا سطح کنترل‌های واقعی موجود معتبر است و نیازمندی‌های باقی‌مانده گزارش شده‌اند.',
+      summaryEn: status === 'healthy' ? 'Real tool checks passed.' : 'Only available real checks passed; remaining prerequisites are reported.'
+    };
+  }
+
+  app.post('/api/tools/validate', async (req, res) => {
+    const tId = String(req.body?.toolId || 'architect_overseer');
+    if (!VALID_TOOL_IDS.includes(tId)) return res.status(400).json({ success:false, error:'Unknown toolId.' });
+    const result = await validateToolReal(tId);
+    res.status(result.status === 'healthy' ? 200 : 200).json(result);
   });
 
-  // API: All Tools Validation
-  app.post('/api/tools/validate-all', (req, res) => {
-    const modules = [
-      'architect_overseer', 'autonomous_agent', 'ai_diagnostics', 'bento_overview',
-      'cluster_deployer', 'architecture_auditor', 'topology', 'management_nodes',
-      'docker_k8s', 'commercial_license', 'health_audit', 'live_logs', 'config_editor',
-      'doc_reference', 'heartbeat_radar', 'alert_manager', 'network_sources',
-      'component_agents', 'remote_gateway', 'package_center', 'backup_archive',
-      'network_toolbox', 'admin_security'
-    ];
-    const results: Record<string, any> = {};
-    modules.forEach(mId => {
-      results[mId] = {
-        toolId: mId,
-        status: 'healthy',
-        score: 100,
-        latencyMs: Math.floor(Math.random() * 10) + 3,
-        checks: [
-          {
-            nameFa: 'پاسخ‌دهی وب‌سرویس و API',
-            nameEn: 'API Health',
-            status: 'pass',
-            detailFa: 'نودها و ابزار متصل است.',
-            detailEn: 'Tool endpoints connected.'
-          }
-        ],
-        summaryFa: 'ابزار سالم است و کار می‌کند.',
-        summaryEn: 'Tool verified and active.'
-      };
-    });
-
+  app.post('/api/tools/validate-all', async (_req, res) => {
+    const entries = await Promise.all(VALID_TOOL_IDS.map(async id => [id, await validateToolReal(id)] as const));
+    const results = Object.fromEntries(entries);
+    const values = Object.values(results);
+    const healthyCount = values.filter((r:any) => r.status === 'healthy').length;
+    const warningCount = values.filter((r:any) => r.status !== 'healthy').length;
     res.json({
       success: true,
-      totalTools: modules.length,
-      healthyCount: modules.length,
-      results
+      totalTools: VALID_TOOL_IDS.length,
+      healthyCount,
+      warningCount,
+      results,
+      messageFa: 'اعتبارسنجی همه ابزارها بر اساس کنترل‌های واقعی انجام شد.',
+      messageEn: 'All tools were validated using real executable checks.'
     });
   });
 
