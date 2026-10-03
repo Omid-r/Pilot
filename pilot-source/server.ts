@@ -31,9 +31,16 @@ import { getSplunkWebHtml } from './src/server/splunkWebHtml';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
 
   app.use(express.json());
+
+  // Authentication boundary for every API route except login.
+  // This is registered before any API handlers, including legacy handlers below.
+  app.use('/api', (req, res, next) => {
+    if (req.path === '/auth/login') return next();
+    return requireAuth(req, res, next);
+  });
 
   // PuTTY Live SSH Stream for all UI Button Clicks & Web API Actions
   app.use((req, res, next) => {
@@ -5111,7 +5118,7 @@ disabled = 0
         version: '1.4.0',
         sizeBytes: stats.size,
         sizeMb: (stats.size / (1024 * 1024)).toFixed(2),
-        message: 'Successfully rebuilt fresh RHEL standalone package v1.3.0!'
+        message: 'Successfully rebuilt fresh RHEL standalone package v1.4.0!'
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
