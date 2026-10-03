@@ -103,7 +103,7 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
   const [targetRestPort, setTargetRestPort] = useState(8090);
   const [targetTcpPort, setTargetTcpPort] = useState(9998);
   const [targetKvPort, setTargetKvPort] = useState(8193);
-  const [adminPassword, setAdminPassword] = useState('changeme');
+  const [adminPassword, setAdminPassword] = useState('');
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
 
   // Local Offline AI Chat Consultation
@@ -391,217 +391,206 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
   // User authorizes AI to execute the specific step
   const handleApproveAndExecuteStep = async (stepId: string) => {
     setIsEngineRunning(true);
-    
-    // Set step to in_progress
-    setWorkflowSteps(prev => prev.map(s => s.id === stepId ? { ...s, status: 'in_progress' } : s));
+    setWorkflowSteps(prev => prev.map(step => step.id === stepId
+      ? { ...step, status: 'in_progress', outputLogs: [] }
+      : step
+    ));
 
-    const stepIdx = workflowSteps.findIndex(s => s.id === stepId);
-    
+    const stepIdx = workflowSteps.findIndex(step => step.id === stepId);
+
+    const appendResult = (logs: string[], summaryFa: string, summaryEn: string) => {
+      setWorkflowSteps(prev => prev.map(step => step.id === stepId ? {
+        ...step,
+        status: 'completed',
+        outputLogs: logs,
+        resultsSummaryFa: summaryFa,
+        resultsSummaryEn: summaryEn
+      } : step));
+      unlockNextStep(stepIdx + 1);
+    };
+
+    const failStep = (message: string, logs: string[] = []) => {
+      setWorkflowSteps(prev => prev.map(step => step.id === stepId ? {
+        ...step,
+        status: 'failed',
+        outputLogs: [...logs, '[ERROR] ' + message]
+      } : step));
+    };
+
+    const postJson = async (url: string, body?: unknown) => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || data.message || `${url} failed (HTTP ${res.status})`);
+      }
+      return data;
+    };
+
     try {
       if (stepId === 'step-discovery') {
-        // Step 1: Discovery execution
-        const simulatedLogs = [
-          `[AI_ORCHESTRATOR] Initializing Deep Server Telemetry Scan...`,
-          `[+] Kernel Release: ${discoveryData.kernel}`,
-          `[+] OS: ${discoveryData.osRelease}`,
-          `[+] Hardware: ${discoveryData.cpuCores} vCPUs, ${discoveryData.memoryTotalGb}GB RAM, ${discoveryData.diskFreeGb}GB Free Disk`,
-          `[+] Network Interface eth0: ${discoveryData.primaryIp} (State: UP)`,
-          `[+] Primary Splunk detected at /opt/splunk (Listening on Ports 8000, 8089, 9997, 8191)`,
-          `[+] Target Parallel Allocation: Web=${targetWebPort}, REST=${targetRestPort}, SplunkTCP=${targetTcpPort}, KVStore=${targetKvPort}`,
-          `[SUCCESS] Server discovery completed. Hardware sizing verified compliant for Splunk Enterprise.`
+        const system = await (async () => {
+          const res = await fetch('/api/real/system');
+          const data = await res.json();
+          if (!res.ok || data.success === false) throw new Error(data.error || `System discovery failed (HTTP ${res.status})`);
+          return data;
+        })();
+        const network = await postJson('/api/real/network/scan', {});
+        const listeners = Array.isArray(network.listeners) ? network.listeners : [];
+        const nodes = Array.isArray(network.nodes) ? network.nodes : [];
+        const logs = [
+          '[REAL] Host discovery completed.',
+          `Hostname: ${system.hostname}`,
+          `Primary IP: ${system.primaryIp}`,
+          `OS: ${system.os?.PRETTY_NAME || system.os?.NAME || system.platform}`,
+          `Kernel: ${system.release}`,
+          `Architecture: ${system.arch}`,
+          `Listener count: ${listeners.length}`,
+          `Discovered nodes/peers: ${nodes.length}`,
+          ...listeners.slice(0, 20).map((x: any) => `LISTEN ${x.proto} ${x.local} ${x.processInfo || ''}`.trim())
         ];
-
-        await new Promise(r => setTimeout(r, 900));
-
-        setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-          ...s,
-          status: 'completed',
-          outputLogs: simulatedLogs,
-          resultsSummaryFa: `سرور با موفقیت شناسایی شد. ${discoveryData.cpuCores} هسته CPU و ${discoveryData.memoryTotalGb}GB رم تایید شد. پورت‌های پیشنهادی کاملاً آزاد و بدون تداخل هستند.`,
-          resultsSummaryEn: `Server discovery passed. ${discoveryData.cpuCores} CPU cores & ${discoveryData.memoryTotalGb}GB RAM confirmed. Target ports are non-conflicting.`
-        } : s));
-
-        // Unlock next step for approval
-        unlockNextStep(stepIdx + 1);
+        const summaryFa = `شناسایی واقعی هاست انجام شد: ${system.primaryIp}، ${listeners.length} لیسنر و ${nodes.length} نود/peer.`;
+        const summaryEn = `Real host discovery completed: ${system.primaryIp}, ${listeners.length} listeners and ${nodes.length} discovered peers.`;
+        appendResult(logs, summaryFa, summaryEn);
 
       } else if (stepId === 'step-container-k8s') {
-        // Step 2: Container / K8s offline provisioning
-        const res = await fetch('/api/k8s/deploy-splunk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ports: { web: targetWebPort, rest: targetRestPort, splunkTcp: targetTcpPort },
-            password: adminPassword
-          })
-        });
-
-        const data = await res.json().catch(() => ({}));
-        const realLogs = data.logs && Array.isArray(data.logs) && data.logs.length > 0 
-          ? data.logs 
-          : [
-            `[+] Creating /opt/splunk_container_runtime directory...`,
-            `[+] Writing offline Kubernetes blueprint: splunk-k8s-standalone.yaml...`,
-            `[+] Generating offline Dockerfile & docker-compose.yml...`,
-            `[+] Deploying deploy-splunk-k8s-offline.sh executable script...`,
-            `[+] Checking Podman engine with air-gapped local image configuration...`,
-            `[SUCCESS] Offline Container & K8s environment successfully prepared!`
-          ];
-
-        setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-          ...s,
-          status: 'completed',
-          outputLogs: realLogs,
-          resultsSummaryFa: `محیط کانتینری و اسکریپت‌های کوبرنتیز در مسیر /opt/splunk_container_runtime با موفقیت مستقر شدند.`,
-          resultsSummaryEn: `Air-gapped container & K8s blueprints deployed in /opt/splunk_container_runtime.`
-        } : s));
-
-        unlockNextStep(stepIdx + 1);
+        const runtime = await postJson('/api/container-engine/install-offline');
+        const logs = [
+          '[REAL] Offline container/Kubernetes installer completed.',
+          ...(runtime.logs || []),
+          runtime.dockerVersion ? `Docker: ${runtime.dockerVersion}` : 'Docker: not verified',
+          runtime.podmanVersion ? `Podman: ${runtime.podmanVersion}` : 'Podman: not verified',
+          runtime.kubectlVersion ? `kubectl: ${runtime.kubectlVersion}` : 'kubectl: not verified'
+        ];
+        appendResult(
+          logs,
+          'رانتایم واقعی Docker/Podman/Kubernetes بررسی یا نصب شد؛ اگر artifact لازم وجود نداشته باشد step شکست می‌خورد.',
+          'Real Docker/Podman/Kubernetes runtime was installed or verified; missing offline artifacts cause a real failure.'
+        );
 
       } else if (stepId === 'step-deploy-splunk') {
-        // Step 3: Multi-version Splunk Deployment
-        const res = await fetch('/api/parallel-cluster/copy-configs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            configs: {
-              'web.conf': `[settings]\nhttpport = ${targetWebPort}\nserver.socket_host = 0.0.0.0\nappServerPorts = 8066\nmgmtHostPort = 127.0.0.1:${targetRestPort}\nstartwebserver = 1\nenableSplunkWebSSL = false\n`,
-              'server.conf': `[general]\nserverName = splunk-parallel-node\nmgmtHostPort = 127.0.0.1:${targetRestPort}\npass4SymmKey = changeme-pass\nactive_group = Free\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${targetRestPort}\n\n[kvstore]\nport = ${targetKvPort}\n`,
-              'inputs.conf': `[default]\nhost = splunk-parallel-node\n\n[splunktcp://${targetTcpPort}]\ndisabled = 0\n`,
-              'user-seed.conf': `[user_info]\nUSERNAME = admin\nPASSWORD = ${adminPassword}\n`
-            },
-            targetPorts: { web: targetWebPort, rest: targetRestPort, splunkTcp: targetTcpPort }
-          })
-        });
+        if (adminPassword.length < 12) throw new Error(isFa ? 'رمز ادمین حداقل باید ۱۲ کاراکتر باشد.' : 'Admin password must be at least 12 characters.');
 
-        await new Promise(r => setTimeout(r, 1000));
+        const imageRef = window.prompt(
+          isFa ? 'Image Ref آفلاین واقعی (مثلاً splunk-enterprise:10.4.0 یا digest) را وارد کنید:' :
+            'Enter the real offline image reference (for example splunk-enterprise:10.4.0 or a digest):'
+        ) || '';
+        if (!imageRef.trim()) throw new Error(isFa ? 'Image Ref وارد نشد.' : 'Image Ref is required.');
+
+        const useKubernetes = selectedRuntimeEngine === 'kubernetes' || selectedRuntimeEngine === 'k8s';
+        const data = useKubernetes
+          ? await postJson('/api/real/deploy/kubernetes', {
+              imageRef: imageRef.trim(),
+              adminPassword,
+              namespace: 'splunk-managed'
+            })
+          : await postJson('/api/real/deploy/container', {
+              runtime: selectedRuntimeEngine === 'podman' ? 'podman' : 'docker',
+              image: window.prompt(
+                isFa ? 'مسیر کامل archive ایمیج Splunk روی سرور را وارد کنید:' :
+                  'Enter the full local path to the Splunk image archive on the server:'
+              ) || '',
+              imageRef: imageRef.trim(),
+              adminPassword
+            });
 
         const logs = [
-          `[+] Target Splunk Version: ${selectedSplunkVersion}`,
-          `[+] Writing synchronized /opt/splunk_parallel/etc/system/local/web.conf (httpport=${targetWebPort}, mgmtHostPort=127.0.0.1:${targetRestPort}, appServerPorts=8066)`,
-          `[+] Writing /opt/splunk_parallel/etc/system/local/server.conf (mgmtHostPort=127.0.0.1:${targetRestPort}, kvstore=${targetKvPort})`,
-          `[+] Writing /opt/splunk_parallel/etc/system/local/inputs.conf (splunktcp://${targetTcpPort})`,
-          `[+] Writing /opt/splunk_parallel/etc/system/local/user-seed.conf (admin user)`,
-          `[+] Setting execution permissions: chmod -R +x /opt/splunk_parallel/bin/`,
-          `[SUCCESS] Multi-version instance configuration compiled with 0 port collisions.`
-        ];
+          '[REAL] Splunk deployment command completed.',
+          useKubernetes ? String(data.rollout?.stdout || data.rollout || '') : String(data.runId || data.container || ''),
+          data.verified !== undefined ? `Verified: ${data.verified}` : ''
+        ].filter(Boolean);
 
-        setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-          ...s,
-          status: 'completed',
-          outputLogs: logs,
-          resultsSummaryFa: `نسخه اسپلانک ${selectedSplunkVersion} با پورت وب ${targetWebPort} و منیجمنت ${targetRestPort} پیکربندی شد.`,
-          resultsSummaryEn: `Splunk ${selectedSplunkVersion} configured on Web ${targetWebPort} & REST ${targetRestPort}.`
-        } : s));
-
-        unlockNextStep(stepIdx + 1);
+        appendResult(
+          logs,
+          `استقرار واقعی Splunk ${selectedSplunkVersion} با راستی‌آزمایی backend انجام شد.`,
+          `Real Splunk ${selectedSplunkVersion} deployment completed with backend verification.`
+        );
 
       } else if (stepId === 'step-diagnostics-preflight') {
-        // Step 4: Deep Diagnostics scan
-        const res = await fetch('/api/parallel-cluster/deep-diagnostics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            webPort: targetWebPort,
-            restPort: targetRestPort,
-            tcpPort: targetTcpPort,
-            kvPort: targetKvPort
-          })
+        const data = await postJson('/api/parallel-cluster/deep-diagnostics', {
+          serverType: 'parallel',
+          webPort: targetWebPort,
+          restPort: targetRestPort,
+          tcpPort: targetTcpPort,
+          kvPort: targetKvPort,
+          targetDir: '/opt/splunk_parallel'
         });
-        const data = await res.json().catch(() => ({}));
-
-        const diagLogs = [
-          `[DIAGNOSTIC_SCAN] Initiating 8-point deep root-cause inspection...`,
-          `[Check 1/8] Web Port Listener ${targetWebPort}: Checked (Found stale socket locks from previous run)`,
-          `[Check 2/8] REST Port Listener ${targetRestPort}: Checked (Orphaned PID detected)`,
-          `[Check 3/8] web.conf mgmtHostPort alignment: Verified mgmtHostPort=127.0.0.1:${targetRestPort}`,
-          `[Check 4/8] appServerPorts directive: Configured (8066)`,
-          `[Check 5/8] KVStore port isolation: Configured (${targetKvPort} - no collision with primary 8192)`,
-          `[Check 6/8] Air-Gapped Podman runtime: Active (offline mode bypass enabled)`,
-          `[Check 7/8] Linux Firewall Rules: Permitted ports ${targetWebPort}, ${targetRestPort}, ${targetTcpPort}`,
-          `[Check 8/8] Permissions: SPLUNK_RUN_AS_ROOT=1 flag active`,
-          `[ROOT_CAUSE_FOUND] Root cause identified: Stale socket lock on ${targetWebPort} and stopped daemon. Ready for auto-heal!`
+        const issues = Array.isArray(data.issues) ? data.issues : [];
+        const logs = [
+          '[REAL] Deep diagnostic scan completed.',
+          `HTTP: ${data.httpStatus || '000'}`,
+          `Latency: ${data.httpLatency ?? 'n/a'}ms`,
+          `Health score: ${data.healthScore ?? 'n/a'}`,
+          ...issues.map((x: any) => `[${x.severity || x.status}] ${x.titleEn || x.titleFa || x.id}`)
         ];
-
-        setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-          ...s,
-          status: 'completed',
-          outputLogs: diagLogs,
-          resultsSummaryFa: 'علت ریشه‌ای شناسایی شد: سوکت معلق پروسه قبلی و توقف وب‌سرویس. موتور خودترمیمی آماده اجرای رفع خودکار است.',
-          resultsSummaryEn: 'Root cause identified: Stale socket lock & stopped web daemon. Ready for automated self-healing.'
-        } : s));
-
-        unlockNextStep(stepIdx + 1);
+        appendResult(
+          logs,
+          `عیب‌یابی واقعی انجام شد و ${issues.length} finding ثبت شد.`,
+          `Real diagnostics completed and returned ${issues.length} findings.`
+        );
 
       } else if (stepId === 'step-auto-healing') {
-        // Step 5: Auto-healing execution
-        const res = await fetch('/api/parallel-cluster/ai-auto-heal', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            webPort: targetWebPort,
-            restPort: targetRestPort,
-            tcpPort: targetTcpPort,
-            password: adminPassword
-          })
+        if (adminPassword.length < 12) throw new Error(isFa ? 'رمز ادمین حداقل باید ۱۲ کاراکتر باشد.' : 'Admin password must be at least 12 characters.');
+        const pass4SymmKey = window.prompt(
+          isFa ? 'pass4SymmKey واقعی (حداقل ۱۲ کاراکتر):' : 'Real pass4SymmKey (minimum 12 characters):'
+        ) || '';
+        if (pass4SymmKey.length < 12) throw new Error(isFa ? 'pass4SymmKey کافی نیست.' : 'pass4SymmKey is required.');
+
+        const data = await postJson('/api/parallel-cluster/ai-auto-heal', {
+          webPort: targetWebPort,
+          restPort: targetRestPort,
+          tcpPort: targetTcpPort,
+          kvPort: targetKvPort,
+          adminPassword,
+          pass4SymmKey
         });
-
-        const data = await res.json().catch(() => ({}));
-        const healLogs = data.logs && Array.isArray(data.logs) && data.logs.length > 0
-          ? data.logs
-          : [
-            `[AI_AUTO_HEAL] Starting autonomous healing cycle...`,
-            `[1/6] Freeing stale sockets: fuser -k ${targetWebPort}/tcp ${targetRestPort}/tcp ${targetTcpPort}/tcp`,
-            `[2/6] Cleaning legacy lockfiles in /var/run/splunk...`,
-            `[3/6] Rewriting synchronized web.conf and server.conf stanzas...`,
-            `[4/6] Updating firewall rules in firewalld (ports ${targetWebPort}, ${targetRestPort}, ${targetTcpPort})...`,
-            `[5/6] Starting Splunk Enterprise daemon with --run-as-root flag...`,
-            `[6/6] Splunk> Winning the War on Error. Web UI service listening on port ${targetWebPort}!`,
-            `[SUCCESS] Auto-healing finished. HTTP status code returned 200 OK.`
-          ];
-
-        setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-          ...s,
-          status: 'completed',
-          outputLogs: healLogs,
-          resultsSummaryFa: `کلیه خطاها و تداخل پورت‌ها برطرف شد و سرویس وب اسپلانک روی پورت ${targetWebPort} فعال گردید.`,
-          resultsSummaryEn: `All socket locks and config conflicts resolved. Web service is now active on port ${targetWebPort}.`
-        } : s));
-
-        unlockNextStep(stepIdx + 1);
+        const logs = Array.isArray(data.logs) ? data.logs : [String(data.output || '')];
+        appendResult(
+          logs.filter(Boolean),
+          `خودترمیمی فقط پس از موفقیت واقعی Splunk و Web تکمیل شد: HTTP ${data.httpStatus || 'unknown'}.`,
+          `Auto-healing completed only after real Splunk and Web verification: HTTP ${data.httpStatus || 'unknown'}.`
+        );
 
       } else if (stepId === 'step-verification-delivery') {
-        // Step 6: Final Verification & Handover
-        const simulatedLogs = [
-          `[READINESS_PROBE] Testing Web Interface at http://127.0.0.1:${targetWebPort}/en-US/account/login...`,
-          `[+] TCP Handshake: CONNECTED to 127.0.0.1:${targetWebPort} (Latency: 0.8ms)`,
-          `[+] HTTP Response Status: 200 OK`,
-          `[+] HTTP Headers: Server=Splunkd, Content-Type=text/html; charset=UTF-8`,
-          `[+] UI Login Page ready and rendering properly.`,
-          `======================================================================`,
-          `  SPLUNK WEB SERVICE IS ACTIVE AND LIVE!`,
-          `  Web URL: http://${discoveryData.primaryIp}:${targetWebPort}/en-US/account/login`,
-          `  Username: admin`,
-          `  Password: ${adminPassword}`,
-          `======================================================================`
+        const status = await (async () => {
+          const res = await fetch(`/api/splunk/status?serverType=parallel&targetDir=${encodeURIComponent('/opt/splunk_parallel')}`);
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || `Status failed (HTTP ${res.status})`);
+          return data;
+        })();
+
+        const response = await fetch(`/api/real/splunk/preflight`);
+        const preflight = await response.json();
+        if (!response.ok || preflight.success === false) throw new Error(preflight.error || 'Splunk preflight failed.');
+
+        const logs = [
+          '[REAL] Final readiness verification completed.',
+          `Installed: ${status.installed ? 'yes' : 'no'}`,
+          `Running: ${status.running ? 'yes' : 'no'}`,
+          `Web port: ${targetWebPort}`,
+          `Splunk detected: ${preflight.detected ? 'yes' : 'no'}`,
+          `Preflight version: ${preflight.version || 'unknown'}`,
+          ...((preflight.ports || []).map((p: any) => `Port ${p.port}: ${p.open ? 'OPEN' : 'CLOSED'}`))
         ];
 
-        await new Promise(r => setTimeout(r, 800));
+        if (!status.installed || !status.running) {
+          throw new Error(isFa ? 'راستی‌آزمایی نهایی رد شد: Splunk واقعی نصب/در حال اجرا نیست.' : 'Final verification failed: real Splunk is not installed and running.');
+        }
 
-        setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-          ...s,
-          status: 'completed',
-          outputLogs: simulatedLogs,
-          resultsSummaryFa: `راستی‌آزمایی با وضعیت ۲۰۰ OK با موفقیت انجام شد. پنل وب هم‌اکنون آماده بهره‌برداری است!`,
-          resultsSummaryEn: `Readiness verified with 200 OK status. Web interface is fully ready for login!`
-        } : s));
+        appendResult(
+          logs,
+          `راستی‌آزمایی واقعی موفق بود؛ Splunk در حال اجراست و وضعیت preflight ثبت شد.`,
+          `Real readiness verification passed; Splunk is running and preflight was collected.`
+        );
+
+      } else {
+        throw new Error(`Unknown workflow step: ${stepId}`);
       }
-
     } catch (err: any) {
-      setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
-        ...s,
-        status: 'failed',
-        outputLogs: [...s.outputLogs, `[ERROR] Step failed: ${err.message}`]
-      } : s));
+      failStep(err?.message || String(err));
     } finally {
       setIsEngineRunning(false);
     }
