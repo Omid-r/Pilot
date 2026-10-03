@@ -747,7 +747,7 @@ async function startServer() {
         hasSplunkAccess: isRoot || isSplunkUser || filePermissions.serverConf.readable,
         isRealServer: splunkDiscovery.detected,
         statusFa: !splunkDiscovery.detected 
-          ? 'اسپلانک در مسیرهای استاندارد (/opt/splunk یا /opt/splunkforwarder) روی این ماشین یافت نشد. داده‌های نمایش داده شده به صورت دمو و شبیه‌سازی شده هستند.'
+          ? 'اسپلانک در مسیرهای استاندارد (/opt/splunk یا /opt/splunkforwarder) روی این ماشین یافت نشد؛ هیچ داده شبیه‌سازی‌شده‌ای جایگزین وضعیت واقعی نمی‌شود.'
           : !filePermissions.outputsConf.readable
             ? 'اسپلانک روی سرور شناسایی شد، اما دسترسی خواندن فایل‌های کانفیگ به دلیل عدم اجرای برنامه با مجوز root یا کاربر splunk مسدود است.'
             : 'اسپلانک واقعی و فایل‌های کانفیگ با موفقیت و دسترسی کامل خوانده شدند.',
@@ -3937,6 +3937,14 @@ PASSWORD = ${password}
     'network_toolbox', 'admin_security'
   ];
 
+  function probeBinary(binary: string, args: string[] = ['--version']): string {
+    try {
+      return execSync(binary + ' ' + args.join(' '), { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    } catch (error: any) {
+      return String(error?.stdout || error?.stderr || '');
+    }
+  }
+
   function validateTool(toolId: string) {
     const started = Date.now();
     const checks: any[] = [];
@@ -3958,69 +3966,68 @@ PASSWORD = ${password}
       `Node.js process is active (PID: ${process.pid}).`
     );
 
-    const osr = readOsRelease();
+    const audit = getSystemAudit();
     add(
-      'شناسایی سیستم‌عامل',
-      'Operating System Probe',
-      Boolean(osr.ID),
-      osr.ID ? `سیستم‌عامل ${osr.PRETTY_NAME || osr.ID} شناسایی شد.` : 'اطلاعات سیستم‌عامل در دسترس نیست.',
-      osr.ID ? `Detected ${osr.PRETTY_NAME || osr.ID}.` : 'OS identification is unavailable.'
+      'شناسایی سیستم‌عامل و ابزارهای پایه',
+      'Host Inventory',
+      Boolean(audit.tools.procfs),
+      audit.tools.procfs ? 'procfs و اطلاعات میزبان در دسترس است.' : 'procfs در دسترس نیست.',
+      audit.tools.procfs ? 'procfs and host inventory are available.' : 'procfs is unavailable.'
     );
 
     const needsNetwork = ['architect_overseer','network_sources','network_toolbox','topology','heartbeat_radar'].includes(toolId);
     if (needsNetwork) {
-      const ipCmd = commandSync('ip', ['-json', 'addr']);
-      const ssCmd = commandSync('ss', ['-H', '-tulpn']);
+      const networkOk = audit.tools.ip && audit.tools.ss;
       add(
         'ابزارهای واقعی شبکه',
         'Network Tooling',
-        Boolean(ipCmd) && ssCmd !== '',
-        Boolean(ipCmd) && ssCmd !== '' ? 'ip و ss پاسخ واقعی ارائه دادند.' : 'ip/ss در محیط اجرا در دسترس یا قابل استفاده نیستند.',
-        Boolean(ipCmd) && ssCmd !== '' ? 'ip and ss returned live host data.' : 'ip/ss are unavailable or not usable.'
+        networkOk,
+        networkOk ? 'ip و ss روی همین میزبان شناسایی و قابل اجرا هستند.' : 'ip و/یا ss روی میزبان موجود نیست.',
+        networkOk ? 'ip and ss are available on this host.' : 'ip and/or ss are unavailable.'
       );
     }
 
     const needsSplunk = ['architect_overseer','autonomous_agent','ai_diagnostics','cluster_deployer','architecture_auditor','topology','management_nodes','docker_k8s','commercial_license','health_audit','live_logs','config_editor','splunk_web','package_center'].includes(toolId);
     if (needsSplunk) {
-      const home = findSplunkHome();
       add(
         'وجود باینری واقعی Splunk',
         'Splunk Binary',
-        Boolean(home),
-        home ? `Splunk در ${home} شناسایی شد.` : 'باینری Splunk روی این host شناسایی نشد.',
-        home ? `Splunk detected at ${home}.` : 'No Splunk binary detected on this host.'
+        audit.splunkHome.detected,
+        audit.splunkHome.detected ? `Splunk در ${audit.splunkHome.path} شناسایی شد.` : 'باینری Splunk روی این host شناسایی نشد.',
+        audit.splunkHome.detected ? `Splunk detected at ${audit.splunkHome.path}.` : 'No Splunk binary detected on this host.'
       );
     }
 
     if (toolId === 'docker_k8s') {
-      const docker = commandSync('docker', ['--version']);
-      const podman = commandSync('podman', ['--version']);
-      const kubectl = commandSync('kubectl', ['version', '--client=true', '--output=json']);
+      const docker = probeBinary('docker');
+      const podman = probeBinary('podman');
+      const kubectl = probeBinary('kubectl', ['version','--client=true','--output=json']);
       const available = Boolean(docker || podman || kubectl);
       add(
         'موتور کانتینر/کلاستر',
         'Container / Kubernetes Tooling',
         available,
-        available ? 'حداقل یکی از docker/podman/kubectl در دسترس است.' : 'docker، podman و kubectl هیچ‌کدام در دسترس نیستند.',
-        available ? 'At least one of docker/podman/kubectl is available.' : 'docker, podman and kubectl are unavailable.'
+        available ? 'حداقل یکی از docker/podman/kubectl در دسترس است.' : 'docker، podman و kubectl در دسترس نیستند.',
+        available ? 'At least one container/Kubernetes tool is available.' : 'docker, podman and kubectl are unavailable.'
       );
     }
 
     if (toolId === 'remote_gateway') {
-      const ssh = commandSync('ssh', ['-V']);
+      const ssh = probeBinary('ssh', ['-V']);
       add('ابزار SSH', 'SSH Client', Boolean(ssh), Boolean(ssh) ? 'کلاینت SSH در دسترس است.' : 'کلاینت SSH در دسترس نیست.', Boolean(ssh) ? 'SSH client is available.' : 'SSH client is unavailable.');
     }
 
     if (toolId === 'package_center' || toolId === 'backup_archive') {
       let writable = false;
       try { fs.accessSync(process.cwd(), fs.constants.W_OK); writable = true; } catch {}
-      const artifacts = artifactSearch(/(splunk.*\\.(rpm|tgz|tar\\.gz)|\\.(tar|tar\\.gz|oci))$/i);
+      const artifactDirs = ['/opt/splunk-doctor/artifacts','/opt/dr-splunk/artifacts','/opt/splunk/artifacts','/var/lib/splunk-doctor/artifacts'];
+      const staged = artifactDirs.filter(dir => fs.existsSync(dir));
       add(
-        'مخزن واقعی فایل‌ها',
+        'workspace و artifactهای واقعی',
         'Artifact Workspace',
         writable,
-        writable ? `workspace قابل نوشتن است؛ ${artifacts.length} artifact شناسایی شد.` : 'workspace برنامه قابل نوشتن نیست.',
-        writable ? `Workspace is writable; ${artifacts.length} artifacts detected.` : 'Application workspace is not writable.'
+        writable ? `workspace قابل نوشتن است؛ ${staged.length} مسیر artifact موجود است.` : 'workspace برنامه قابل نوشتن نیست.',
+        writable ? `Workspace is writable; ${staged.length} artifact roots are present.` : 'Application workspace is not writable.'
       );
     }
 
@@ -4033,23 +4040,28 @@ PASSWORD = ${password}
       score,
       latencyMs: Date.now() - started,
       checks,
-      summaryFa: status === 'healthy' ? 'تمام بررسی‌های لازم برای این ابزار با داده واقعی با موفقیت انجام شد.' : status === 'warning' ? 'ابزار قابل بررسی است اما حداقل یک وابستگی یا پیش‌نیاز روی host موجود نیست.' : 'بررسی واقعی ابزار نتوانست پیش‌نیازهای اصلی را تایید کند.',
-      summaryEn: status === 'healthy' ? 'All required runtime checks passed against real host state.' : status === 'warning' ? 'The tool is probeable, but one or more dependencies or prerequisites are missing.' : 'The real probe could not verify the core prerequisites.'
+      summaryFa: status === 'healthy'
+        ? 'تمام بررسی‌های لازم برای این ابزار با داده واقعی با موفقیت انجام شد.'
+        : status === 'warning'
+          ? 'ابزار قابل بررسی است اما حداقل یک وابستگی یا پیش‌نیاز روی host موجود نیست.'
+          : 'بررسی واقعی ابزار نتوانست پیش‌نیازهای اصلی را تایید کند.',
+      summaryEn: status === 'healthy'
+        ? 'All required runtime checks passed against real host state.'
+        : status === 'warning'
+          ? 'The tool is probeable, but one or more dependencies or prerequisites are missing.'
+          : 'The real probe could not verify the core prerequisites.'
     };
   }
 
   app.post('/api/tools/validate', (req, res) => {
     const toolId = String(req.body?.toolId || 'architect_overseer');
     if (!toolModules.includes(toolId)) return res.status(400).json({ success: false, error: 'Unknown toolId.' });
-    const result = validateTool(toolId);
-    res.json({ success: true, ...result });
+    res.json({ success: true, ...validateTool(toolId) });
   });
 
   app.post('/api/tools/validate-all', (req, res) => {
     const results: Record<string, any> = {};
-    for (const toolId of toolModules) {
-      results[toolId] = validateTool(toolId);
-    }
+    for (const toolId of toolModules) results[toolId] = validateTool(toolId);
     const values = Object.values(results) as any[];
     res.json({
       success: true,
