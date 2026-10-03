@@ -250,6 +250,29 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
       return;
     }
 
+    const adminPassword = window.prompt(isFa ? 'رمز واقعی admin اسپلانک برای این استقرار:' : 'Real Splunk admin password for this deployment:') || '';
+    const pass4SymmKey = window.prompt(isFa ? 'کلید واقعی pass4SymmKey:' : 'Real pass4SymmKey:') || '';
+    if (adminPassword.length < 12 || pass4SymmKey.length < 12) {
+      alert(isFa ? 'رمزهای واقعی وارد نشدند یا کوتاه هستند؛ استقرار متوقف شد.' : 'Real credentials were not supplied or are too short; deployment stopped.');
+      return;
+    }
+    let imageRef = '';
+    let composeFile = '';
+    if (deploymentEngine === 'k8s_operator') {
+      imageRef = window.prompt(isFa ? 'نام کامل Image واقعی که روی نودها load شده است:' : 'Full name of the real image already loaded on target nodes:') || '';
+      if (!imageRef.trim()) {
+        alert(isFa ? 'Image واقعی برای Kubernetes الزامی است.' : 'A real preloaded image is required for Kubernetes.');
+        return;
+      }
+    }
+    if (deploymentEngine === 'docker_standalone') {
+      composeFile = window.prompt(isFa ? 'مسیر/نام فایل docker-compose واقعی روی نودها:' : 'Path/name of the real docker-compose manifest on target nodes:') || '';
+      if (!composeFile.trim()) {
+        alert(isFa ? 'Compose واقعی برای Docker الزامی است.' : 'A real Compose manifest is required for Docker.');
+        return;
+      }
+    }
+
     setIsDeploying(true);
     setDeploymentProgress(1);
     setDeployStepIndex(0);
@@ -263,6 +286,10 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
           deploymentEngine,
           selectedOS,
           sizingInputs,
+          adminPassword,
+          pass4SymmKey,
+          imageRef,
+          composeFile,
           nodes:assets.map(a=>({
             id:a.id,hostname:a.hostname,ip:a.ip,sshUser:a.sshUser,sshPort:a.sshPort,
             lomIp:a.lomIp,lomType:a.lomType,role:a.role,site:a.site,
