@@ -221,7 +221,7 @@ if [ ! -x "$NODE_PATH" ]; then
   echo "[-] Bundled Node.js runtime is missing: $NODE_PATH"
   exit 1
 fi
-sed -i "s|ExecStart=.*|ExecStart=${NODE_PATH} /opt/splunk-doctor/dist/server.cjs|g" "$TARGET_DIR/systemd/splunk-doctor.service"
+sed -i "s|ExecStart=.*|ExecStart=\${NODE_PATH} /opt/splunk-doctor/dist/server.cjs|g" "$TARGET_DIR/systemd/splunk-doctor.service"
 
 echo "[+] Installing systemd service: /etc/systemd/system/splunk-doctor.service"
 cp "$TARGET_DIR/systemd/splunk-doctor.service" /etc/systemd/system/splunk-doctor.service
