@@ -2618,71 +2618,60 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Install Docker Engine & Kubernetes (K3s) Offline on Host
-  app.post('/api/container-engine/install-offline', async (req, res) => {
+  // API: Install Docker Engine & Kubernetes (K3s) Offline on Host — real artifacts only
+  app.post('/api/container-engine/install-offline', async (_req, res) => {
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+      return res.status(403).json({ success:false, error:'Container runtime installation requires root.' });
+    }
     const scriptPath = getScriptPath('install-container-engine-offline.sh');
-    const logs: string[] = [];
-
-    logs.push('[1/3] Executing air-gapped Docker & Kubernetes offline installer...');
+    if (!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'install-container-engine-offline.sh not found.'});
     try {
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`, {
-          toolId: 'docker_installer',
-          toolNameFa: 'تنظیم دسترسی اسکریپت نصب داکر و کوبرنتیز',
-          toolNameEn: 'Chmod Offline Installer',
-          category: 'docker'
-        });
-
-        const result = await runCommand(`bash "${scriptPath}"`, {
-          toolId: 'docker_installer',
-          toolNameFa: 'نصب و استقرار آفلاین داکر و کوبرنتیز',
-          toolNameEn: 'Install Offline Docker & Kubernetes',
-          category: 'docker',
-          timeout: 120000
-        });
-
-        logs.push(result.stdout || 'Installation completed.');
-
-        // Verify versions
-        const dCheck = await runCommand('docker --version 2>/dev/null || true');
-        const kCheck = await runCommand('kubectl version --client 2>/dev/null || true');
-
-        res.json({
-          success: true,
-          dockerVersion: dCheck.stdout.trim() || 'Docker Engine active',
-          k8sVersion: kCheck.stdout.trim() || 'Kubernetes v1.28.2 active',
-          logs
-        });
-      } else {
-        res.status(404).json({ success: false, error: 'install-container-engine-offline.sh not found' });
-      }
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message, logs });
+      const result = await runCommand(`bash "${scriptPath}"`,{
+        toolId:'docker_installer',
+        toolNameFa:'نصب واقعی آفلاین Docker/Podman و Kubernetes',
+        toolNameEn:'Real Offline Container/Kubernetes Runtime Install',
+        category:'docker',
+        timeout:300000
+      });
+      const docker=await runCommand('docker --version',{toolId:'docker_installer',category:'docker',timeout:10000});
+      const podman=await runCommand('podman --version',{toolId:'docker_installer',category:'docker',timeout:10000});
+      const kubectl=await runCommand('kubectl version --client',{toolId:'docker_installer',category:'k8s',timeout:10000});
+      const valid=result.code===0 && (docker.code===0 || podman.code===0 || kubectl.code===0);
+      return res.status(valid?200:500).json({
+        success:valid,
+        exitCode:result.code,
+        logs:(result.stdout||result.stderr||'').split('\n'),
+        dockerVersion:docker.code===0?docker.stdout.trim():null,
+        podmanVersion:podman.code===0?podman.stdout.trim():null,
+        kubectlVersion:kubectl.code===0?kubectl.stdout.trim():null
+      });
+    } catch(err:any) {
+      return res.status(500).json({success:false,error:err.message});
     }
   });
 
-  // API: Diagnose & Auto-Fix Parallel Splunk Web on Port 8001
-  app.post('/api/parallel-cluster/diagnose-fix', async (req, res) => {
-    const targetDir = '/opt/splunk_parallel';
-    const scriptPath = getScriptPath('fix-parallel-web.sh');
-    try {
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const result = await runCommand(`bash "${scriptPath}" "${targetDir}" ${parallelActivePorts.web} ${parallelActivePorts.rest} ${parallelActivePorts.splunkTcp} ${parallelActivePorts.kvstore}`);
-        
-        // Also test direct curl locally
-        const curlRes = await runCommand(`curl -s -I "http://127.0.0.1:${parallelActivePorts.web}/en-US/account/login" | head -n 5 || true`);
-
-        return res.json({
-          success: true,
-          logs: result.stdout.split('\n'),
-          curlHeader: curlRes.stdout || 'No HTTP response on 127.0.0.1'
-        });
-      }
-      res.json({ success: false, error: 'fix-parallel-web.sh not found' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+  // API: Diagnose & Auto-Fix Parallel Splunk Web on Port 8001 — real-only
+  app.post('/api/parallel-cluster/diagnose-fix', async (req,res) => {
+    const targetDir='/opt/splunk_parallel';
+    const scriptPath=getScriptPath('fix-parallel-web.sh');
+    const password=String(req.body?.adminPassword||'');
+    const pass4=String(req.body?.pass4SymmKey||'');
+    if(password.length<12 || pass4.length<12) return res.status(400).json({success:false,error:'A real admin password and pass4SymmKey are required.'});
+    if(!fs.existsSync(path.join(targetDir,'bin','splunk'))) return res.status(404).json({success:false,error:'Real Splunk binary is not installed in /opt/splunk_parallel.'});
+    if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'Real fix-parallel-web.sh not found.'});
+    const q=(v:string)=>"'" + v.replace(/'/g,"'\\''") + "'";
+    try{
+      const result=await runCommand('SPLUNK_ADMIN_PASSWORD='+q(password)+' SPLUNK_PASS4SYMMKEY='+q(pass4)+' bash '+q(scriptPath)+' '+q(targetDir)+' '+Number(parallelActivePorts.web)+' '+Number(parallelActivePorts.rest)+' '+Number(parallelActivePorts.splunkTcp)+' '+Number(parallelActivePorts.kvstore),{
+        toolId:'diagnostics_autoheal',
+        toolNameEn:'Real Splunk Web diagnostics and remediation',
+        category:'splunk',
+        cwd:targetDir,
+        timeout:360000
+      });
+      const curl=await runCommand(`curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://127.0.0.1:${Number(parallelActivePorts.web)}/en-US/account/login"`,{toolId:'diagnostics_autoheal',category:'network',timeout:10000});
+      const success=result.code===0 && /^(200|302|303)$/.test((curl.stdout||'').trim());
+      return res.status(success?200:500).json({success,exitCode:result.code,logs:(result.stdout||result.stderr||'').split('\n'),curlHeader:curl.stdout||curl.stderr});
+    }catch(err:any){return res.status(500).json({success:false,error:err.message});}
   });
 
   // =========================================================================
@@ -2982,52 +2971,39 @@ PASSWORD = ${password}
     }
   });
 
-  // API: Copy all configurations from Real/Main Server to Parallel Instance
-  app.post('/api/parallel-cluster/copy-configs', (req, res) => {
-    const { configs = {}, targetPorts = { web: 8001, rest: 8090, splunkTcp: 9998 } } = req.body;
-    const targetDir = '/opt/splunk_parallel/etc/system/local';
-    const copiedFiles: string[] = [];
-    const sanitizedParams: string[] = [];
-
-    try {
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+  // API: Copy sanitized configuration files to a real parallel Splunk installation.
+  app.post('/api/parallel-cluster/copy-configs', async (req,res) => {
+    const targetDir='/opt/splunk_parallel/etc/system/local';
+    const configs=req.body?.configs;
+    const targetPorts=req.body?.targetPorts||{};
+    const allowed=new Set(['inputs.conf','outputs.conf','server.conf','web.conf','indexes.conf','props.conf','transforms.conf','limits.conf','deploymentclient.conf','authentication.conf','user-seed.conf']);
+    if(!configs || typeof configs!=='object' || Array.isArray(configs)) return res.status(400).json({success:false,error:'configs must be an object.'});
+    const files:string[]=[]; const sanitized:any={};
+    try{
+      fs.mkdirSync(targetDir,{recursive:true});
+      for(const [name,value] of Object.entries(configs)){
+        if(!allowed.has(name)) return res.status(400).json({success:false,error:'Unsupported config file: '+name});
+        let text=String(value);
+        if(name==='server.conf'){
+          text=text.replace(/pass4SymmKey\s*=\s*changeme[^\n]*/ig,'');
+          if(String(targetPorts.rest||'') && /mgmtHostPort\s*=/.test(text)) text=text.replace(/mgmtHostPort\s*=\s*[^\n]+/g,`mgmtHostPort = 127.0.0.1:${Number(targetPorts.rest)}`);
+        }
+        if(name==='web.conf' && String(targetPorts.web||'') && /httpport\s*=/.test(text)) text=text.replace(/httpport\s*=\s*\d+/g,`httpport = ${Number(targetPorts.web)}`);
+        if(name==='inputs.conf' && String(targetPorts.splunkTcp||'') ) text=text.replace(/\[splunktcp:\/\/\d+\]/g,`[splunktcp://${Number(targetPorts.splunkTcp)}]`);
+        const full=path.join(targetDir,name);
+        if(fs.existsSync(full)) backupFile(full,'/var/lib/splunk-doctor/backups');
+        fs.writeFileSync(full,text,{encoding:'utf8',mode:name==='user-seed.conf'?0o600:0o644});
+        files.push(name); sanitized[name]=text;
       }
-    } catch (_) {}
-
-    const sanitizedConfigs: Record<string, string> = {};
-
-    Object.entries(configs).forEach(([filename, content]) => {
-      let mod = String(content);
-      if (filename === 'inputs.conf') {
-        mod = mod.replace(/\[splunktcp:\/\/9997\]/g, `[splunktcp://${targetPorts.splunkTcp || 9998}]`);
-        sanitizedParams.push('inputs.conf: remapped splunktcp 9997 -> 9998');
-      } else if (filename === 'web.conf') {
-        mod = mod.replace(/httpport\s*=\s*8000/g, `httpport = ${targetPorts.web || 8001}`);
-        sanitizedParams.push(`web.conf: remapped httpport 8000 -> ${targetPorts.web || 8001}`);
-      } else if (filename === 'server.conf') {
-        mod = mod.replace(/mgmtHostPort\s*=\s*127\.0\.0\.1:8089/g, `mgmtHostPort = 127.0.0.1:${targetPorts.rest || 8090}`)
-                 .replace(/\[general\]\nserverName\s*=\s*[^\n]+/g, `[general]\nserverName = splunk-parallel-staging-01`);
-        sanitizedParams.push(`server.conf: remapped mgmtHostPort 8089 -> ${targetPorts.rest || 8090} and renamed serverName`);
+      const binary='/opt/splunk_parallel/bin/splunk';
+      let btool=null;
+      if(fs.existsSync(binary)){
+        const check=await runCommand(`SPLUNK_HOME="/opt/splunk_parallel" "${binary}" btool check`,{toolId:'config_sync',toolNameEn:'Verify synchronized Splunk configuration',category:'splunk',timeout:30000});
+        btool={exitCode:check.code,stdout:check.stdout,stderr:check.stderr};
+        if(check.code!==0) return res.status(500).json({success:false,files,sanitized,btool});
       }
-
-      sanitizedConfigs[filename] = mod;
-      copiedFiles.push(filename);
-
-      try {
-        fs.writeFileSync(path.join(targetDir, filename), mod, 'utf8');
-      } catch (_) {}
-    });
-
-    res.json({
-      success: true,
-      copiedCount: copiedFiles.length,
-      copiedFiles,
-      sanitizedParams,
-      btoolResult: 'btool check: 0 stanza collisions, all sanitized ports validated.',
-      sanitizedConfigs,
-      syncedAt: new Date().toISOString()
-    });
+      return res.json({success:true,files,sanitized,btool,checkedAt:new Date().toISOString()});
+    }catch(err:any){return res.status(500).json({success:false,error:err.message,files});}
   });
 
   // API: Deep Diagnostic Probe across host, configs, sockets, and container runtimes
