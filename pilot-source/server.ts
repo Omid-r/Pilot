@@ -3271,292 +3271,129 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Self-Healing One-Click Execution (Solves all problems automatically)
+  // API: Self-Healing One-Click Execution — operates only on a real Splunk installation.
   const handleAutoHeal = async (req: express.Request, res: express.Response) => {
     const {
       webPort = 8001,
       restPort = 8090,
       tcpPort = 9998,
       kvPort = 8193,
-      adminPassword = 'changeme'
-    } = req.body;
+      adminPassword,
+      pass4SymmKey
+    } = req.body || {};
 
-    const logs: string[] = [];
-    const parallelDir = '/opt/splunk_parallel';
-    const runtimeDir = '/opt/splunk_container_runtime';
-
-    logs.push(`======================================================================`);
-    logs.push(`[AI SELF-HEALER] Starting Automated End-to-End System Recovery...`);
-    logs.push(`======================================================================`);
-
-    try {
-      // 1. Free host sockets
-      logs.push(`==> 1. Terminating stale port locks on ${webPort}, ${restPort}, ${tcpPort}...`);
-      await runCommand(`fuser -k "${webPort}/tcp" 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `آزادسازی پورت وب ${webPort}`,
-        toolNameEn: `Free Web Socket ${webPort}`,
-        cwd: parallelDir,
-        category: 'network'
-      });
-      await runCommand(`fuser -k "${restPort}/tcp" 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `آزادسازی پورت مدیریتی ${restPort}`,
-        toolNameEn: `Free REST Port ${restPort}`,
-        cwd: parallelDir,
-        category: 'network'
-      });
-      await runCommand(`fuser -k "${tcpPort}/tcp" 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `آزادسازی پورت داده اینجست ${tcpPort}`,
-        toolNameEn: `Free TCP Ingestion Port ${tcpPort}`,
-        cwd: parallelDir,
-        category: 'network'
-      });
-      logs.push(`  [✓] Ports ${webPort}, ${restPort}, ${tcpPort} unlocked.`);
-
-      // 2. Setup runtime directories & sync scripts
-      logs.push(`==> 2. Synchronizing runtime directories and self-healing scripts...`);
-      if (!fs.existsSync(runtimeDir)) fs.mkdirSync(runtimeDir, { recursive: true });
-      if (!fs.existsSync(parallelDir)) fs.mkdirSync(parallelDir, { recursive: true });
-      fs.mkdirSync(path.join(parallelDir, 'etc/system/local'), { recursive: true });
-      fs.mkdirSync(path.join(parallelDir, 'var/log/splunk'), { recursive: true });
-      fs.mkdirSync(path.join(parallelDir, 'var/run/splunk'), { recursive: true });
-
-      // Clean old lockfiles and stale inherited passwd
-      await runCommand(
-        `rm -rf "${parallelDir}/var/run/splunk/"*.pid "${parallelDir}/var/run/splunk/"*.socket "${parallelDir}/var/lock/splunk/"* 2>/dev/null || true`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'پاکسازی قفل‌های قدیمی PID و Socket',
-          toolNameEn: 'Clean Stale Lockfiles and Sockets',
-          cwd: parallelDir,
-          category: 'splunk'
-        }
-      );
-      await runCommand(
-        `rm -f "${parallelDir}/etc/passwd" "${parallelDir}/etc/system/local/passwd" 2>/dev/null || true`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'پاکسازی هش‌های معلق پسورد اسپلانک',
-          toolNameEn: 'Reset Legacy Passwd Credentials',
-          cwd: parallelDir,
-          category: 'security'
-        }
-      );
-
-      const scriptSources = ['deploy-splunk-k8s-offline.sh', 'fix-parallel-web.sh', 'reset-splunk-password.sh'];
-      for (const s of scriptSources) {
-        const src = path.join(process.cwd(), 'scripts', s);
-        const dst = path.join(runtimeDir, s);
-        if (fs.existsSync(src)) {
-          fs.copyFileSync(src, dst);
-          await runCommand(`chmod +x "${src}" "${dst}" 2>/dev/null || true`, {
-            toolId: 'diagnostics_autoheal',
-            toolNameFa: `تنظیم دسترسی اجرایی اسکریپت ${s}`,
-            toolNameEn: `Set Executable Permissions on ${s}`,
-            category: 'system'
-          });
-        }
-      }
-      logs.push(`  [✓] Scripts deployed to ${runtimeDir} with execution permissions.`);
-
-      // 3. Write clean, collision-free configuration files
-      logs.push(`==> 3. Generating synchronized configuration stanzas (KVStore=${kvPort}, REST=${restPort})...`);
-      const webConf = `[settings]\nhttpport = ${webPort}\nserver.socket_host = 0.0.0.0\nenableSplunkWebSSL = false\nstartwebserver = 1\nappServerPorts = 8066\nmgmtHostPort = 127.0.0.1:${restPort}\n`;
-      const serverConf = `[general]\nserverName = splunk-parallel-staging-01\nmgmtHostPort = 127.0.0.1:${restPort}\npass4SymmKey = changeme-parallel-key\nactive_group = Enterprise\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${restPort}\n\n[kvstore]\nport = ${kvPort}\n`;
-      const inputsConf = `[default]\nhost = splunk-parallel-staging-01\n\n[splunktcp://${tcpPort}]\ndisabled = 0\nqueueSize = 10MB\n`;
-      const userSeedConf = `[user_info]\nUSERNAME = admin\nPASSWORD = ${adminPassword}\n`;
-      const uiTourConf = `[splunk_enterprise]\nviewed = 1\n`;
-      const launchConf = `SPLUNK_HOME=${parallelDir}\nSPLUNK_DB=${parallelDir}/var/lib/splunk\n`;
-
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/web.conf'), webConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/server.conf'), serverConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/inputs.conf'), inputsConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/user-seed.conf'), userSeedConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/ui-tour.conf'), uiTourConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/splunk-launch.conf'), launchConf, 'utf8');
-      
-      await runCommand(
-        `cat "${parallelDir}/etc/system/local/web.conf" "${parallelDir}/etc/system/local/server.conf" | head -n 12`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'بررسی صحت کانفیگ‌های تولیدشده web.conf و server.conf',
-          toolNameEn: 'Verify Generated Stanza Configurations',
-          cwd: parallelDir,
-          category: 'splunk'
-        }
-      );
-      logs.push(`  [✓] Clean web.conf, server.conf, inputs.conf, user-seed.conf written.`);
-
-      // 4. Open Firewall
-      logs.push(`==> 4. Configuring firewall access rules for TCP ${webPort}, ${restPort}, ${tcpPort}...`);
-      await runCommand(
-        `firewall-cmd --permanent --zone=public --add-port=${webPort}/tcp --add-port=${restPort}/tcp --add-port=${tcpPort}/tcp --add-port=${kvPort}/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'تنظیم قوانین پورت‌های فایروال سیستم‌عامل',
-          toolNameEn: 'Firewall Port Authorization Rules',
-          category: 'security'
-        }
-      );
-      await runCommand(`iptables -I INPUT -p tcp --dport ${webPort} -j ACCEPT 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `باز کردن پورت ورودی iptables ${webPort}`,
-        toolNameEn: `Accept Inbound TCP Port ${webPort}`,
-        category: 'security'
-      });
-      await runCommand(`iptables -I INPUT -p tcp --dport ${restPort} -j ACCEPT 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `باز کردن پورت ورودی iptables ${restPort}`,
-        toolNameEn: `Accept Inbound TCP Port ${restPort}`,
-        category: 'security'
-      });
-      logs.push(`  [✓] Firewall rules configured successfully.`);
-
-      // 5. Execute binary or repair script
-      logs.push(`==> 5. Starting Splunk daemon on Port ${webPort} (with --run-as-root)...`);
-      const fixScript = path.join(process.cwd(), 'scripts/fix-parallel-web.sh');
-      if (fs.existsSync(fixScript)) {
-        await runCommand(`chmod +x "${fixScript}"`);
-        const fixRun = await runCommand(`bash "${fixScript}" "${parallelDir}" ${webPort} ${restPort} ${tcpPort} ${kvPort}`, {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'اجرای اسکریپت خودترمیمی و استارت دیمن اسپلانک',
-          toolNameEn: 'Execute Splunk Fix & Bootstrap Script',
-          cwd: parallelDir,
-          category: 'splunk'
-        });
-        if (fixRun.stdout) {
-          logs.push(fixRun.stdout);
-        }
-      } else if (fs.existsSync(path.join(parallelDir, 'bin/splunk'))) {
-        const binPath = path.join(parallelDir, 'bin/splunk');
-        await runCommand(`chmod -R +x "${parallelDir}/bin" 2>/dev/null || true`);
-        const startRun = await runCommand(
-          `SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`,
-          {
-            toolId: 'diagnostics_autoheal',
-            toolNameFa: 'راه‌اندازی سرویس اسپلانک با مجوز روت',
-            toolNameEn: 'Splunk Daemon Start with Root Privileges',
-            cwd: parallelDir,
-            category: 'splunk'
-          }
-        );
-        if (startRun.stdout) logs.push(startRun.stdout);
-      } else {
-        // Link from main splunk if parallel binary is empty
-        if (fs.existsSync('/opt/splunk/bin')) {
-          await runCommand(`cp -rn /opt/splunk/bin /opt/splunk/lib /opt/splunk/share /opt/splunk/openssl "${parallelDir}/" 2>/dev/null || true`);
-          await runCommand(`chmod -R +x "${parallelDir}/bin" 2>/dev/null || true`);
-          const startRun = await runCommand(
-            `SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${parallelDir}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`,
-            {
-              toolId: 'diagnostics_autoheal',
-              toolNameFa: 'کپی باینری‌ها و استارت دیمن موازی',
-              toolNameEn: 'Bootstrap Parallel Splunk Binary & Daemon',
-              cwd: parallelDir,
-              category: 'splunk'
-            }
-          );
-          if (startRun.stdout) logs.push(startRun.stdout);
-        }
-      }
-
-      // 6. Verification probe
-      logs.push(`==> 6. Testing Web Service Listener on Port ${webPort}...`);
-      await runCommand(
-        `curl -s -I --connect-timeout 3 "http://127.0.0.1:${webPort}/en-US/account/login" | head -n 5`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'تست اعتبارسنجی نهایی وب‌سایت اسپلانک (HTTP 200 OK)',
-          toolNameEn: 'Final Post-Recovery HTTP Validation',
-          cwd: parallelDir,
-          category: 'splunk'
-        }
-      );
-      await new Promise(r => setTimeout(r, 1500));
-
-      let httpCode = '200';
-      const netInfo = getSystemNetworkInfo();
-      const loginUrl = `http://${netInfo.primaryIp || '127.0.0.1'}:${webPort}/en-US/account/login`;
-
-      logs.push(`======================================================================`);
-      logs.push(`[SUCCESS] AI Auto-Healing Completed!`);
-      logs.push(`  Status: HTTP 200 OK`);
-      logs.push(`  Login URL: ${loginUrl}`);
-      logs.push(`  Admin Username: admin | Password: ${adminPassword}`);
-      logs.push(`======================================================================`);
-
-      res.json({
-        success: true,
-        httpStatus: httpCode,
-        webUrl: loginUrl,
-        credentials: { username: 'admin', password: adminPassword },
-        logs,
-        healedAt: new Date().toISOString()
-      });
-    } catch (err: any) {
-      logs.push(`[-] Error during auto-heal: ${err.message}`);
-      res.status(500).json({ success: false, error: err.message, logs });
+    if (String(adminPassword || '').length < 12 || String(pass4SymmKey || '').length < 12) {
+      return res.status(400).json({ success:false, error:'A real admin password and pass4SymmKey are required (minimum 12 characters each).' });
     }
+
+    const parallelDir='/opt/splunk_parallel';
+    const binary=path.join(parallelDir,'bin','splunk');
+    if(!fs.existsSync(binary)) {
+      return res.status(404).json({ success:false, error:'Real Splunk binary is not installed in /opt/splunk_parallel.' });
+    }
+
+    const script=path.join(process.cwd(),'scripts','fix-parallel-web.sh');
+    if(!fs.existsSync(script)) return res.status(404).json({success:false,error:'Real repair script is missing.'});
+
+    const q=(v:string)=>"'" + String(v).replace(/'/g,"'\\''") + "'";
+    const cmd='SPLUNK_ADMIN_PASSWORD='+q(adminPassword)+' SPLUNK_PASS4SYMMKEY='+q(pass4SymmKey)+' bash '+q(script)+' '+q(parallelDir)+' '+Number(webPort)+' '+Number(restPort)+' '+Number(tcpPort)+' '+Number(kvPort);
+    const run=await runCommand(cmd,{
+      toolId:'diagnostics_autoheal',
+      toolNameFa:'خودترمیم واقعی Splunk',
+      toolNameEn:'Real Splunk Auto-Heal',
+      cwd:parallelDir,
+      category:'splunk',
+      timeout:360000
+    });
+
+    const status=await runCommand(`SPLUNK_HOME="${parallelDir}" "${binary}" status`,{
+      toolId:'diagnostics_autoheal',
+      toolNameFa:'اعتبارسنجی وضعیت Splunk بعد از تعمیر',
+      toolNameEn:'Verify Splunk After Auto-Heal',
+      cwd:parallelDir,
+      category:'splunk',
+      timeout:15000
+    });
+    const statusText=(status.stdout||status.stderr||'').toString();
+    const healthy=status.code===0 && /splunkd is running|splunkweb is running/i.test(statusText);
+
+    if(run.code!==0 || !healthy){
+      return res.status(500).json({
+        success:false,
+        exitCode:run.code,
+        logs:[run.stdout||run.stderr,statusText],
+        verification:statusText
+      });
+    }
+
+    const httpCheck=await runCommand(`curl -ksS -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://127.0.0.1:${Number(webPort)}/en-US/account/login"`,{
+      toolId:'diagnostics_autoheal',
+      toolNameEn:'Verify Splunk Web after auto-heal',
+      category:'network',
+      timeout:10000
+    });
+    let httpCode=(httpCheck.stdout||'').trim();
+    if(!/^(200|302|303)$/.test(httpCode)){
+      const plain=await runCommand(`curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://127.0.0.1:${Number(webPort)}/en-US/account/login"`,{
+        toolId:'diagnostics_autoheal',
+        toolNameEn:'Verify HTTP Splunk Web after auto-heal',
+        category:'network',
+        timeout:10000
+      });
+      httpCode=(plain.stdout||'').trim();
+    }
+
+    const verifiedWeb=/^(200|302|303)$/.test(httpCode);
+    return res.status(healthy && verifiedWeb ? 200 : 500).json({
+      success:healthy && verifiedWeb,
+      exitCode:run.code,
+      httpStatus:httpCode,
+      webUrl:`http://${getSystemNetworkInfo().primaryIp || '127.0.0.1'}:${Number(webPort)}/en-US/account/login`,
+      logs:[run.stdout||run.stderr,statusText]
+    });
   };
 
   app.post('/api/parallel-cluster/auto-heal-all', handleAutoHeal);
   app.post('/api/parallel-cluster/ai-auto-heal', handleAutoHeal);
 
-  // API: Targeted Single Issue Auto-Fix (Fixes individual issue clicked in UI)
-  app.post('/api/parallel-cluster/fix-individual-issue', async (req, res) => {
-    const { issueId, serverType = 'parallel', targetDir = '/opt/splunk_parallel' } = req.body;
-    let commandToRun = '';
-    let toolNameFa = 'اصلاح خطای اختصاصی عیب‌یابی';
-    let toolNameEn = 'Single Issue Targeted Auto-Fix';
+  // API: Targeted Single Issue Auto-Fix — only documented real remediations.
+  app.post('/api/parallel-cluster/fix-individual-issue', async (req,res) => {
+    const { issueId, targetDir='/opt/splunk_parallel', webPort=8001, restPort=8090, tcpPort=9998, kvPort=8193, adminPassword, pass4SymmKey } = req.body || {};
+    if(!['/opt/splunk_parallel','/opt/splunk'].includes(targetDir)) return res.status(400).json({success:false,error:'Unsupported target directory.'});
 
-    if (issueId === 'diag-kvstore-collision') {
-      toolNameFa = 'رفع تداخل پورت KVStore و تنظیم پورت 8193';
-      toolNameEn = 'Fix KVStore Port Collision (Set Port 8193)';
-      commandToRun = `mkdir -p "${targetDir}/etc/system/local" && (grep -q "\\[kvstore\\]" "${targetDir}/etc/system/local/server.conf" 2>/dev/null && sed -i 's/port\\s*=\\s*8192/port = 8193/g' "${targetDir}/etc/system/local/server.conf" || echo -e "\\n[kvstore]\\nport = 8193" >> "${targetDir}/etc/system/local/server.conf") && echo "[SUCCESS] KVStore port updated to 8193"`;
-    } else if (issueId === 'diag-web-conf-mgmt' || issueId === 'diag-web-mgmt-mismatch') {
-      toolNameFa = 'تنظیم mgmtHostPort = 127.0.0.1:8090 در web.conf';
-      toolNameEn = 'Sync mgmtHostPort in web.conf';
-      commandToRun = `mkdir -p "${targetDir}/etc/system/local" && (grep -q "\\[settings\\]" "${targetDir}/etc/system/local/web.conf" 2>/dev/null && sed -i 's/mgmtHostPort.*/mgmtHostPort = 127.0.0.1:8090/g' "${targetDir}/etc/system/local/web.conf" || echo -e "[settings]\\nhttpport = 8001\\nmgmtHostPort = 127.0.0.1:8090" >> "${targetDir}/etc/system/local/web.conf") && echo "[SUCCESS] web.conf synchronized with REST mgmtHostPort=8090"`;
-    } else if (issueId === 'virt-docker-perm') {
-      toolNameFa = 'اصلاح دسترسی و مالکیت فایل‌های داکر لینوکس';
-      toolNameEn = 'Fix Docker Volume Linux Ownership (4181:4181)';
-      commandToRun = `mkdir -p /var/lib/splunk_virtual && chown -R 4181:4181 /var/lib/splunk_virtual 2>/dev/null || true && chmod -R 755 /var/lib/splunk_virtual && echo "[SUCCESS] Linux filesystem permissions fixed for UID 4181"`;
-    } else if (issueId === 'virt-heartbeat-out') {
-      toolNameFa = 'راه‌اندازی مجدد کانتینر اسپلانک مجازی و رفع هارت‌بیت';
-      toolNameEn = 'Restart Virtual Splunk Container';
-      commandToRun = `fuser -k 8080/tcp 2>/dev/null || true; docker restart splunk_virtual_node 2>/dev/null || podman restart splunk_virtual_node 2>/dev/null || echo "[SUCCESS] Container restart signal sent to port 8080"`;
-    } else if (issueId === 'diag-auth-seed-missing') {
-      toolNameFa = 'ایجاد فایل user-seed.conf برای ادمین';
-      toolNameEn = 'Create Default Admin user-seed.conf';
-      commandToRun = `mkdir -p "${targetDir}/etc/system/local" && echo -e "[user_info]\\nUSERNAME = admin\\nPASSWORD = changeme" > "${targetDir}/etc/system/local/user-seed.conf" && chmod 600 "${targetDir}/etc/system/local/user-seed.conf" && echo "[SUCCESS] user-seed.conf initialized with admin credentials"`;
-    } else if (issueId === 'diag-rest-mgmt-closed' || issueId === 'diag-web-http-listener') {
-      toolNameFa = 'آزادسازی سوکت‌های مسدود و ریستارت دیمن اسپلانک';
-      toolNameEn = 'Unlock Sockets & Restart Daemon';
-      commandToRun = `fuser -k 8001/tcp 8090/tcp 2>/dev/null || true && SPLUNK_HOME="${targetDir}" "${targetDir}/bin/splunk" restart --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || echo "[INFO] Splunk restart executed."`;
-    } else {
-      toolNameFa = `اصلاح خودکار خطای ${issueId}`;
-      toolNameEn = `Auto-Fix Issue ${issueId}`;
-      commandToRun = `fuser -k 8001/tcp 8090/tcp 2>/dev/null || true && echo "[SUCCESS] Diagnostic fix command executed for ${issueId}"`;
+    const binary=path.join(targetDir,'bin','splunk');
+    if(['diag-web-conf-mgmt','diag-web-http-response','diag-rest-mgmt-closed','diag-web-http-listener','diag-real-pass4symmkey'].includes(issueId) && !fs.existsSync(binary)){
+      return res.status(404).json({success:false,error:'Real Splunk binary is required for this remediation.'});
     }
 
-    const result = await runCommand(commandToRun, {
-      toolId: 'diagnostics_autoheal',
-      toolNameFa,
-      toolNameEn,
-      cwd: targetDir,
-      category: 'splunk'
-    });
+    if(issueId==='diag-auth-seed-missing'){
+      return res.status(400).json({success:false,error:'Default credentials are disabled. Supply a real password through the authenticated installation flow.'});
+    }
 
-    res.json({
-      success: result.code === 0,
-      issueId,
-      command: commandToRun,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      code: result.code
-    });
+    if(issueId==='virt-docker-perm' || issueId==='virt-heartbeat-out'){
+      return res.status(410).json({success:false,error:'Virtual server remediation is disabled because no synthetic server is maintained.'});
+    }
+
+    const script=getScriptPath('fix-parallel-web.sh');
+    if(['diag-web-conf-mgmt','diag-web-http-response','diag-rest-mgmt-closed','diag-web-http-listener'].includes(issueId)){
+      if(String(adminPassword||'').length<12 || String(pass4SymmKey||'').length<12) {
+        return res.status(400).json({success:false,error:'A real admin password and pass4SymmKey are required.'});
+      }
+      const q=(v:string)=>"'" + String(v).replace(/'/g,"'\\''") + "'";
+      const cmd='SPLUNK_ADMIN_PASSWORD='+q(adminPassword)+' SPLUNK_PASS4SYMMKEY='+q(pass4SymmKey)+' bash '+q(script)+' '+q(targetDir)+' '+Number(webPort)+' '+Number(restPort)+' '+Number(tcpPort)+' '+Number(kvPort);
+      const r=await runCommand(cmd,{toolId:'diagnostics_autoheal',toolNameEn:'Real targeted Splunk remediation',category:'splunk',cwd:targetDir,timeout:300000});
+      return res.status(r.code===0?200:500).json({success:r.code===0,issueId,stdout:r.stdout,stderr:r.stderr,exitCode:r.code});
+    }
+
+    if(issueId==='diag-kvstore-collision'){
+      const conf=path.join(targetDir,'etc/system/local/server.conf');
+      if(!fs.existsSync(conf)) return res.status(404).json({success:false,error:'server.conf not found.'});
+      const text=fs.readFileSync(conf,'utf8');
+      fs.writeFileSync(conf,/\\[kvstore\\]/.test(text)?text.replace(/port\\s*=\\s*8192/g,'port = 8193'):text+'\\n[kvstore]\\nport = 8193\\n','utf8');
+      return res.json({success:true,issueId,changed:true,path:conf});
+    }
+
+    return res.status(400).json({success:false,issueId,error:'No supported real remediation is registered for this issue.'});
   });
 
   // API: Execute Master Runbook Command Directly
