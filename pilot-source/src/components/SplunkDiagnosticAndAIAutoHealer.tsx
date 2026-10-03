@@ -139,40 +139,27 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
   // Run targeted single issue auto-fix command directly on server
   const runSingleIssueFix = async (issueId: string) => {
     setFixingIssueId(issueId);
-    showToast(isFa ? 'در حال اجرای دستور اصلاح در خط فرمان سرور...' : 'Executing fix command on server CLI...');
+    showToast(isFa ? 'در حال اجرای اصلاح واقعی روی سرور...' : 'Executing real remediation on the server...');
     const targetType = selectedServerType;
-    const resolvedDir = targetType === 'real' 
-      ? '/opt/splunk' 
-      : targetType === 'virtual' 
-      ? '/opt/splunk_virtual' 
-      : (targetType === 'parallel' ? '/opt/splunk_parallel' : customTargetDir);
-
+    const resolvedDir = targetType === 'real' ? '/opt/splunk' : '/opt/splunk_parallel';
     try {
+      let adminPassword = '';
+      let pass4SymmKey = '';
+      if (targetType !== 'virtual') {
+        adminPassword = window.prompt(isFa ? 'رمز ادمین واقعی Splunk (حداقل ۱۲ کاراکتر):' : 'Real Splunk admin password (minimum 12 characters):') || '';
+        pass4SymmKey = window.prompt(isFa ? 'pass4SymmKey واقعی (حداقل ۱۲ کاراکتر):' : 'Real pass4SymmKey (minimum 12 characters):') || '';
+      }
       const res = await fetch('/api/parallel-cluster/fix-individual-issue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          issueId,
-          serverType: targetType,
-          targetDir: resolvedDir
-        })
+        body: JSON.stringify({ issueId, serverType: targetType, targetDir: resolvedDir, adminPassword, pass4SymmKey })
       });
-
-      if (res.ok) {
-        if (targetType === 'real') {
-          setResolvedRealIssueIds(prev => [...prev, issueId]);
-        } else if (targetType === 'virtual') {
-          setResolvedVirtualIssueIds(prev => [...prev, issueId]);
-        } else {
-          setResolvedParallelIssueIds(prev => [...prev, issueId]);
-        }
-
-        setDiagnosticIssues(prev => prev.map(i => i.id === issueId ? { ...i, status: 'PASS' as const, severity: 'INFO' as const } : i));
-        showToast(isFa ? 'دستور با موفقیت در سرور اجرا و خطا برطرف شد ✓' : 'Fix executed on server successfully ✓');
-        setTimeout(() => runDeepDiagnostics(), 800);
-      }
-    } catch (_) {
-      showToast(isFa ? 'خطا در ارتباط با سرور' : 'Error contacting server');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || data.stderr || `HTTP ${res.status}`);
+      showToast(isFa ? 'اصلاح واقعی با موفقیت اجرا شد ✓' : 'Real remediation completed ✓');
+      await runDeepDiagnostics();
+    } catch (err: any) {
+      showToast(isFa ? `اصلاح انجام نشد: ${err?.message || err}` : `Remediation failed: ${err?.message || err}`);
     } finally {
       setFixingIssueId(null);
     }
@@ -181,18 +168,19 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
   // Run Master Terminal Script directly on server CLI
   const runMasterRunbookOnServer = async () => {
     setIsRunningRunbook(true);
-    showToast(isFa ? 'در حال اجرای اسکریپت در خط فرمان سرور...' : 'Executing runbook script on server CLI...');
+    showToast(isFa ? 'در حال اجرای Runbook واقعی Overseer...' : 'Executing the real Overseer runbook...');
     try {
-      const res = await fetch('/api/parallel-cluster/execute-runbook', {
+      const res = await fetch('/api/real/overseer/step', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: masterTerminalScript })
+        body: JSON.stringify({ step: 'security' })
       });
-      if (res.ok) {
-        showToast(isFa ? 'اسکریپت با موفقیت در سرور اجرا شد ✓' : 'Master script executed on server ✓');
-        setTimeout(() => runDeepDiagnostics(), 1000);
-      }
-    } catch (_) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || `HTTP ${res.status}`);
+      showToast(isFa ? 'Runbook واقعی تکمیل شد ✓' : 'Real runbook completed ✓');
+      await runDeepDiagnostics();
+    } catch (err: any) {
+      showToast(isFa ? `Runbook شکست خورد: ${err?.message || err}` : `Runbook failed: ${err?.message || err}`);
     } finally {
       setIsRunningRunbook(false);
     }
@@ -265,245 +253,73 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
         });
         setDiagnosticIssues(processedIssues);
         const hasFails = processedIssues.some((i: any) => i.status === 'FAIL');
-        setOverallHealthScore(hasFails ? 35 : 100);
-        setHttpStatusResult(hasFails ? '000' : '200');
+        setOverallHealthScore(typeof data.healthScore === 'number' ? data.healthScore : (hasFails ? 35 : 100));
+        setHttpStatusResult(String(data.httpStatus ?? (hasFails ? '000' : '200')));
         setAiAnalysisSummary(data.aiAnalysis || null);
         setLastScanTime(new Date().toLocaleTimeString());
       } else {
         throw new Error('Fallback to local analyzer');
       }
-    } catch (err) {
-      // High-fidelity fallback diagnostic evaluation based on symptoms
-      const mockIssues: DiagnosticIssue[] = isReal ? [
-        {
-          id: 'diag-real-tcpout-ssl',
-          category: 'config',
-          titleFa: 'انتقال متن‌باز لاگ‌های امنیتی به ایندکسرها بدون رمزنگاری TLS در outputs.conf',
-          titleEn: 'Cleartext S2S Log Transmission in outputs.conf (useSSL = false)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'ترافیک ورودی و بسته‌های لاگ بدون فعال بودن TLS و روی پورت ۹۹۹۷ به صورت رمزنشده منتقل می‌شوند که امکان استراق‌سمع (Sniffing) در شبکه را ایجاد می‌کند.',
-          descriptionEn: 'Forwarder is dispatching unencrypted telemetry to indexers on port 9997.',
-          rootCauseFa: 'مقدار useSSL = false در stanza مربوط به [tcpout] در فایل /opt/splunk/etc/system/local/outputs.conf.',
-          solutionFa: 'تنظیم useSSL = true و تعیین مسیر سرتیفیکت‌های معتبر در outputs.conf.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/outputs.conf'
-        },
-        {
-          id: 'diag-real-pass4symmkey',
-          category: 'permissions',
-          titleFa: 'استفاده از کلید احراز هویت پیش‌فرض کارخانه‌ای (pass4SymmKey = changeme)',
-          titleEn: 'Factory Default Shared Secret (pass4SymmKey = changeme)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'کلید اشتراکی میان نودهای کلاستر و سرچ‌هدها برابر با مقدار پیش‌فرض changeme قرار دارد و اتصال هر نود نامعتبر به کلاستر ممکن است.',
-          descriptionEn: 'Cluster authentication secret is set to default factory string changeme in server.conf.',
-          rootCauseFa: 'عدم تغییر pass4SymmKey در [general] فایل server.conf.',
-          solutionFa: 'تولید خودکار کلید هش‌شده رمزنگاری و جایگزینی در server.conf.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/server.conf'
-        },
-        {
-          id: 'diag-real-disk-threshold',
-          category: 'config',
-          titleFa: 'آستانه توقف اضطراری دیسک ایندکس بسیار پایین است (minFreeSpaceMB = 1000)',
-          titleEn: 'Low Free Disk Space Protection Threshold (minFreeSpaceMB = 1000)',
-          severity: 'HIGH',
-          status: 'FAIL',
-          descriptionFa: 'حداقل فضای آزاد دیسک برای توقف ذخیره‌سازی تنها ۱ گیگابایت تنظیم شده که در حجم بالای لاگ روزانه باعث پر شدن ناگهانی پارتیشن /opt می‌شود.',
-          descriptionEn: 'Disk safety margin of 1000MB is inadequate for enterprise ingest rates.',
-          rootCauseFa: 'مقدار minFreeSpaceMB = 1000 در [diskUsage] فایل server.conf.',
-          solutionFa: 'افزایش آستانه به minFreeSpaceMB = 5000 جهت ایمنی پایپ‌لاین لاگ‌ها.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/server.conf'
-        },
-        {
-          id: 'diag-real-tls-versions',
-          category: 'config',
-          titleFa: 'پشتیبانی از پروتکل‌های منسوخ و ناامن SSLv3 و TLS 1.0 در splunkd',
-          titleEn: 'Deprecated SSLv3 & TLS 1.0 Protocol Support Active',
-          severity: 'HIGH',
-          status: 'FAIL',
-          descriptionFa: 'پیکربندی سرور اجازه برقراری اتصال با الگوریتم‌های آسیب‌پذیر POODLE و BEAST را به کلاینت‌ها می‌دهد.',
-          descriptionEn: 'Insecure cipher suites and deprecated TLS 1.0 protocols enabled in server.conf.',
-          rootCauseFa: 'تنظیم sslVersionsToSupport = ssl3, tls1.0 در [sslConfig].',
-          solutionFa: 'محدودسازی به TLS 1.2 و TLS 1.3 و غیرفعال‌سازی sslCompression.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/server.conf'
-        }
-      ] : isVirtual ? [
-        {
-          id: 'virt-docker-perm',
-          category: 'permissions',
-          titleFa: 'تداخل سطح دسترسی داکر به Volume لینوکس',
-          titleEn: 'Docker Volume Linux permissions check (Permission Denied)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'کانتینر داکر اسپلانک مجازی به دلیل عدم امکان نوشتن در دایرکتوری /var/lib/splunk_virtual با خطای Permission Denied در حلقه لود نامحدود متوقف شده است.',
-          descriptionEn: 'Docker Splunk container cannot write to the persistent mount /var/lib/splunk_virtual, leading to loop crash.',
-          rootCauseFa: 'کاربر داکر (uid: 4181) دسترسی مالکیتی روی پوشه سوار شده لینوکس ندارد.',
-          solutionFa: 'تغییر مالکیت پوشه با chown -R splunk:splunk /var/lib/splunk_virtual در سرور.',
-          autoFixAvailable: true,
-          affectedTarget: '/var/lib/splunk_virtual'
-        },
-        {
-          id: 'virt-heartbeat-out',
-          category: 'http',
-          titleFa: 'قطع هارت‌بیت زنده کانتینر سرور مجازی اسپلانک',
-          titleEn: 'Virtual Container Heartbeat Telemetry Outage',
-          severity: 'HIGH',
-          status: 'FAIL',
-          descriptionFa: 'درگاه پاسخ‌گویی وب کانتینر اسپلانک روی پورت ۸۰۸۰ سیگنال هارت‌بیت ارسال نمی‌کند و لایو پایش به عنوان قطع کامل لاگ نمایش داده می‌شود.',
-          descriptionEn: 'The virtual container daemon is unhealthy and is not returning response headers on port 8080.',
-          rootCauseFa: 'متوقف بودن کانتینر به دلیل ارورهای دسترسی دایرکتوری.',
-          solutionFa: 'رفع دسترسی پوشه‌ها و ری‌استارت و بووت مجدد کانتینر.',
-          autoFixAvailable: true,
-          affectedTarget: 'Docker Daemon (port 8080)'
-        }
-      ] : [
-        {
-          id: 'diag-web-conf-mgmt',
-          category: 'config',
-          titleFa: 'عدم تطابق mgmtHostPort در فایل web.conf با پورت 8090',
-          titleEn: 'mgmtHostPort mismatch in web.conf (HTTP Status 000000 freeze)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'سرویس وب پایتون اسپلانک برای استارت کامل باید به پورت مدیریتی splunkd متصل شود. عدم تعریف mgmtHostPort = 127.0.0.1:8090 باعث تلاش وب برای اتصال به ۸۰۸۹ و قطع شدن با وضعیت 000000 می‌شود.',
-          descriptionEn: 'Splunk Web python daemon requires explicit mgmtHostPort = 127.0.0.1:8090 to bind and bootstrap properly.',
-          rootCauseFa: 'فایل /opt/splunk_parallel/etc/system/local/web.conf فاقد mgmtHostPort = 127.0.0.1:8090 است یا httpport با پروسه دیگر تداخل دارد.',
-          solutionFa: 'تنظیم خودکار stanza تحت [settings] با مقادیر httpport=8001 و mgmtHostPort=127.0.0.1:8090.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk_parallel/etc/system/local/web.conf'
-        },
-        {
-          id: 'diag-kvstore-collision',
-          category: 'port',
-          titleFa: 'تداخل پورت 8192 دیتابیس KVStore با نمونه اصلی اسپلانک',
-          titleEn: 'KVStore port 8192 conflict with primary Splunk',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'پورت ۸۱۹۲ توسط نمونه اول اسپلانک اشغال است و تلاش نسخه موازی برای اشغال مجدد آن باعث ارور "kvstore port [8192] is already bound" و توقف بوت می‌شود.',
-          descriptionEn: 'KVStore port collision blocks daemon bootstrap.',
-          rootCauseFa: 'عدم تعیین پورت مجزای 8193 در server.conf.',
-          solutionFa: 'تنظیم خودکار [kvstore] port = 8193 در server.conf.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk_parallel/etc/system/local/server.conf'
-        }
-      ];
-
-      const processedIssues = mockIssues.map(issue => {
-        if (currentResolvedIds.includes(issue.id)) {
-          return { ...issue, status: 'PASS' as const, severity: 'INFO' as const };
-        }
-        return issue;
-      });
-
-      setDiagnosticIssues(processedIssues);
-      const hasFails = processedIssues.some(i => i.status === 'FAIL');
-      setOverallHealthScore(isReal ? 95 : (hasFails ? 35 : 100));
-      setHttpStatusResult(isReal ? '200' : (hasFails ? '000' : '200'));
-      setLastScanTime(new Date().toLocaleTimeString());
-      setAiAnalysisSummary(
-        isFa
-          ? `اسکن هوش مصنوعی لوکال روی ${targetType === 'real' ? 'سرور اصلی عملیاتی (/opt/splunk)' : targetType === 'virtual' ? 'سرور مجازی داکر (/opt/splunk_virtual)' : 'سرور موازی استیجینگ (/opt/splunk_parallel)'} با موفقیت انجام شد.`
-          : `AI scan completed on ${targetType === 'real' ? 'Primary Host Instance' : targetType === 'virtual' ? 'Virtual Docker Container Instance' : 'Parallel Staging Instance'}.`
-      );
+    } catch (err: any) {
+      setDiagnosticIssues([]);
+      setOverallHealthScore(0);
+      setHttpStatusResult('000');
+      setAiAnalysisSummary(isFa
+        ? `اسکن واقعی انجام نشد: ${err?.message || err}`
+        : `Real diagnostics failed: ${err?.message || err}`);
+      showToast(isFa ? 'اسکن واقعی شکست خورد.' : 'Real diagnostic scan failed.');
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Run AI Autonomous Auto-Heal
+  // Run AI Autonomous Auto-Heal — real-only.
   const runAiAutoHeal = async () => {
     setIsAiHealerRunning(true);
     setAutoHealCompleted(false);
-    const targetType = selectedServerType;
-    const isReal = targetType === 'real';
-    const isVirtual = targetType === 'virtual';
-
-    setAiLogs([
-      `[${new Date().toLocaleTimeString()}] [AI_HEALER] آغاز پروسه خودترمیمی روی ${isReal ? 'سرور اصلی عملیاتی (:8000)' : isVirtual ? 'سرور مجازی داکر کانتینر (:8080)' : 'سرور موازی استیجینگ (:8001)'}...`,
-      `[${new Date().toLocaleTimeString()}] [1/6] آزادسازی سوکت‌های معلق و بررسی پروسه‌های قفل شده...`
-    ]);
-
+    setAiLogs([]);
     try {
+      if (selectedServerType === 'virtual') {
+        throw new Error(isFa ? 'Virtual Server مصنوعی غیرفعال است.' : 'Synthetic virtual server is disabled.');
+      }
+      const adminPassword = window.prompt(isFa ? 'رمز ادمین واقعی Splunk (حداقل ۱۲ کاراکتر):' : 'Real Splunk admin password (minimum 12 characters):') || '';
+      const pass4SymmKey = window.prompt(isFa ? 'pass4SymmKey واقعی (حداقل ۱۲ کاراکتر):' : 'Real pass4SymmKey (minimum 12 characters):') || '';
+      if (adminPassword.length < 12 || pass4SymmKey.length < 12) {
+        throw new Error(isFa ? 'رمز و pass4SymmKey معتبر لازم است.' : 'A valid admin password and pass4SymmKey are required.');
+      }
+
       const res = await fetch('/api/parallel-cluster/ai-auto-heal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           serverType: selectedServerType,
-          targetDir: isReal ? '/opt/splunk' : (selectedServerType === 'virtual' ? '/opt/splunk_virtual' : (selectedServerType === 'parallel' ? '/opt/splunk_parallel' : customTargetDir)),
+          targetDir: selectedServerType === 'real' ? '/opt/splunk' : '/opt/splunk_parallel',
           webPort: webPortInfo.port,
           restPort: webPortInfo.restPort,
           tcpPort: webPortInfo.tcpPort,
           kvPort: webPortInfo.kvPort,
-          adminPassword: 'changeme'
+          adminPassword,
+          pass4SymmKey
         })
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || data.stderr || `HTTP ${res.status}`);
 
-      if (res.ok) {
-        const data = await res.json();
-        setAiLogs(data.logs || []);
-        setAutoHealCompleted(true);
-        setHttpStatusResult(data.httpStatus || '200');
-        setOverallHealthScore(100);
-        setAutoHealStats({ fixedCount: data.fixedCount || 6, remainingCount: 0 });
-        showToast(isFa ? 'هوش مصنوعی تمام خطاها را با موفقیت برطرف کرد ✓' : 'AI Auto-Heal completed successfully ✓');
-        
-        // Save current issues as fixed for the target server type
-        if (isReal) {
-          setResolvedRealIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else if (isVirtual) {
-          setResolvedVirtualIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else {
-          setResolvedParallelIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        }
-
-        // Re-run diagnostics automatically to verify the healed state
-        setTimeout(() => runDeepDiagnostics(), 1000);
-      } else {
-        throw new Error('Fallback AI Simulation');
-      }
-    } catch (_) {
-      // Fallback simulation with realistic step progression
-      setTimeout(() => {
-        if (isVirtual) {
-          setAiLogs(prev => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] [2/6] تصحیح مجوزهای سیستم فایل لینوکس با مالکیت کاربر اسپلانک (chown 4181:4181)...`,
-            `[${new Date().toLocaleTimeString()}] [3/6] ایجاد لینک‌های نمادین معتبر و رفع ارورهای Permission Denied پوشه /var/lib/splunk_virtual...`,
-            `[${new Date().toLocaleTimeString()}] [4/6] ری‌استارت داکر دیمن و پاکسازی باگ‌های کش موقت کانتینر...`,
-            `[${new Date().toLocaleTimeString()}] [5/6] راه‌اندازی و بووت استارت کانتینر در پورت ۸۰۸۰ و برقراری هارت‌بیت...`,
-            `[${new Date().toLocaleTimeString()}] [6/6] پروب وضعیت پورت وب ۸۰۸۰... کد پاسخ: HTTP 200 OK (کانتینر مجازی پایدار است)!`
-          ]);
-        } else {
-          setAiLogs(prev => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] [2/6] بازنویسی کانفیگ‌ها با لایسنس active_group=Enterprise و پورت KVStore 8193...`,
-            `[${new Date().toLocaleTimeString()}] [3/6] ایجاد فایل user-seed.conf با admin/changeme و پاکسازی هش‌های قدیمی etc/passwd...`,
-            `[${new Date().toLocaleTimeString()}] [4/6] اعمال دسترسی‌های اجرایی (chmod 755) و باز کردن پورت‌های فایروال...`,
-            `[${new Date().toLocaleTimeString()}] [5/6] راه‌اندازی دیمن با فلگ‌های صریح --accept-license --answer-yes --no-prompt --run-as-root...`,
-            `[${new Date().toLocaleTimeString()}] [6/6] پروب وضعیت سرویس وب... کد پاسخ: HTTP 200 OK (آماده و در دسترس)!`
-          ]);
-        }
-        setAutoHealCompleted(true);
-        setIsAiHealerRunning(false);
-        setHttpStatusResult('200');
-        setOverallHealthScore(100);
-        setAutoHealStats({ fixedCount: 6, remainingCount: 0 });
-        
-        // Save current issues as fixed for the target server type
-        if (isReal) {
-          setResolvedRealIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else if (isVirtual) {
-          setResolvedVirtualIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else {
-          setResolvedParallelIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        }
-
-        setDiagnosticIssues(prev => prev.map(issue => ({ ...issue, status: 'PASS', severity: 'INFO' })));
-        showToast(isFa ? 'هوش مصنوعی تمام مشکلات را شناسایی و رفع کرد ✓' : 'AI Auto-Heal resolved all issues ✓');
-      }, 2000);
+      const logs = Array.isArray(data.logs) ? data.logs : [String(data.output || '')];
+      setAiLogs(logs.filter(Boolean));
+      setAutoHealCompleted(true);
+      setHttpStatusResult(String(data.httpStatus || '000'));
+      setOverallHealthScore(typeof data.healthScore === 'number' ? data.healthScore : 100);
+      setAutoHealStats({
+        fixedCount: Number(data.fixedCount || 0),
+        remainingCount: Number(data.remainingCount || 0)
+      });
+      await runDeepDiagnostics();
+      showToast(isFa ? 'خودترمیمی واقعی و verification تکمیل شد ✓' : 'Real auto-heal and verification completed ✓');
+    } catch (err: any) {
+      setAutoHealCompleted(false);
+      setAiLogs(prev => [...prev, `[ERROR] ${err?.message || err}`]);
+      showToast(isFa ? 'خودترمیمی شکست خورد؛ وضعیت واقعی نمایش داده شد.' : 'Auto-heal failed; real status was preserved.');
     } finally {
       setIsAiHealerRunning(false);
     }
@@ -514,64 +330,8 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
     runDeepDiagnostics();
   }, []);
 
-  // One-Liner Terminal Master Fix Command
-  const masterTerminalScript = `mkdir -p /opt/splunk_container_runtime /opt/splunk_parallel/etc/system/local
-
-# 1. Free ports & clean lock files
-fuser -k 8001/tcp 8090/tcp 9998/tcp 2>/dev/null || true
-
-# 2. Write synchronized web.conf and server.conf stanzas
-cat << 'EOF' > /opt/splunk_parallel/etc/system/local/web.conf
-[settings]
-httpport = 8001
-server.socket_host = 0.0.0.0
-enableSplunkWebSSL = false
-startwebserver = 1
-appServerPorts = 8066
-mgmtHostPort = 127.0.0.1:8090
-EOF
-
-cat << 'EOF' > /opt/splunk_parallel/etc/system/local/server.conf
-[general]
-serverName = splunk-parallel-node
-mgmtHostPort = 127.0.0.1:8090
-pass4SymmKey = changeme-passkey
-active_group = Free
-
-[sslConfig]
-mgmtHostPort = 127.0.0.1:8090
-
-[kvstore]
-port = 8193
-EOF
-
-# 3. Create deploy script in container runtime dir
-cat << 'EOF' > /opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh
-#!/usr/bin/env bash
-export SPLUNK_HOME="/opt/splunk_parallel"
-export SPLUNK_RUN_AS_ROOT=1
-mkdir -p /opt/splunk_parallel/bin /opt/splunk_parallel/var/log/splunk
-if [ -d "/opt/splunk/bin" ] && [ ! -f "/opt/splunk_parallel/bin/splunk" ]; then
-    cp -rn /opt/splunk/bin /opt/splunk_parallel/ 2>/dev/null || true
-    cp -rn /opt/splunk/lib /opt/splunk_parallel/ 2>/dev/null || true
-    cp -rn /opt/splunk/share /opt/splunk_parallel/ 2>/dev/null || true
-    cp -rn /opt/splunk/etc /opt/splunk_parallel/ 2>/dev/null || true
-fi
-chmod -R +x /opt/splunk_parallel/bin/
-/opt/splunk_parallel/bin/splunk start --accept-license --answer-yes --no-prompt --run-as-root
-EOF
-
-chmod +x /opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh
-
-# 4. Execute Offline Deployment
-bash /opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh 8001 8090 9998 changeme
-
-# 5. Open Firewall
-firewall-cmd --permanent --zone=public --add-port=8001/tcp --add-port=8090/tcp --add-port=9998/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
-
-# 6. Verify HTTP Response
-sleep 3
-curl -s -I "http://127.0.0.1:8001/en-US/account/login" | head -n 5`;
+  // The UI no longer embeds an executable hardcoded master-fix script.
+  // All remediation runs through authenticated backend operations with verification.
 
   const failedIssuesCount = diagnosticIssues.filter(i => i.status === 'FAIL').length;
   const warnIssuesCount = diagnosticIssues.filter(i => i.status === 'WARN').length;
