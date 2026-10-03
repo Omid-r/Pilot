@@ -2448,7 +2448,7 @@ PASSWORD = ${password}
       }
 
       logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] وضعیت پاسخ HTTP وب‌سرور: ${finalHttpStatus} OK. پنل با موفقیت بالا آمد!`);
-      logs.push(`[${new Date().toLocaleTimeString()}] [READY] آدرس وب‌اینترفیس: http://<SERVER-IP>:${webPort}/en-US/account/login (User: admin | Pass: ${password})`);
+      logs.push(`[${new Date().toLocaleTimeString()}] [READY] آدرس وب‌اینترفیس: http://<SERVER-IP>:${webPort}/en-US/account/login`);
 
       res.json({
         success: true,
@@ -3416,12 +3416,22 @@ PASSWORD = ${password}
       restPort = 8090,
       tcpPort = 9998,
       kvPort = 8193,
-      adminPassword
+      adminPassword,
+      pass4SymmKey
     } = req.body;
 
     const logs: string[] = [];
     const parallelDir = '/opt/splunk_parallel';
     const runtimeDir = '/opt/splunk_container_runtime';
+    if (typeof adminPassword !== 'string' || adminPassword.length < 12) {
+      return res.status(400).json({ success: false, error: 'A real admin password of at least 12 characters is required.' });
+    }
+    if (typeof pass4SymmKey !== 'string' || pass4SymmKey.length < 12) {
+      return res.status(400).json({ success: false, error: 'A real pass4SymmKey of at least 12 characters is required.' });
+    }
+    if (!fs.existsSync(path.join(parallelDir, 'bin', 'splunk')) && !fs.existsSync('/opt/splunk/bin/splunk')) {
+      return res.status(404).json({ success: false, error: 'No real Splunk binary is available for auto-healing.' });
+    }
 
     logs.push(`======================================================================`);
     logs.push(`[AI SELF-HEALER] Starting Automated End-to-End System Recovery...`);
@@ -3664,11 +3674,11 @@ PASSWORD = ${password}
     } else if (issueId === 'virt-heartbeat-out') {
       toolNameFa = 'راه‌اندازی مجدد کانتینر اسپلانک مجازی و رفع هارت‌بیت';
       toolNameEn = 'Restart Virtual Splunk Container';
-      commandToRun = `fuser -k 8080/tcp 2>/dev/null || true; docker restart splunk_virtual_node 2>/dev/null || podman restart splunk_virtual_node 2>/dev/null || echo "[SUCCESS] Container restart signal sent to port 8080"`;
+      return res.status(400).json({ success:false, issueId, error:'Synthetic container recovery is disabled; target a real container runtime and image.' });
     } else if (issueId === 'diag-auth-seed-missing') {
       toolNameFa = 'ایجاد فایل user-seed.conf برای ادمین';
       toolNameEn = 'Create Default Admin user-seed.conf';
-      commandToRun = `mkdir -p "${targetDir}/etc/system/local" && echo -e "[user_info]\\nUSERNAME = admin\\nPASSWORD = changeme" > "${targetDir}/etc/system/local/user-seed.conf" && chmod 600 "${targetDir}/etc/system/local/user-seed.conf" && echo "[SUCCESS] user-seed.conf initialized with admin credentials"`;
+      return res.status(400).json({ success:false, issueId, error:'Default administrator credentials are disabled. Use the authenticated password-reset flow with a real password.' });
     } else if (issueId === 'diag-rest-mgmt-closed' || issueId === 'diag-web-http-listener') {
       toolNameFa = 'آزادسازی سوکت‌های مسدود و ریستارت دیمن اسپلانک';
       toolNameEn = 'Unlock Sockets & Restart Daemon';
