@@ -1,4 +1,3 @@
-// CI source verification marker: extracted snapshot remains the working source.
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
