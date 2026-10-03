@@ -26,11 +26,29 @@ jobs:
         working-directory: pilot-source
         run: npm install --legacy-peer-deps --no-audit --no-fund --no-package-lock
 
+      - name: Verify text encodings
+        working-directory: pilot-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== App.tsx encoding ==="
+          file -bi src/App.tsx
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path("src/App.tsx").read_bytes()
+          for enc in ("utf-8","utf-16","utf-16-le","utf-16-be","cp1252","cp1256","iso-8859-1"):
+              try:
+                  s=b.decode(enc)
+                  print(enc, "OK", "chars=", len(s), "nul=", s.count("\x00"), "head=", repr(s[:80]))
+              except Exception as e:
+                  print(enc, "FAIL", type(e).__name__, str(e))
+          PY
+
       - name: TypeScript check
         working-directory: pilot-source
         run: npm run lint
 
-      - name: Verify text encodings
+      - name: Verify all text encodings
         working-directory: pilot-source
         shell: bash
         run: |
