@@ -45,15 +45,17 @@ rm -rf "${TARGET_DIR}/dist" "${TARGET_DIR}/scripts" "${TARGET_DIR}/systemd" "${T
 echo "==> [۳/۶] کپی و استقرار فایل‌های بسته جدید..."
 cp -rf "${SOURCE_DIR}"/* "${TARGET_DIR}/"
 
-# 5. Install safe permissions; do not make every config/data file executable.
-echo "==> [۴/۶] اعمال مجوزهای امن و اجرایی..."
+# 5. Install every bundled user-space prerequisite from local RPMs/binaries only.
+# This deliberately happens before recursive permission normalization so a
+# minimal RHEL install without findutils can bootstrap itself from the bundle.
+echo "==> [۴/۶] نصب تمام پیش‌نیازهای آفلاین RHEL از روی مدیا..."
+bash "${TARGET_DIR}/scripts/install-offline-prereqs.sh"
+
+# Install safe permissions; do not make every config/data file executable.
+echo "==> [۴.۵/۶] اعمال مجوزهای امن و اجرایی..."
 find "${TARGET_DIR}" -type d -exec chmod 755 {} +
 find "${TARGET_DIR}" -type f -exec chmod 644 {} +
 chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
-
-# Install every bundled user-space prerequisite from local RPMs/binaries only.
-echo "==> [۴.۵/۶] نصب تمام پیش‌نیازهای آفلاین RHEL از روی مدیا..."
-bash "${TARGET_DIR}/scripts/install-offline-prereqs.sh"
 
 # Private runtime state and secrets live outside the application tree.
 mkdir -p "${DATA_DIR}"
