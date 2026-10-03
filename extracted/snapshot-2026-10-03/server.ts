@@ -148,56 +148,7 @@ async function startServer() {
     category?: 'system' | 'network' | 'splunk' | 'docker' | 'k8s' | 'security' | 'custom_prompt';
   }
 
-  const serverCommandLogs: ServerCommandLogEntry[] = [
-    {
-      id: 'cmd-boot-1',
-      timestamp: new Date(Date.now() - 12000).toISOString(),
-      toolId: 'system_init',
-      toolNameFa: 'راه‌اندازی سرویس سرور (Server Bootstrap)',
-      toolNameEn: 'System Bootstrap & Interface Discovery',
-      command: 'ip addr show && hostname -f',
-      workingDir: '/opt/splunk',
-      user: 'root',
-      status: 'success',
-      exitCode: 0,
-      durationMs: 14,
-      stdout: '1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN\n    inet 127.0.0.1/8 scope host lo\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP\n    inet 10.18.23.56/24 brd 10.18.23.255 scope global dynamic eth0\nhostname: rhel-server.corp.net',
-      stderr: '',
-      category: 'system'
-    },
-    {
-      id: 'cmd-boot-2',
-      timestamp: new Date(Date.now() - 10000).toISOString(),
-      toolId: 'splunk_discovery',
-      toolNameFa: 'پایش دایرکتوری و باینری اسپلانک (Splunk Discovery)',
-      toolNameEn: 'Splunk Daemon & Binary Path Scan',
-      command: 'pgrep -a splunkd || which splunk || ls -d /opt/splunk /opt/splunkforwarder 2>/dev/null',
-      workingDir: '/opt/splunk',
-      user: 'root',
-      status: 'success',
-      exitCode: 0,
-      durationMs: 8,
-      stdout: '/opt/splunk/bin/splunkd -p 8089 (pid 1420)\n/opt/splunk/bin/splunk',
-      stderr: '',
-      category: 'splunk'
-    },
-    {
-      id: 'cmd-boot-3',
-      timestamp: new Date(Date.now() - 8000).toISOString(),
-      toolId: 'network_toolbox',
-      toolNameFa: 'بررسی پورت‌های لیسنور فعال (Active Port Listeners)',
-      toolNameEn: 'Active Ports & Sockets Probe',
-      command: 'ss -tulpn | grep -E "8000|8089|9997|8088|514|1514"',
-      workingDir: '/opt/splunk',
-      user: 'root',
-      status: 'success',
-      exitCode: 0,
-      durationMs: 12,
-      stdout: 'tcp LISTEN 0 128 0.0.0.0:8000 0.0.0.0:* users:(("splunkd",pid=1420,fd=89))\ntcp LISTEN 0 128 0.0.0.0:8089 0.0.0.0:* users:(("splunkd",pid=1420,fd=45))\ntcp LISTEN 0 128 0.0.0.0:9997 0.0.0.0:* users:(("splunkd",pid=1420,fd=112))\ntcp LISTEN 0 128 0.0.0.0:8088 0.0.0.0:* users:(("splunkd",pid=1420,fd=67))\nudp UNCONN 0 0 0.0.0.0:514 0.0.0.0:* users:(("syslog-ng",pid=980,fd=4))',
-      stderr: '',
-      category: 'network'
-    }
-  ];
+  const serverCommandLogs: ServerCommandLogEntry[] = [];
 
   const sseCommandClients: express.Response[] = [];
 
