@@ -103,7 +103,8 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
   const [targetRestPort, setTargetRestPort] = useState(8090);
   const [targetTcpPort, setTargetTcpPort] = useState(9998);
   const [targetKvPort, setTargetKvPort] = useState(8193);
-  const [adminPassword, setAdminPassword] = useState('changeme');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [pass4SymmKey, setPass4SymmKey] = useState('');
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
 
   // Local Offline AI Chat Consultation
@@ -139,31 +140,27 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
 
   // Server & System Discovery State
   const [discoveryData, setDiscoveryData] = useState<ServerDiscoveryInfo>({
-    hostname: 'rhel-enterprise-node',
-    primaryIp: '192.168.232.101',
-    osRelease: 'Red Hat Enterprise Linux 9.4 (Plow) / Linux 6.6-x86_64',
-    kernel: 'Linux 6.6.137+ x86_64',
-    cpuCores: 8,
-    memoryTotalGb: 32,
-    diskFreeGb: 184,
-    interfaces: [
-      { name: 'eth0', ip: '192.168.232.101', mac: '52:54:00:fa:8c:12', status: 'UP / ACTIVE' },
-      { name: 'lo', ip: '127.0.0.1', mac: '00:00:00:00:00:00', status: 'UP / LOOPBACK' }
-    ],
+    hostname: 'Not discovered',
+    primaryIp: '',
+    osRelease: 'Not discovered',
+    kernel: 'Not discovered',
+    cpuCores: 0,
+    memoryTotalGb: 0,
+    diskFreeGb: 0,
+    interfaces: [],
     existingSplunk: {
-      installed: true,
-      path: '/opt/splunk',
-      version: 'Splunk Enterprise 10.4.0 (Build 9b3d04e)',
-      runningPorts: [8000, 8089, 9997, 8191]
+      installed: false,
+      path: '',
+      version: '',
+      runningPorts: []
     },
     containerRuntimes: {
       docker: false,
-      podman: true,
-      podmanVersion: 'Podman v4.9.4-rhel (Air-Gapped)',
+      podman: false,
       k8s: false
     },
-    openPorts: [8000, 8089, 9997, 8191, 22, 3000],
-    firewallActive: true
+    openPorts: [],
+    firewallActive: false
   });
 
   // 6 Comprehensive Workflow Steps with AI Reasoning & Approval Gates
