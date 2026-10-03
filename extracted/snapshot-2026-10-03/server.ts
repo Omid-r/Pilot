@@ -2267,7 +2267,7 @@ async function startServer() {
   });
 
   // API: Fix Individual Issue by ID
-  app.post('/api/parallel-cluster/fix-individual-issue', async (req, res) => {
+  app.post('/api/parallel-cluster/fix-individual-issue', requireAuth, requireRoles('super_admin', 'cluster_admin'), async (req, res) => {
     const { issueId, serverType, targetDir: customDir, webPort = 8001, restPort = 8090, tcpPort = 9998 } = req.body;
     const targetDir = customDir || (serverType === 'real' ? '/opt/splunk' : '/opt/splunk_parallel');
     const runtimeDir = '/opt/splunk_container_runtime';
@@ -2330,7 +2330,7 @@ mgmtHostPort = 127.0.0.1:${restPort}
   });
 
   // API: Execute Master Runbook Script on Server CLI
-  app.post('/api/parallel-cluster/execute-runbook', async (req, res) => {
+  app.post('/api/parallel-cluster/execute-runbook', requireAuth, requireRoles('super_admin'), async (req, res) => {
     const { script } = req.body;
     if (!script || typeof script !== 'string') {
       return res.status(400).json({ error: 'Script parameter is required.' });
@@ -2358,149 +2358,18 @@ mgmtHostPort = 127.0.0.1:${restPort}
     }
   });
 
-  // API: Local AI Autonomous Auto-Healer Execution
-  app.post('/api/parallel-cluster/ai-auto-heal', async (req, res) => {
-    const { webPort = 8001, restPort = 8090, tcpPort = 9998, password = 'changeme' } = req.body;
-    const targetDir = '/opt/splunk_parallel';
-    const runtimeDir = '/opt/splunk_container_runtime';
-    const logs: string[] = [];
-    let fixedCount = 0;
-
-    logs.push(`[${new Date().toLocaleTimeString()}] [AI_AUTO_HEAL] آغاز چرخه خودترمیمی هوش مصنوعی لوکال در پس‌زمینه...`);
-
-    try {
-      // 1. Ensure runtime directories exist
-      logs.push(`[${new Date().toLocaleTimeString()}] [1/6] ایجاد دایرکتوری‌های سیستمی ${runtimeDir} و ${targetDir}...`);
-      if (!fs.existsSync(runtimeDir)) {
-        fs.mkdirSync(runtimeDir, { recursive: true });
-      }
-      if (!fs.existsSync(path.join(targetDir, 'bin'))) {
-        fs.mkdirSync(path.join(targetDir, 'bin'), { recursive: true });
-      }
-      if (!fs.existsSync(path.join(targetDir, 'etc/system/local'))) {
-        fs.mkdirSync(path.join(targetDir, 'etc/system/local'), { recursive: true });
-      }
-      if (!fs.existsSync(path.join(targetDir, 'var/log/splunk'))) {
-        fs.mkdirSync(path.join(targetDir, 'var/log/splunk'), { recursive: true });
-      }
-      fixedCount++;
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] دایرکتوری‌ها با موفقیت ایجاد شدند.`);
-
-      // 2. Sync deployment script to /opt/splunk_container_runtime
-      logs.push(`[${new Date().toLocaleTimeString()}] [2/6] سینک کردن اسکریپت deploy-splunk-k8s-offline.sh با دسترسی اجرایی...`);
-      const srcScript = getScriptPath('deploy-splunk-k8s-offline.sh');
-      const dstScript = path.join(runtimeDir, 'deploy-splunk-k8s-offline.sh');
-      if (fs.existsSync(srcScript)) {
-        fs.copyFileSync(srcScript, dstScript);
-        await runCommand(`chmod +x "${dstScript}" "${srcScript}" 2>/dev/null || true`);
-      }
-      fixedCount++;
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] اسکریپت در مسیر ${dstScript} مستقر و مجوز اجرا گرفت.`);
-
-      // 3. Free stale ports
-      logs.push(`[${new Date().toLocaleTimeString()}] [3/6] آزادسازی سوکت‌های مسدود روی پورت‌های ${webPort}, ${restPort}, ${tcpPort}...`);
-      await runCommand(`fuser -k ${webPort}/tcp ${restPort}/tcp ${tcpPort}/tcp 2>/dev/null || true`);
-      fixedCount++;
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] پورت‌های شبکه آزاد شدند.`);
-
-      // 4. Generate synchronized web.conf & server.conf stanzas
-      logs.push(`[${new Date().toLocaleTimeString()}] [4/6] تنظیم دقیق استنزاهای web.conf و server.conf با پورت مدیریتی ${restPort}...`);
-      const webConfContent = `[settings]
-httpport = ${webPort}
-server.socket_host = 0.0.0.0
-enableSplunkWebSSL = false
-startwebserver = 1
-appServerPorts = 8066
-mgmtHostPort = 127.0.0.1:${restPort}
-`;
-
-      const serverConfContent = `[general]
-serverName = splunk-parallel-node
-mgmtHostPort = 127.0.0.1:${restPort}
-pass4SymmKey = changeme-passkey
-active_group = Free
-
-[sslConfig]
-mgmtHostPort = 127.0.0.1:${restPort}
-
-[kvstore]
-port = 8192
-`;
-
-      const inputsConfContent = `[default]
-host = splunk-parallel-node
-
-[splunktcp://${tcpPort}]
-disabled = 0
-queueSize = 10MB
-`;
-
-      const userSeedContent = `[user_info]
-USERNAME = admin
-PASSWORD = ${password}
-`;
-
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/web.conf'), webConfContent, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/server.conf'), serverConfContent, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/inputs.conf'), inputsConfContent, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/user-seed.conf'), userSeedContent, 'utf8');
-      fixedCount++;
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] فایل‌های کانفیگ با تنظیمات ایزوله بازنویسی شدند.`);
-
-      // 5. Open Firewall ports
-      logs.push(`[${new Date().toLocaleTimeString()}] [5/6] به‌روزرسانی رول‌های فایروال لینوکس برای پورت‌های ${webPort}, ${restPort}, ${tcpPort}...`);
-      await runCommand(`firewall-cmd --permanent --zone=public --add-port=${webPort}/tcp --add-port=${restPort}/tcp --add-port=${tcpPort}/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true`);
-      fixedCount++;
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] فایروال هاست پیکربندی شد.`);
-
-      // 6. Launch offline Splunk daemon or container
-      logs.push(`[${new Date().toLocaleTimeString()}] [6/6] اجرای دیمن اسپلانک با فلگ‌های --accept-license --answer-yes --no-prompt --run-as-root...`);
-      const fixScript = path.join(process.cwd(), 'scripts/fix-parallel-web.sh');
-      if (fs.existsSync(fixScript)) {
-        await runCommand(`chmod +x "${fixScript}"`);
-        const runRes = await runCommand(`bash "${fixScript}" "${targetDir}" ${webPort} ${restPort} ${tcpPort} 8192`);
-        if (runRes.stdout) {
-          logs.push(runRes.stdout.trim());
-        }
-      } else {
-        const binPath = path.join(targetDir, 'bin/splunk');
-        if (fs.existsSync(binPath)) {
-          await runCommand(`chmod +x "${binPath}"`);
-          await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`);
-        }
-      }
-      fixedCount++;
-
-      // Verify HTTP Response
-      logs.push(`[${new Date().toLocaleTimeString()}] در حال پروب و راستی‌آزمایی پاسخ‌دهی وب‌سرور روی پورت ${webPort}...`);
-      let finalHttpStatus = '200';
-      try {
-        const curlCheck = await runCommand(`curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${webPort}/en-US/account/login" 2>/dev/null || true`);
-        const code = curlCheck.stdout.trim();
-        if (code && code !== '000') {
-          finalHttpStatus = code;
-        }
-      } catch (_) {}
-
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] وضعیت پاسخ HTTP وب‌سرور: ${finalHttpStatus} OK. پنل با موفقیت بالا آمد!`);
-      logs.push(`[${new Date().toLocaleTimeString()}] [READY] آدرس وب‌اینترفیس: http://<SERVER-IP>:${webPort}/en-US/account/login (User: admin | Pass: ${password})`);
-
-      res.json({
-        success: true,
-        fixedCount,
-        httpStatus: finalHttpStatus,
-        logs,
-        webUrl: `http://localhost:${webPort}/en-US/account/login`,
-        healedAt: new Date().toISOString()
-      });
-    } catch (err: any) {
-      logs.push(`[ERROR] ${err.message}`);
-      res.status(500).json({ success: false, error: err.message, logs });
-    }
+  // Legacy autonomous auto-heal is disabled until each remediation action is
+  // backed by an explicit, reversible real operation with post-change validation.
+  app.post('/api/parallel-cluster/ai-auto-heal', requireAuth, requireRoles('super_admin', 'cluster_admin'), (_req, res) => {
+    return res.status(501).json({
+      success: false,
+      code: 'REAL_AUTO_HEAL_NOT_YET_IMPLEMENTED',
+      error: 'Legacy autonomous auto-heal is disabled. Use real diagnostics plus an approved remediation action.'
+    });
   });
 
   // API: Reset / Wipe all Parallel Clusters & Containers
-  app.post('/api/parallel-cluster/reset', async (req, res) => {
+  app.post('/api/parallel-cluster/reset', requireAuth, requireRoles('super_admin'), async (req, res) => {
     const logs: string[] = [];
     logs.push('[FLEET WIPE] Initiating complete purge of all parallel instances and containers...');
     
@@ -2805,34 +2674,13 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Deploy Splunk on Kubernetes / Docker (Offline Container Pipeline)
-  app.post('/api/k8s/deploy-splunk', async (req, res) => {
-    const { ports = { web: 8001, rest: 8090, splunkTcp: 9998 }, password = 'changeme' } = req.body;
-    const scriptPath = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
-    const runtimePath = '/opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh';
-    try {
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        try {
-          if (!fs.existsSync('/opt/splunk_container_runtime')) {
-            fs.mkdirSync('/opt/splunk_container_runtime', { recursive: true });
-          }
-          fs.copyFileSync(scriptPath, runtimePath);
-          await runCommand(`chmod +x "${runtimePath}" 2>/dev/null || true`);
-        } catch (_) {}
-
-        const result = await runCommand(`bash "${scriptPath}" ${ports.web || 8001} ${ports.rest || 8090} ${ports.splunkTcp || 9998} "${password}"`);
-        return res.json({
-          success: true,
-          logs: result.stdout.split('\n'),
-          webUrl: `http://localhost:${ports.web || 8001}/en-US/account/login`,
-          credentials: { username: 'admin', password }
-        });
-      }
-      res.status(500).json({ success: false, error: 'deploy-splunk-k8s-offline.sh not found' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+  // Legacy container deployment is routed through the real control plane.
+  app.post('/api/k8s/deploy-splunk', requireAuth, requireRoles('super_admin', 'cluster_admin'), (_req, res) => {
+    return res.status(410).json({
+      success: false,
+      code: 'USE_REAL_CONTROL_PLANE',
+      error: 'Legacy deployment endpoint disabled. Use /api/real/deploy/container or /api/real/deploy/kubernetes with a real offline artifact and explicit image reference.'
+    });
   });
 
   // API: Get Kubernetes / Docker Container Status
