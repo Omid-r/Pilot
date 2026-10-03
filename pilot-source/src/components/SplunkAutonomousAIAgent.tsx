@@ -480,7 +480,7 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
         ) || '';
         if (!imageRef.trim()) throw new Error(isFa ? 'Image Ref وارد نشد.' : 'Image Ref is required.');
 
-        const useKubernetes = selectedRuntimeEngine === 'kubernetes' || selectedRuntimeEngine === 'k8s';
+        const useKubernetes = selectedRuntimeEngine === 'k8s';
         const data = useKubernetes
           ? await postJson('/api/real/deploy/kubernetes', {
               imageRef: imageRef.trim(),
