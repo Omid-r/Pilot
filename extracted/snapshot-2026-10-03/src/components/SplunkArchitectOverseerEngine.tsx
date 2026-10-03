@@ -192,71 +192,55 @@ export function SplunkArchitectOverseerEngine({
     }
   };
 
-  const handleRunAllStepsFlow = () => {
+  const handleRunAllStepsFlow = async () => {
     setIsExecutingOverseerFlow(true);
     setOverseerLogs([]);
-    const logs: string[] = [];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setOverseerLogs([...logs]);
-    };
-
-    addLog(isFa ? "🕵️ شروع فرآیند نظارت ارشد معمار اسپلانک روی تمام لایه‌ها..." : "🕵️ Initiating Senior Splunk Enterprise Architect Overseer pipeline...");
     setStepStatuses(['running', 'idle', 'idle', 'idle', 'idle', 'idle']);
+    const stepMap = ['environment','architecture','stanza','ingestion','security','final'];
 
-    // Step 1
-    setTimeout(() => {
-      addLog(isFa ? "🧹 گام ۱: ارزیابی محیط‌ها، حذف کش سرورهای ازدست‌رفته و همگام‌سازی منوها..." : "🧹 Step 1: Auditing environments, purging stale server caches and aligning selectors...");
-      onPurgeDecommissionedServers();
-      setStepStatuses(['success', 'running', 'idle', 'idle', 'idle', 'idle']);
-    }, 1000);
-
-    // Step 2
-    setTimeout(() => {
-      addLog(isFa ? "🏛️ گام ۲: ممیزی معماری SVA، ظرفیت ایندکسرها و پهنای باند کانال‌های TCP..." : "🏛️ Step 2: Auditing SVA architecture, Indexer peer capacity and TCP channel bandwidth...");
-      setStepStatuses(['success', 'success', 'running', 'idle', 'idle', 'idle']);
-    }, 2200);
-
-    // Step 3
-    setTimeout(() => {
-      addLog(isFa ? "🛠️ گام ۳: عیب‌یابی استنزاها و اجرای ترمیم اتوماتیک روی فایل‌های .conf..." : "🛠️ Step 3: Stanza collision diagnostics and auto-healing configs on disk...");
-      onApplyAllRemediations();
-      setStepStatuses(['success', 'success', 'success', 'running', 'idle', 'idle']);
-    }, 3600);
-
-    // Step 4
-    setTimeout(() => {
-      addLog(isFa ? "📡 گام ۴: بررسی سوکت‌های پورت ۹۹۹۷، ۸۰۸۹ و هارت‌بیت ورودی‌های SOC..." : "📡 Step 4: Probing TCP sockets for ports 9997, 8089 and SOC heartbeat matrix...");
-      setStepStatuses(['success', 'success', 'success', 'success', 'running', 'idle']);
-    }, 5000);
-
-    // Step 5
-    setTimeout(() => {
-      addLog(isFa ? "🔐 گام ۵: اعتبارسنجی زنجیره PKI، گواهینامه‌های TLS و لایسنس تجاری..." : "🔐 Step 5: Validating PKI cert chain, mTLS cert expiration and commercial license...");
-      setStepStatuses(['success', 'success', 'success', 'success', 'success', 'running']);
-    }, 6400);
-
-    // Step 6
-    setTimeout(() => {
-      addLog(isFa ? "💾 گام ۶: همگام‌سازی فایل‌ها با دیسک سرور و صدور گواهی تاییدیه مدیر معمار..." : "💾 Step 6: Disk sync to host and issuance of 100% Health Pass by Master Architect...");
+    try {
+      const executionLogs: string[] = [];
+      for (let i = 0; i < stepMap.length; i++) {
+        const step = stepMap[i];
+        const started = Date.now();
+        setStepStatuses(prev => prev.map((v, idx) => idx === i ? 'running' : (idx < i ? 'success' : 'idle')) as any);
+        const res = await fetch('/api/real/overseer/step', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({step})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || `Overseer step ${step} failed`);
+        }
+        const logs = Array.isArray(data.logs) ? data.logs : [];
+        executionLogs.push(...logs);
+        setOverseerLogs([...executionLogs]);
+        setStepStatuses(prev => prev.map((v, idx) => idx <= i ? 'success' : 'idle') as any);
+        onLogBackendOperation(
+          'overseer_engine',
+          `ناظر ارشد - ${step}`,
+          `Overseer - ${step}`,
+          `اجرای واقعی مرحله ${step}`,
+          `Real execution of ${step}`,
+          'success',
+          logs.join('\n'),
+          logs.join('\n'),
+          '',
+          Date.now() - started
+        );
+      }
       onRescanAudit(true);
-      setStepStatuses(['success', 'success', 'success', 'success', 'success', 'success']);
-      addLog(isFa ? "✅ عملیات ناظر ارشد اسپلانک با موفقیت به پایان رسید! تمام کلاستر ۱۰۰٪ سبز است." : "✅ Overseer pipeline executed successfully! All cluster layers audited & 100% green.");
+      setOverseerLogs(prev => [...prev, isFa ? '✅ تمام مراحل ناظر ارشد با نتیجه واقعی تکمیل شد.' : '✅ All Overseer stages completed with real execution results.']);
+    } catch (e: any) {
+      setOverseerLogs(prev => [...prev, `[FAILED] ${e?.message || 'Overseer execution failed'}`]);
+      setStepStatuses(prev => {
+        const idx = prev.findIndex(v => v === 'running');
+        return prev.map((v, i) => i === idx ? 'failed' : v) as any;
+      });
+    } finally {
       setIsExecutingOverseerFlow(false);
-
-      onLogBackendOperation(
-        'overseer_engine',
-        'موتور ناظر ارشد معمار اسپلانک',
-        'Splunk Master Architect Overseer Engine',
-        'اجرای کامل ۶ گام نظارت، عیب‌یابی و اصلاح سیستم',
-        'Full execution of 6-step architecture audit, diagnostics and auto-heal pipeline',
-        'success',
-        'تمام لایه‌های کلاستر بررسی و تمام خطاهای فعال برطرف گردیدند. امتیاز سلامت: ۱۰۰/۱۰۰',
-        'All cluster layers audited and repaired. Health Score: 100/100',
-        'Exec steps: 1-6 completed | Active findings: 0 | Environment: Production',
-        7500
-      );
-    }, 7800);
+    }
   };
 
   const filteredOps = backendOperations.filter(op => {
