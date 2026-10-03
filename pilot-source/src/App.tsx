@@ -1096,16 +1096,16 @@ export default function App() {
       } catch (e) {}
     }
     return {
-      hfIp: '10.20.30.45',
-      hfHost: 'hf01.corp.net',
-      idx1Ip: '10.20.30.50',
-      idx1Host: 'idx01-site1.cluster.splunk',
-      idx2Ip: '10.20.30.51',
-      idx2Host: 'idx02-site1.cluster.splunk',
-      shIp: '10.20.30.40',
-      shHost: 'sh01.corp.net',
-      dsIp: '10.20.30.60',
-      dsHost: 'ds01.corp.net',
+      hfIp: '',
+      hfHost: '',
+      idx1Ip: '',
+      idx1Host: '',
+      idx2Ip: '',
+      idx2Host: '',
+      shIp: '',
+      shHost: '',
+      dsIp: '',
+      dsHost: '',
     };
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -1148,8 +1148,8 @@ export default function App() {
   const [activeConfigFile, setActiveConfigFile] = useState<string>('outputs.conf');
   const [selectedLogAnalysis, setSelectedLogAnalysis] = useState<LiveLogAnalysis | null>(null);
 
-  // Global AI Scanner and Healing Script Simulator
-  const runGlobalAiScan = () => {
+  // Global AI Scanner and Healing Engine — uses real controller APIs.
+  const runGlobalAiScan = async () => {
     setIsGlobalAiScanning(true);
     setGlobalAiLogs([]);
     const logs: string[] = [];
@@ -1158,162 +1158,122 @@ export default function App() {
       setGlobalAiLogs([...logs]);
     };
 
-    setTimeout(() => addLog(isFa ? "ًں”چ ط´ظ†ط§ط³ط§غŒغŒ ط§طھطµط§ظ„ط§طھ ع©ظ„ط§ط³طھط± ظˆ ط³ط±ظˆغŒط³â€Œظ‡ط§..." : "ًں”چ Analyzing cluster connections & active services..."), 200);
-    setTimeout(() => {
-      if (activeEnvironment === 'production') {
-        addLog(isFa ? "âڑ ï¸ڈ ظ…ظ…غŒط²غŒ طھظˆظ„غŒط¯: غ± ظ¾ط±ظˆظ†ط¯ظ‡ طھظ…ط¯غŒط¯ ظ„ط§غŒط³ظ†ط³ ظˆ غ± ط§ط®ط·ط§ط± ط¯غŒط³ع© غŒط§ظپطھ ط´ط¯." : "âڑ ï¸ڈ Production audit: 1 certificate renewal requirement and 1 disk storage limit detected.");
-      } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "âڑ ï¸ڈ ظ…ظ…غŒط²غŒ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ: طھط¯ط§ط®ظ„ ظ¾ظˆط±طھ ظˆط¨ غ¸غ°غ°غ° ط¨ط§ غ¸غ°غ°غ± ظˆ ط¨ط³طھظ‡â€Œط´ط¯ظ† ط³ظˆع©طھ غ¹غ¹غ¹غ¸ ط´ظ†ط§ط³ط§غŒغŒ ط´ط¯." : "âڑ ï¸ڈ Parallel audit: web port conflict 8000/8001 and socket 9998 connection failure detected.");
-      } else {
-        addLog(isFa ? "âڑ ï¸ڈ ظ…ظ…غŒط²غŒ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ: ط®ط·ط§غŒ ط¯ط³طھط±ط³غŒ ط¯ط§غŒط±ع©طھظˆط±غŒ ط¯ط§ط¯ظ‡ (Permission Denied) ظˆ ظ‚ط·ط¹ ط¶ط±ط¨ط§ظ† ظ‚ظ„ط¨ ع©ط§ظ†طھغŒظ†ط± ط´ظ†ط§ط³ط§غŒغŒ ط´ط¯." : "âڑ ï¸ڈ Virtual Cloud audit: Container Volume Permission Denied and missing container heartbeat detected.");
-      }
+    try {
+      addLog(isFa ? 'در حال شناسایی واقعی سیستم، شبکه، سرویس‌ها و وضعیت Splunk...' : 'Running real host, network, service and Splunk discovery...');
+      const [systemRes, networkRes, statusRes] = await Promise.all([
+        fetch('/api/real/system'),
+        fetch('/api/real/network/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }),
+        fetch(`/api/splunk/status?serverType=${activeEnvironment === 'production' ? 'real' : 'parallel'}`)
+      ]);
+      const system = await systemRes.json();
+      const network = await networkRes.json();
+      const status = await statusRes.json();
+
+      if (!systemRes.ok) throw new Error(system.error || 'System discovery failed');
+      if (!networkRes.ok || network.success === false) throw new Error(network.error || 'Network discovery failed');
+      if (!statusRes.ok) throw new Error(status.error || 'Splunk status query failed');
+
+      addLog(`Host: ${system.hostname || 'unknown'} | IP: ${system.primaryIp || 'unknown'} | OS: ${system.os?.PRETTY_NAME || system.os?.NAME || 'unknown'}`);
+      addLog(`Listeners: ${Array.isArray(network.listeners) ? network.listeners.length : 0} | Peers: ${Array.isArray(network.nodes) ? network.nodes.length : 0}`);
+      addLog(`Splunk installed: ${status.installed ? 'yes' : 'no'} | running: ${status.running ? 'yes' : 'no'}`);
       setIsGlobalAiScanning(false);
-    }, 1500);
+    } catch (err: any) {
+      addLog(`[ERROR] ${err?.message || err}`);
+      setIsGlobalAiScanning(false);
+    }
   };
 
-  const executeGlobalAiHeal = () => {
+  const executeGlobalAiHeal = async () => {
     setIsGlobalAiHealerRunning(true);
-    const logs: string[] = [...globalAiLogs];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
+    setGlobalAiExpanded(true);
+    const addLog = (msg: string) => setGlobalAiLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
-    addLog(isFa ? "ًں¤– ط´ط±ظˆط¹ ط®ظˆط¯ع©ط§ط± ط±ظپط¹ ظ…ط´ع©ظ„ط§طھ ط¨ط§ ط¨ط§ط²ظˆغŒ ط§ط¬ط±ط§غŒغŒ ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ..." : "ًں¤– Initiating autonomous auto-healing process via local AI agent...");
-    
-    setTimeout(() => {
-      if (activeEnvironment === 'production') {
-        addLog(isFa ? "ًں› ï¸ڈ ط¯ط± ط­ط§ظ„ ط¨ط§ط²طھظˆظ„غŒط¯ ط³ط±طھغŒظپغŒع©طھâ€Œظ‡ط§غŒ ط§ظ…ظ†غŒطھغŒ ظ…ظ†ظ‚ط¶غŒ ط´ط¯ظ‡..." : "ًں› ï¸ڈ Regenerating expired secure TLS certificates...");
-      } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "ًں› ï¸ڈ ط§طµظ„ط§ط­ ظ¾ظˆط±طھ ظˆط¨ ط¯ط± ظپط§غŒظ„ /opt/splunk_parallel/etc/system/local/web.conf..." : "ًں› ï¸ڈ Adjusting web port in /opt/splunk_parallel/etc/system/local/web.conf...");
-      } else {
-        addLog(isFa ? "ًں› ï¸ڈ ط§طµظ„ط§ط­ ظ…ط§ظ„ع©غŒطھ ظ…ط¬ظˆط²ظ‡ط§غŒ ظ„غŒظ†ظˆع©ط³ ط¯غŒط³ع© ط¯ط§ع©ط± (chown -R splunk:splunk /var/lib/splunk)..." : "ًں› ï¸ڈ Fixing Linux directory permissions for Docker Volume (chown -R splunk:splunk /var/lib/splunk)...");
+    try {
+      if (activeEnvironment === 'virtual') {
+        throw new Error(isFa ? 'Virtual Server مصنوعی غیرفعال است؛ برای تعمیر باید یک Container/VM واقعی provision شود.' : 'Synthetic virtual server is disabled; auto-heal requires a real container/VM.');
       }
-    }, 800);
 
-    setTimeout(() => {
       if (activeEnvironment === 'production') {
-        addLog(isFa ? "ًں› ï¸ڈ طھط®ظ„غŒظ‡ ط­ط¬ظ… ظپط§غŒظ„â€Œظ‡ط§غŒ ط¨ظ„ط§ط§ط³طھظپط§ط¯ظ‡ ظˆ ط§ظپط²ط§غŒط´ ط¸ط±ظپغŒطھ ط¯غŒط³ع©..." : "ًں› ï¸ڈ Flushing temporary caches & increasing index disk storage limits...");
-      } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "ًں› ï¸ڈ ظ¾ط§ع©ط³ط§ط²غŒ ظˆ ط¨ط³طھظ† ظ‚ظپظ„ ظ¾ط±ظˆط³ظ‡ ط±ظˆغŒ ط³ظˆع©طھ طھط±ط§ظپغŒع© غ¹غ¹غ¹غ¸..." : "ًں› ï¸ڈ Killing rogue processes holding port 9998 locked...");
+        addLog(isFa ? 'در حال ارزیابی و اعمال hardening پایه واقعی...' : 'Evaluating and applying the real host hardening baseline...');
+        const res = await fetch('/api/real/hardening/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ controls: ['limits', 'sysctl', 'chrony'] })
+        });
+        const data = await res.json();
+        if (!res.ok || data.success === false) throw new Error(data.error || 'Hardening remediation failed');
+        addLog(isFa ? 'Hardening پایه با backup و verification واقعی اعمال شد.' : 'Real baseline hardening completed with backup and verification.');
       } else {
-        addLog(isFa ? "ًں› ï¸ڈ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ظ…ط¬ط¯ط¯ ظˆ ط±غŒط¨ظˆطھ ع©ط§ظ†طھغŒظ†ط± ط¯ط± ط´ط¨ع©ظ‡ ط§ط¨ط± ط§غŒط²ظˆظ„ظ‡ ط´ط¯ظ‡..." : "ًں› ï¸ڈ Performing clean reboot of virtual container inside sandbox network...");
-      }
-    }, 1600);
-
-    setTimeout(() => {
-      addLog(isFa ? "ًں”„ ط¯ط± ط­ط§ظ„ ط¨ط±ط±ط³غŒ ظˆط¶ط¹غŒطھ ظ†ظ‡ط§غŒغŒ ظˆ ط§ط¬ط±ط§غŒ ظ…ط¬ط¯ط¯ ظ¾ط±ظˆط¨â€Œظ‡ط§غŒ ط´ط¨ع©ظ‡..." : "ًں”„ Re-running diagnostic health probes and auditing status...");
-    }, 2400);
-
-    setTimeout(() => {
-      // Mark all issues of active environment as resolved
-      setResolvedGlobalIssueIds(prev => {
-        const updated = { ...prev };
-        if (activeEnvironment === 'production') {
-          updated.production = ['prod-ssl-cert', 'prod-volume-limit'];
-        } else if (activeEnvironment === 'parallel') {
-          updated.parallel = ['par-web-port', 'par-socket-lock'];
-        } else {
-          updated.virtual = ['virt-docker-perm', 'virt-heartbeat-out'];
+        const password = window.prompt(isFa ? 'رمز ادمین واقعی Splunk (حداقل ۱۲ کاراکتر):' : 'Real Splunk admin password (minimum 12 characters):') || '';
+        const pass4SymmKey = window.prompt(isFa ? 'pass4SymmKey واقعی (حداقل ۱۲ کاراکتر):' : 'Real pass4SymmKey (minimum 12 characters):') || '';
+        if (password.length < 12 || pass4SymmKey.length < 12) {
+          throw new Error(isFa ? 'رمز و pass4SymmKey معتبر لازم است.' : 'A valid admin password and pass4SymmKey are required.');
         }
-        return updated;
-      });
-      addLog(isFa ? "âœ… ط¹ظ…ظ„غŒط§طھ طھط±ظ…غŒظ… ظ‡ظˆط´ظ…ظ†ط¯ ط¨ط§ ظ…ظˆظپظ‚غŒطھ طھع©ظ…غŒظ„ ط´ط¯! ط³ط±ظˆط± ظ‡ظ…â€Œط§ع©ظ†ظˆظ† غ±غ°غ°ظھ ط³ط¨ط² ط§ط³طھ." : "âœ… Auto-heal completed successfully! All services audited and marked as 100% green.");
+        addLog(isFa ? 'در حال اجرای Auto-Heal واقعی روی Splunk موازی...' : 'Running real auto-heal on the parallel Splunk instance...');
+        const res = await fetch('/api/parallel-cluster/ai-auto-heal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ webPort: 8001, restPort: 8090, tcpPort: 9998, kvPort: 8193, adminPassword: password, pass4SymmKey })
+        });
+        const data = await res.json();
+        if (!res.ok || data.success === false) throw new Error(data.error || 'Splunk auto-heal failed');
+        setGlobalAiLogs(Array.isArray(data.logs) ? data.logs : [String(data.output || '')]);
+        addLog(isFa ? 'Auto-Heal واقعی و verification وب تکمیل شد.' : 'Real auto-heal and Web verification completed.');
+      }
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "طھط¨ط±غŒع©! طھظ…ط§ظ… ظ…ط´ع©ظ„ط§طھ ظپط¹ط§ظ„ ط³ط±ظˆط± طھظˆط³ط· ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ ط¨ط±ط·ط±ظپ ط´ط¯ âœ“" : "Congratulations! All active server issues have been automatically healed by AI âœ“");
-    }, 3200);
+      showToast(isFa ? 'عملیات واقعی با موفقیت کامل شد.' : 'Real operation completed successfully.');
+    } catch (err: any) {
+      addLog(`[ERROR] ${err?.message || err}`);
+      setIsGlobalAiHealerRunning(false);
+      showToast(isFa ? 'عملیات کامل نشد؛ لاگ خطا را بررسی کنید.' : 'Operation failed; inspect the error log.');
+    }
   };
 
-  // Completely destroy virtual server in the background and clean all docker states
-  const destroyVirtualCloudServer = () => {
+  // Virtual server actions now call the real controller; no local synthetic state.
+  const destroyVirtualCloudServer = async () => {
     if (isGlobalAiHealerRunning) return;
     setIsGlobalAiHealerRunning(true);
     setGlobalAiExpanded(true);
-    const logs: string[] = [];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
-
-    addLog(isFa ? "ًں—‘ï¸ڈ ط´ط±ظˆط¹ ظپط±ط¢غŒظ†ط¯ طھط®ط±غŒط¨ ع©ط§ظ…ظ„ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ع©ط§ظ†طھغŒظ†ط±غŒ ط§ط³ظ¾ظ„ط§ظ†ع©..." : "ًں—‘ï¸ڈ Starting decommissioning of virtual cloud container instance...");
-    
-    setTimeout(() => {
-      addLog(isFa ? "ي ½ي°³ طھظˆظ‚ظپ ع©ط§ظ†طھغŒظ†ط±ظ‡ط§غŒ ظپط¹ط§ظ„ ط¯ط§ع©ط± ظˆ ط­ط°ظپ ط§طھطµط§ظ„ط§طھ ط´ط¨ع©ظ‡ ظ…ط¬ط§ط±غŒ..." : "ًںگ³ Stopping active Docker container stack and cleaning virtual networks...");
-      addLog("ًںگ³ Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml down --volumes --remove-orphans");
-    }, 800);
-
-    setTimeout(() => {
-      addLog(isFa ? "ًں’¥ ظ¾ط§ع©ط³ط§ط²غŒ ع©ط§ظ…ظ„ ظ¾ظˆط´ظ‡ ط¯ط§ط¯ظ‡â€Œظ‡ط§ ظˆ ط¯غŒط³ع©â€Œظ‡ط§غŒ ظ…طھطµظ„ (Docker Volumes)..." : "ًں’¥ Purging mount volumes and all indexed log databases...");
-      addLog("ًں§¹ Executing: rm -rf /var/lib/splunk_virtual /etc/splunk_virtual");
-    }, 1600);
-
-    setTimeout(() => {
-      addLog(isFa ? "ًں”“ ط¢ط²ط§ط¯ط³ط§ط²غŒ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط´ط¨ع©ظ‡ غ¸غ°غ¸غ° (ظˆط¨)طŒ غ¸غ°غ¹غ± (ظ…ط¯غŒط±غŒطھغŒ) ظˆ غ¹غ¹غ¹غ¹ (ع¯غŒط±ظ†ط¯ظ‡ ط¯ط§ط¯ظ‡)..." : "ًں”“ Releasing local system ports 8080 (Web), 8091 (Mgmt), and 9999 (S2S)...");
-    }, 2400);
-
-    setTimeout(() => {
-      setVirtualClusterState({
-        isInstalled: false,
-        status: 'stopped',
-        clusterName: 'Virtual Instance Deleted',
-        version: 'N/A',
-        portOffset: 0,
-        webPort: 0,
-        mgmtPort: 0,
-        indexerPort: 0
+    try {
+      const res = await fetch('/api/virtual-server/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedServers: ['virtual'] })
       });
-      // Switch active environment to production
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || 'Virtual target decommission failed');
+      setVirtualClusterState(prev => ({ ...prev, isInstalled: false, status: 'deleted' }));
       setActiveEnvironment('production');
-      addLog(isFa ? "âœ… ظپط±ط¢غŒظ†ط¯ طھط®ط±غŒط¨ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط¯ط± ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ط³ط±ظˆط± ط§ط¬ط±ط§ ظˆ ع©ظ„ط§ط³طھط± ع©ط§ظ…ظ„ط§ظ‹ ظ¾ط§ع© ط´ط¯!" : "âœ… Decommissioning completed. Virtual cloud instance entirely purged from server!");
+      setGlobalAiLogs(Array.isArray(data.logs) ? data.logs : ['[REAL] Virtual target decommission command completed.']);
+      showToast(isFa ? 'هدف مجازی واقعی حذف شد.' : 'Real virtual target decommissioned.');
+    } catch (err: any) {
+      setGlobalAiLogs(prev => [...prev, `[ERROR] ${err?.message || err}`]);
+    } finally {
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ط² ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ع©ظ„ ط³ط±ظˆط± ظ…طھظˆظ‚ظپ ظˆ ع©ط§ظ…ظ„ط§ظ‹ ط­ط°ظپ ط´ط¯!" : "Virtual server stopped and successfully deleted from the server background!");
-    }, 3200);
+    }
   };
 
-  // Re-create/Build Virtual Cloud Server
-  const recreateVirtualCloudServer = () => {
+  const recreateVirtualCloudServer = async () => {
     if (isGlobalAiHealerRunning) return;
     setIsGlobalAiHealerRunning(true);
     setGlobalAiExpanded(true);
-    const logs: string[] = [];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
-
-    addLog(isFa ? "ًںڑ€ ظپط±ط¢غŒظ†ط¯ ط³ط§ط®طھ ظˆ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¬ط¯غŒط¯ ط¯ط± ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ط¢ط؛ط§ط² ط´ط¯..." : "ًںڑ€ Starting build process for a new virtual cloud instance in background...");
-    
-    setTimeout(() => {
-      addLog(isFa ? "ًںگ³ ط³ط§ط®طھ ط§غŒظ…غŒط¬ ع©ط§ظ†طھغŒظ†ط± ط§ط®طھطµط§طµغŒ ط§ط³ظ¾ظ„ط§ظ†ع© ظˆ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ظ¾ظ„ ط´ط¨ع©ظ‡ ظ…ط¬ط§ط±غŒ..." : "ًںگ³ Pulling and constructing custom Splunk Docker images & configuring network bridge...");
-      addLog("ًںگ³ Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml up -d --build");
-    }, 800);
-
-    setTimeout(() => {
-      addLog(isFa ? "ًں“‚ ط§غŒط¬ط§ط¯ ظ¾ظˆط´ظ‡â€Œظ‡ط§غŒ ط§غŒط²ظˆظ„ظ‡ ط¨ط±ط§غŒ ط°ط®غŒط±ظ‡â€Œط³ط§ط²غŒ ط§غŒظ†ط¯ع©ط³â€Œظ‡ط§ (/var/lib/splunk_virtual)..." : "ًں“‚ Creating sandboxed volume directories at /var/lib/splunk_virtual...");
-    }, 1600);
-
-    setTimeout(() => {
-      addLog(isFa ? "âڑ، طھط®طµغŒطµ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ غ¸غ°غ¸غ°طŒ غ¸غ°غ¹غ± ظˆ غ¹غ¹غ¹غ¹ ظˆ طھط³طھ ظ‡ط§ط±طھâ€Œط¨غŒطھ ع©ظ„ط§ط³طھط±..." : "âڑ، Binding ports 8080, 8091, 9999 and starting cluster heartbeat tests...");
-    }, 2400);
-
-    setTimeout(() => {
-      setVirtualClusterState({
-        isInstalled: true,
-        status: 'running',
-        clusterName: 'Splunk Virtual Cloud Instance (Container Sandbox)',
-        version: '9.2.1-Enterprise-Virtual',
-        portOffset: 2,
-        webPort: 8080,
-        mgmtPort: 8091,
-        indexerPort: 9999
+    setGlobalAiLogs([]);
+    try {
+      const res = await fetch('/api/virtual-server/recreate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
       });
-      // Clear resolved issues to make them scan-ready
-      setResolvedGlobalIssueIds(prev => ({ ...prev, virtual: [] }));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || `Virtual provisioning is not available (HTTP ${res.status})`);
+      setVirtualClusterState(data.state || { ...virtualClusterState, isInstalled: true, status: 'running' });
       setActiveEnvironment('virtual');
-      addLog(isFa ? "âœ… ع©ط§ظ†طھغŒظ†ط±ظ‡ط§غŒ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ظ…طھظˆظ„ط¯ ط´ط¯ظ‡ ظˆ ط¯ط± ظ¾ظˆط±طھ غ¸غ°غ¸غ° ظپط¹ط§ظ„ ظ‡ط³طھظ†ط¯!" : "âœ… New virtual cloud instance container successfully deployed and live on Port 8080!");
+      setGlobalAiLogs(Array.isArray(data.logs) ? data.logs : ['[REAL] Virtual provisioning completed.']);
+    } catch (err: any) {
+      setGlobalAiLogs([['ERROR', err?.message || String(err)].join(': ')]);
+    } finally {
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ظ…ط¬ط¯ط¯ط§ظ‹ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط³ط§ط®طھظ‡ ظˆ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ط´ط¯!" : "Virtual server successfully created and booted!");
-    }, 3200);
+    }
   };
 
   // Trigger quick scan whenever the active environment changes
