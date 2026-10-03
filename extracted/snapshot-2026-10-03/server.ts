@@ -3,7 +3,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
-import { exec, execSync } from 'child_process';
+import { exec, execSync, execFile } from 'child_process';
 import net from 'net';
 import os from 'os';
 import {
@@ -3402,6 +3402,26 @@ async function startServer() {
       success: true,
       stepId,
       logs
+    });
+  });
+
+  // Real remote SSH command endpoint. Uses key-based BatchMode; no simulated remote session is returned.
+  app.post('/api/splunk/remote/exec', requireAuth, requireRoles('super_admin','cluster_admin'), async (req, res) => {
+    const { host, user='root', port=22, command, identityFile } = req.body || {};
+    if(!host || !command || typeof command!=='string') return res.status(400).json({success:false,error:'host and command are required.'});
+    let safeHost=''; try { safeHost=sanitizeHostTarget(String(host)); } catch { return res.status(400).json({success:false,error:'Invalid host target.'}); }
+    const sshUser=String(user).replace(/[^a-zA-Z0-9_.@-]/g,'');
+    const sshPort=Number(port)||22;
+    if(!sshUser) return res.status(400).json({success:false,error:'Invalid SSH user.'});
+    const keys=[identityFile,'/root/.ssh/id_ed25519','/root/.ssh/id_rsa'].filter((x:any)=>typeof x==='string'&&x);
+    const key=keys.find((x:string)=>fs.existsSync(x));
+    if(!key) return res.status(400).json({success:false,error:'No local SSH private key is available. Configure identityFile or place a key in /root/.ssh/.',code:'SSH_KEY_REQUIRED'});
+    const started=Date.now();
+    execFile('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=8','-o','StrictHostKeyChecking=accept-new','-i',key,'-p',String(sshPort),`${sshUser}@${safeHost}`,command],{timeout:120000,maxBuffer:2*1024*1024},(error,stdout,stderr)=>{
+      const exitCode=typeof (error as any)?.code==='number'?(error as any).code:0;
+      const success=!error;
+      const redactedCommand=String(command).replace(/(password|token|secret|pass4SymmKey)\s*[= ]\s*[^\s]+/gi,'$1=[REDACTED]');
+      res.status(success?200:502).json({success,host:safeHost,user:sshUser,port:sshPort,command:redactedCommand,stdout,stderr,exitCode,durationMs:Date.now()-started});
     });
   });
 
