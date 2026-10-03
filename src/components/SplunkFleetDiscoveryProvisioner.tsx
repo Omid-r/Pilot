@@ -85,7 +85,7 @@ export const SplunkFleetDiscoveryProvisioner: React.FC<SplunkFleetDiscoveryProvi
   const isFa = lang === 'fa';
 
   // Subnet & Scanning State
-  const [subnetCidr, setSubnetCidr] = useState<string>('192.168.10.0/24');
+  const [subnetCidr, setSubnetCidr] = useState<string>('');
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   const [scanDiscoveredCount, setScanDiscoveredCount] = useState<number>(10);
@@ -247,72 +247,54 @@ export const SplunkFleetDiscoveryProvisioner: React.FC<SplunkFleetDiscoveryProvi
     }));
   };
 
-  // 1. Stage 1: Parallel OS Installation
-  const handleStartNodeOSInstall = (nodeId: string, targetOS?: string) => {
+  // 1. Stage 1: Verify/Provision target OS.
+  const handleStartNodeOSInstall = async (nodeId: string, targetOS?: string) => {
     const node = assets.find(n => n.id === nodeId);
     if (!node) return;
-    const osToUse = targetOS || node.osInstallConfig?.osId || node.osType || 'rhel_9_4';
-    const osMeta = OS_DISTRIBUTIONS.find(o => o.id === osToUse) || OS_DISTRIBUTIONS[0];
 
-    // Clear previous timers for this node
-    if (activeTimersRef.current[nodeId]) {
-      activeTimersRef.current[nodeId].forEach(clearTimeout);
-    }
-    activeTimersRef.current[nodeId] = [];
+    setAssets(prev => prev.map(n => n.id === nodeId ? {
+      ...n,
+      status: 'os_installing',
+      lifecycleStage: 'os_installing',
+      parallelTask: {
+        ...(n.parallelTask || {}),
+        taskName: 'بررسی واقعی سیستم‌عامل هدف',
+        taskStage: 'os',
+        taskProgress: 20,
+        taskStatus: 'running',
+        taskLogs: [...(n.parallelTask?.taskLogs || []), `[${new Date().toLocaleTimeString()}] [REAL_OS] Probing ${node.ip}:22 over SSH...`]
+      }
+    } : n));
 
-    // Set initial state
-    setAssets(prev => prev.map(n => {
-      if (n.id !== nodeId) return n;
-      return {
+    try {
+      const res = await fetch('/api/real/node/probe', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({host:node.ip,ports:[node.sshPort||22],sshUser:node.sshUser||'root',sshPort:node.sshPort||22,inventory:true})
+      });
+      const data = await res.json();
+      if(!res.ok || data.success===false) throw new Error(data.error || 'OS/SSH probe failed');
+
+      const inv = data.sshInventory || data.inventory || {};
+      const osName = inv.prettyName || inv.osPrettyName || inv.os || targetOS || 'OS detected remotely';
+      const kernel = inv.kernel || '';
+      const sshOpen = Array.isArray(data.ports) ? Boolean(data.ports.find((p:any)=>Number(p.port)===(node.sshPort||22)&&p.open)) : Boolean(data.sshOpen);
+
+      if(!sshOpen) {
+        throw new Error('SSH is not reachable. Real OS installation requires a Redfish/IPMI/PXE provisioning channel; no synthetic installation is performed.');
+      }
+
+      setAssets(prev => prev.map(n => n.id === nodeId ? {
         ...n,
-        osType: osToUse as any,
-        status: 'os_installing',
-        lifecycleStage: 'os_installing',
-        installProgress: 10,
-        parallelTask: {
-          taskName: `نصب خودکار ${osMeta.name}`,
-          taskStage: 'os',
-          taskProgress: 10,
-          taskStatus: 'running',
-          taskLogs: [
-            `[${new Date().toLocaleTimeString()}] [PXE/Redfish] Booting ${node.hostname} (${node.ip}) with ${osMeta.name} ISO...`,
-            `[${new Date().toLocaleTimeString()}] [STORAGE] Partitioning NVMe SSD with XFS filesystem (noatime,nodiratime)...`
-          ],
-          startedAt: new Date().toISOString()
-        }
-      };
-    }));
-
-    const steps = [
-      { progress: 35, log: `[PACKAGES] Installing core enterprise packages (${osMeta.packageManager} core utilities, tuned, numactl, bind-utils)...` },
-      { progress: 65, log: `[NETWORK] Configuring static IP ${node.ip}/24 & Gateway via NetworkManager (nmcli)...` },
-      { progress: 85, log: `[POST_INSTALL] Injecting authorized SSH keys & securing boot loader...` },
-      { progress: 100, log: `[OS_READY] ${osMeta.name} installed successfully! Kernel ${osMeta.kernel} active and online.` }
-    ];
-
-    steps.forEach((step, idx) => {
-      const timer = setTimeout(() => {
-        setAssets(prev => prev.map(n => {
-          if (n.id !== nodeId) return n;
-          const isFinished = idx === steps.length - 1;
-          const updatedLogs = [...(n.parallelTask?.taskLogs || []), `[${new Date().toLocaleTimeString()}] ${step.log}`];
-          return {
-            ...n,
-            installProgress: step.progress,
-            status: isFinished ? 'os_ready' : 'os_installing',
-            lifecycleStage: isFinished ? 'os_ready' : 'os_installing',
-            parallelTask: {
-              ...n.parallelTask!,
-              taskProgress: step.progress,
-              taskStatus: isFinished ? 'success' : 'running',
-              taskLogs: updatedLogs
-            }
-          };
-        }));
-      }, (idx + 1) * 800);
-
-      activeTimersRef.current[nodeId].push(timer);
-    });
+        osType: targetOS as any || n.osType,
+        status:'os_ready',
+        lifecycleStage:'os_ready',
+        installProgress:100,
+        parallelTask:{...n.parallelTask!,taskProgress:100,taskStatus:'success',taskLogs:[...(n.parallelTask?.taskLogs||[]),`[${new Date().toLocaleTimeString()}] [OS_READY] Real remote OS detected: ${osName}${kernel ? `; Kernel ${kernel}` : ''}`]}
+      }:n));
+    } catch(e:any) {
+      setAssets(prev => prev.map(n => n.id === nodeId ? {...n,status:'pending_access',lifecycleStage:'discovered',parallelTask:{...n.parallelTask!,taskStatus:'failed',taskLogs:[...(n.parallelTask?.taskLogs||[]),`[${new Date().toLocaleTimeString()}] [FAILED] ${e.message}`]}}:n));
+    }
   };
 
   // 2. Stage 2: Parallel Security Hardening
@@ -343,113 +325,78 @@ export const SplunkFleetDiscoveryProvisioner: React.FC<SplunkFleetDiscoveryProvi
 
   // 3. Stage 3
 
-  // 3. Stage 3: Container / Runtime Engine Installation
-  const handleStartNodeContainerInstall = (nodeId: string, engine: DeploymentTargetEngine) => {
+  // 3. Stage 3: Install/verify real container runtime.
+  const handleStartNodeContainerInstall = async (nodeId: string, engine: DeploymentTargetEngine) => {
     const node = assets.find(n => n.id === nodeId);
     if (!node) return;
 
-    setAssets(prev => prev.map(n => {
-      if (n.id !== nodeId) return n;
-      return {
-        ...n,
-        containerEngineConfig: { engine },
-        status: 'container_installing',
-        lifecycleStage: 'container_installing',
-        parallelTask: {
-          taskName: engine === 'baremetal_native' ? 'آماده‌سازی سیستم‌عامل Native Linux' : engine === 'docker_standalone' ? 'نصب Docker Engine & Compose' : 'نصب K3s Kubernetes & SOK Operator',
-          taskStage: 'container',
-          taskProgress: 20,
-          taskStatus: 'running',
-          taskLogs: [
-            ...(n.parallelTask?.taskLogs || []),
-            `[${new Date().toLocaleTimeString()}] [RUNTIME] Setting up runtime engine: ${engine}...`
-          ]
-        }
-      };
-    }));
+    setAssets(prev => prev.map(n => n.id === nodeId ? {
+      ...n,
+      containerEngineConfig:{engine},
+      status:'container_installing',
+      lifecycleStage:'container_installing',
+      parallelTask:{...(n.parallelTask||{}),taskName:`آماده‌سازی واقعی ${engine}`,taskStage:'container',taskProgress:20,taskStatus:'running',
+        taskLogs:[...(n.parallelTask?.taskLogs||[]),`[${new Date().toLocaleTimeString()}] [REAL_RUNTIME] Installing/verifying ${engine} on ${node.ip}...`]}
+    }:n));
 
-    setTimeout(() => {
-      setAssets(prev => prev.map(n => {
-        if (n.id !== nodeId) return n;
-        return {
-          ...n,
-          status: 'container_engine_ready',
-          lifecycleStage: 'container_ready',
-          parallelTask: {
-            ...n.parallelTask!,
-            taskProgress: 100,
-            taskStatus: 'success',
-            taskLogs: [
-              ...(n.parallelTask?.taskLogs || []),
-              `[${new Date().toLocaleTimeString()}] [RUNTIME_READY] Runtime ${engine} configured and healthy.`
-            ]
-          }
-        };
-      }));
-    }, 1500);
+    try {
+      if (node.ip && node.ip !== '127.0.0.1') {
+        throw new Error('Remote runtime installation requires the node provisioning channel; controller cannot truthfully install Docker/K3s over SSH without an artifact transfer plan.');
+      }
+
+      const runtime = engine === 'docker_standalone' ? 'docker' : engine === 'k3s_sok' ? 'kubernetes' : 'native';
+      if (runtime !== 'native') {
+        const res = await fetch('/api/container-engine/install-offline',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({engine:runtime})
+        });
+        const data = await res.json();
+        if(!res.ok || !data.success) throw new Error(data.error || 'Offline runtime installation failed');
+      }
+
+      setAssets(prev => prev.map(n => n.id === nodeId ? {
+        ...n,
+        status:'container_engine_ready',
+        lifecycleStage:'container_ready',
+        parallelTask:{...n.parallelTask!,taskProgress:100,taskStatus:'success',taskLogs:[...(n.parallelTask?.taskLogs||[]),`[${new Date().toLocaleTimeString()}] [RUNTIME_READY] Real ${engine} runtime verified.`]}
+      }:n));
+    } catch(e:any) {
+      setAssets(prev => prev.map(n => n.id === nodeId ? {...n,status:'runtime_failed',lifecycleStage:'discovered',parallelTask:{...n.parallelTask!,taskStatus:'failed',taskLogs:[...(n.parallelTask?.taskLogs||[]),`[${new Date().toLocaleTimeString()}] [FAILED] ${e.message}`]}}:n));
+    }
   };
 
-  // 4. Stage 4: Splunk Enterprise Instance Installation
-  const handleStartNodeSplunkInstall = (nodeId: string, version: string = '9.4.0') => {
+  // 4. Stage 4: Real Splunk Enterprise installation.
+  const handleStartNodeSplunkInstall = async (nodeId: string, version: string = '') => {
     const node = assets.find(n => n.id === nodeId);
     if (!node) return;
 
-    if (activeTimersRef.current[nodeId]) {
-      activeTimersRef.current[nodeId].forEach(clearTimeout);
+    if (node.ip && node.ip !== '127.0.0.1') {
+      setAssets(prev => prev.map(n => n.id === nodeId ? {...n,status:'splunk_install_failed',parallelTask:{...n.parallelTask!,taskStatus:'failed',taskLogs:[...(n.parallelTask?.taskLogs||[]),'[FAILED] Remote Splunk installation requires an artifact-transfer/provisioning channel; no synthetic install is performed.']}}:n));
+      return;
     }
-    activeTimersRef.current[nodeId] = [];
 
-    setAssets(prev => prev.map(n => {
-      if (n.id !== nodeId) return n;
-      return {
-        ...n,
-        splunkVersion: version as any,
-        status: 'splunk_installing',
-        lifecycleStage: 'splunk_installing',
-        parallelTask: {
-          taskName: `نصب Splunk Enterprise ${version}`,
-          taskStage: 'splunk',
-          taskProgress: 15,
-          taskStatus: 'running',
-          taskLogs: [
-            ...(n.parallelTask?.taskLogs || []),
-            `[${new Date().toLocaleTimeString()}] [SPLUNK_DOWNLOAD] Fetching Splunk Enterprise ${version} package...`,
-            `[${new Date().toLocaleTimeString()}] [EXTRACT] Unpacking binaries into /opt/splunk with owner splunk:splunk...`
-          ]
-        }
-      };
-    }));
+    setAssets(prev => prev.map(n => n.id === nodeId ? {...n,status:'splunk_installing',lifecycleStage:'splunk_installing',splunkVersion:version as any,parallelTask:{...n.parallelTask!,taskProgress:20,taskStatus:'running',taskLogs:[...(n.parallelTask?.taskLogs||[]),`[${new Date().toLocaleTimeString()}] [REAL_SPLUNK] Starting local offline Splunk deployment...`]}}:n));
 
-    const steps = [
-      { progress: 40, log: `[LICENSE] Accepting Splunk Enterprise EULA & generating internal auth keys...` },
-      { progress: 70, log: `[SYSTEMD] Registering /etc/systemd/system/Splunkd.service with cgroup memory limits...` },
-      { progress: 90, log: `[BOOTSTRAP] Starting Splunkd daemon (listening on TCP 8089 & 8000)...` },
-      { progress: 100, log: `[SPLUNK_ONLINE] Splunk Enterprise ${version} is RUNNING and healthy on ${node.hostname}!` }
-    ];
+    try {
+      const art = await fetch('/api/real/artifacts').then(r=>r.json());
+      if(!Array.isArray(art.splunk) || art.splunk.length===0) throw new Error('No real Splunk RPM/TGZ artifact is staged on the controller.');
 
-    steps.forEach((step, idx) => {
-      const timer = setTimeout(() => {
-        setAssets(prev => prev.map(n => {
-          if (n.id !== nodeId) return n;
-          const isFinished = idx === steps.length - 1;
-          const updatedLogs = [...(n.parallelTask?.taskLogs || []), `[${new Date().toLocaleTimeString()}] ${step.log}`];
-          return {
-            ...n,
-            installProgress: 100,
-            status: isFinished ? 'splunk_running' : 'splunk_installing',
-            lifecycleStage: isFinished ? 'splunk_running' : 'splunk_installing',
-            parallelTask: {
-              ...n.parallelTask!,
-              taskProgress: step.progress,
-              taskStatus: isFinished ? 'success' : 'running',
-              taskLogs: updatedLogs
-            }
-          };
-        }));
-      }, (idx + 1) * 750);
+      const admin = window.prompt('Real Splunk admin password (minimum 12 characters):') || '';
+      const pass4 = window.prompt('Real pass4SymmKey (minimum 12 characters):') || '';
+      if(admin.length<12 || pass4.length<12) throw new Error('Valid admin password and pass4SymmKey are required.');
 
-      activeTimersRef.current[nodeId].push(timer);
-    });
+      const result = await fetch('/api/real/deploy/direct',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({artifact:art.splunk[0],adminPassword:admin,pass4SymmKey:pass4})
+      }).then(async r=>{const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'Splunk deployment failed');return d;});
+
+      setAssets(prev=>prev.map(n=>n.id===nodeId?{
+        ...n,status:'splunk_running',lifecycleStage:'splunk_running',installProgress:100,
+        parallelTask:{...n.parallelTask!,taskProgress:100,taskStatus:'success',taskLogs:[...(n.parallelTask?.taskLogs||[]),'[SPLUNK_ONLINE] Real Splunk deployment verified by backend.',...(result.logs||[])]}
+      }:n));
+    }catch(e:any){
+      setAssets(prev=>prev.map(n=>n.id===nodeId?{...n,status:'splunk_install_failed',parallelTask:{...n.parallelTask!,taskStatus:'failed',taskLogs:[...(n.parallelTask?.taskLogs||[]),`[FAILED] ${e.message}`]}}:n));
+    }
   };
 
   // 5. Stage 5: Role Assignment & Placement
@@ -502,22 +449,21 @@ export const SplunkFleetDiscoveryProvisioner: React.FC<SplunkFleetDiscoveryProvi
     }));
   };
 
-  // Batch Auto-Deploy All Discovered Nodes in Parallel
-  const handleBatchAutoDeployAll = () => {
-    assets.forEach((node, index) => {
-      setTimeout(() => {
-        handleStartNodeOSInstall(node.id, node.osType);
-        setTimeout(() => {
-          handleStartNodeHardening(node.id);
-          setTimeout(() => {
-            handleStartNodeSplunkInstall(node.id, '9.4.0');
-            setTimeout(() => {
-              handleAssignNodeRole(node.id, node.role, node.site);
-            }, 3000);
-          }, 3500);
-        }, 3200);
-      }, index * 200);
-    });
+  // Batch deployment: sequential per node, concurrent across nodes, using only real operations.
+  const handleBatchAutoDeployAll = async () => {
+    await Promise.all(assets.map(async node => {
+      await handleStartNodeOSInstall(node.id, node.osType);
+      const latest = assets.find(n => n.id === node.id);
+      if (!latest || latest.status !== 'os_ready') return;
+      await handleStartNodeHardening(node.id);
+      const hardened = assets.find(n => n.id === node.id);
+      if (!hardened || hardened.lifecycleStage !== 'hardened') return;
+      await handleStartNodeContainerInstall(node.id, hardened.containerEngineConfig?.engine || 'baremetal_native' as DeploymentTargetEngine);
+      const runtimeReady = assets.find(n => n.id === node.id);
+      if (!runtimeReady || runtimeReady.lifecycleStage !== 'container_ready') return;
+      await handleStartNodeSplunkInstall(node.id, runtimeReady.splunkVersion || '');
+      handleAssignNodeRole(node.id, node.role, node.site);
+    }));
   };
 
   // Toggle Hardening Item in Node Checklist
