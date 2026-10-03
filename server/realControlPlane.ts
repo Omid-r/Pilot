@@ -206,6 +206,71 @@ function healthFindings() {
   check('chrony', 'chronyd active', 'platform', /^active$/i.test(chrony), chrony || 'chronyd inactive/not installed', 'Enable chronyd for synchronized time.');
   const splunk = findSplunkHome();
   check('splunk', 'Splunk binary', 'splunk', Boolean(splunk), splunk ? 'Detected at ' + splunk : 'No Splunk binary detected.', 'Stage a licensed Splunk package in the offline artifact store.');
+
+  if (splunk) {
+    const btool = commandSync(path.join(splunk, 'bin', 'splunk'), ['btool', 'check'], 30000);
+    check(
+      'splunk-btool',
+      'Splunk btool configuration',
+      'splunk',
+      !!btool && !/error|invalid|failed/i.test(btool),
+      btool || 'btool returned no output; inspect exit status from direct CLI if needed.',
+      'Run splunk btool check and fix configuration precedence/syntax errors before deployment.'
+    );
+
+    const readLocal = (name: string) => {
+      const p = path.join(splunk, 'etc', 'system', 'local', name);
+      return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+    };
+    const webConf = readLocal('web.conf');
+    const serverConf = readLocal('server.conf');
+    const outputsConf = readLocal('outputs.conf');
+
+    const webTls = /enableSplunkWebSSL\s*=\s*true/i.test(webConf);
+    check(
+      'splunk-web-tls',
+      'Splunk Web TLS enabled',
+      'splunk-security',
+      webTls,
+      webTls ? 'web.conf enables Splunk Web TLS.' : 'web.conf does not enable Splunk Web TLS.',
+      'Configure web.conf [settings] enableSplunkWebSSL=true with a valid server certificate before production use.'
+    );
+
+    const splunkdTls = /enableSplunkdSSL\s*=\s*true/i.test(serverConf);
+    check(
+      'splunkd-tls',
+      'splunkd management TLS',
+      'splunk-security',
+      splunkdTls,
+      splunkdTls ? 'server.conf enables splunkd TLS.' : 'server.conf does not enable splunkd TLS.',
+      'Configure [sslConfig] enableSplunkdSSL=true and valid certificates.'
+    );
+
+    const pass4 = /pass4SymmKey\s*=\s*([^\r\n#]+)/i.exec(serverConf)?.[1]?.trim() || '';
+    const safePass4 = Boolean(pass4) && !/^(changeme|default|password|admin)$/i.test(pass4) && pass4.length >= 12;
+    check(
+      'splunk-pass4symmkey',
+      'Splunk pass4SymmKey',
+      'splunk-security',
+      safePass4,
+      safePass4 ? 'A non-default pass4SymmKey is configured.' : 'pass4SymmKey is missing, too short, or a known default.',
+      'Configure a strong non-default pass4SymmKey for the relevant service stanzas.'
+    );
+
+    if (outputsConf) {
+      const useSsl = /useSSL\s*=\s*true/i.test(outputsConf);
+      const verify = /sslVerifyServerCert\s*=\s*true/i.test(outputsConf);
+      check(
+        'splunk-forwarding-tls',
+        'Splunk forwarding TLS + certificate verification',
+        'splunk-security',
+        useSsl && verify,
+        `useSSL=${useSsl}; sslVerifyServerCert=${verify}`,
+        'Enable TLS and server-certificate verification for secure forwarding.'
+      );
+    }
+  }
+
   return { os: osr, findings };
 }
 
