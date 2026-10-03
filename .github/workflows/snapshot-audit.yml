@@ -6,6 +6,10 @@ on:
     paths:
       - '*.zip'
       - '.github/workflows/snapshot-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/snapshot-audit.yml'
   workflow_dispatch:
 
 permissions:
