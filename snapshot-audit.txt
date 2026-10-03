@@ -1,0 +1,309 @@
+# Snapshot inventory
+
+Source commit: 9fc8cea3b814910b9495de41a98365ec1abc0cba
+
+## Files
+extracted/snapshot-2026-10-03/.env.example
+extracted/snapshot-2026-10-03/.github/workflows/build-offline-rhel.yml
+extracted/snapshot-2026-10-03/.gitignore
+extracted/snapshot-2026-10-03/README.md
+extracted/snapshot-2026-10-03/REAL-OFFLINE-CONTROL-PLANE.md
+extracted/snapshot-2026-10-03/SECURITY.md
+extracted/snapshot-2026-10-03/bun.lock
+extracted/snapshot-2026-10-03/data/security-db.json
+extracted/snapshot-2026-10-03/index.html
+extracted/snapshot-2026-10-03/metadata.json
+extracted/snapshot-2026-10-03/package.json
+extracted/snapshot-2026-10-03/public/assets/aistudio/.gitignore
+extracted/snapshot-2026-10-03/public/splunk_cluster_doctor-1.0.0.spl
+extracted/snapshot-2026-10-03/scripts/build-rhel-package.js
+extracted/snapshot-2026-10-03/scripts/deploy-splunk-k8s-offline.sh
+extracted/snapshot-2026-10-03/scripts/fix-parallel-web.sh
+extracted/snapshot-2026-10-03/scripts/fix.sh
+extracted/snapshot-2026-10-03/scripts/indexer-fix.sh
+extracted/snapshot-2026-10-03/scripts/install-all-offline.sh
+extracted/snapshot-2026-10-03/scripts/install-container-engine-offline.sh
+extracted/snapshot-2026-10-03/scripts/install-offline-docker-k8s.sh
+extracted/snapshot-2026-10-03/scripts/install-offline-tools.sh
+extracted/snapshot-2026-10-03/scripts/install-real-parallel-splunk.sh
+extracted/snapshot-2026-10-03/scripts/install-traffic-tools.sh
+extracted/snapshot-2026-10-03/scripts/parallel-server-daemon.sh
+extracted/snapshot-2026-10-03/scripts/peer-traffic.sh
+extracted/snapshot-2026-10-03/scripts/reinstall-and-run.sh
+extracted/snapshot-2026-10-03/scripts/reset-splunk-password.sh
+extracted/snapshot-2026-10-03/scripts/setup.sh
+extracted/snapshot-2026-10-03/scripts/traffic-tools.py
+extracted/snapshot-2026-10-03/scripts/uninstall.sh
+extracted/snapshot-2026-10-03/server.ts
+extracted/snapshot-2026-10-03/server/realControlPlane.ts
+extracted/snapshot-2026-10-03/server/securityEngine.ts
+extracted/snapshot-2026-10-03/src/App.tsx
+extracted/snapshot-2026-10-03/src/build-spl.ts
+extracted/snapshot-2026-10-03/src/components/AdminSecurityPanel.tsx
+extracted/snapshot-2026-10-03/src/components/AlertNotificationCenter.tsx
+extracted/snapshot-2026-10-03/src/components/AppModulesManagerModal.tsx
+extracted/snapshot-2026-10-03/src/components/BackendOperationInspectorModal.tsx
+extracted/snapshot-2026-10-03/src/components/BackupManager.tsx
+extracted/snapshot-2026-10-03/src/components/BentoGridConsole.tsx
+extracted/snapshot-2026-10-03/src/components/ClusterSettingsModal.tsx
+extracted/snapshot-2026-10-03/src/components/CommercialLicenseManager.tsx
+extracted/snapshot-2026-10-03/src/components/ComponentNetworkMap.tsx
+extracted/snapshot-2026-10-03/src/components/ConfigEditor.tsx
+extracted/snapshot-2026-10-03/src/components/Coolicons.tsx
+extracted/snapshot-2026-10-03/src/components/DocCompliancePanel.tsx
+extracted/snapshot-2026-10-03/src/components/EnterpriseAgentGenerator.tsx
+extracted/snapshot-2026-10-03/src/components/FloatingMiniWindow.tsx
+extracted/snapshot-2026-10-03/src/components/FloatingPiPWindow.tsx
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx
+extracted/snapshot-2026-10-03/src/components/HeartbeatMonitoringMatrix.tsx
+extracted/snapshot-2026-10-03/src/components/IssueDetailModal.tsx
+extracted/snapshot-2026-10-03/src/components/LinearSlideToApplyDiff.tsx
+extracted/snapshot-2026-10-03/src/components/LiveLogAnalysisModal.tsx
+extracted/snapshot-2026-10-03/src/components/LoginModal.tsx
+extracted/snapshot-2026-10-03/src/components/NetworkToolbox.tsx
+extracted/snapshot-2026-10-03/src/components/ParallelSplunkProvisioningStudio.tsx
+extracted/snapshot-2026-10-03/src/components/PuTTYLiveShellConsole.tsx
+extracted/snapshot-2026-10-03/src/components/RemoteManagementGateway.tsx
+extracted/snapshot-2026-10-03/src/components/ServerCommandPromptConsole.tsx
+extracted/snapshot-2026-10-03/src/components/ServerManagementModal.tsx
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkAppPackageCenter.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectAssistantModal.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectOverseerEngine.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectureAuditor.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkCertificateAnalyzer.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkClusterDeployerWizard.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkContainerK8sHub.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkDocReference.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkExecutiveAuditReport.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkFleetDiscoveryProvisioner.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkManagementNodesHub.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkNodeConfigModal.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkNodeSpotlightModal.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkPortInspectorModal.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkPortsDiagram.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkSchematicBlueprintDiagram.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkSystemDebugModal.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkVisualArchitectureDiagram.tsx
+extracted/snapshot-2026-10-03/src/components/SplunkWebModal.tsx
+extracted/snapshot-2026-10-03/src/components/ToolValidationModal.tsx
+extracted/snapshot-2026-10-03/src/components/TopologyGraph.tsx
+extracted/snapshot-2026-10-03/src/components/VirtualServerWipeModal.tsx
+extracted/snapshot-2026-10-03/src/data/agentPackagesData.ts
+extracted/snapshot-2026-10-03/src/data/alertRulesData.ts
+extracted/snapshot-2026-10-03/src/data/architectureAuditData.ts
+extracted/snapshot-2026-10-03/src/data/certificateData.ts
+extracted/snapshot-2026-10-03/src/data/commercialLicense.ts
+extracted/snapshot-2026-10-03/src/data/componentsInfo.ts
+extracted/snapshot-2026-10-03/src/data/heartbeatData.ts
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts
+extracted/snapshot-2026-10-03/src/data/logAnalysisEngine.ts
+extracted/snapshot-2026-10-03/src/data/managementNodesData.ts
+extracted/snapshot-2026-10-03/src/data/offlineAiConsultant.ts
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts
+extracted/snapshot-2026-10-03/src/data/splunkAppFiles.ts
+extracted/snapshot-2026-10-03/src/data/splunkArchitectureDocs.ts
+extracted/snapshot-2026-10-03/src/data/splunkDeployerData.ts
+extracted/snapshot-2026-10-03/src/data/splunkDockerK8sData.ts
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts
+extracted/snapshot-2026-10-03/src/data/splunkTarGzBase64.ts
+extracted/snapshot-2026-10-03/src/data/visualTopologyData.ts
+extracted/snapshot-2026-10-03/src/index.css
+extracted/snapshot-2026-10-03/src/main.tsx
+extracted/snapshot-2026-10-03/src/server/splunkWebHtml.ts
+extracted/snapshot-2026-10-03/src/types.ts
+extracted/snapshot-2026-10-03/src/utils/splunkAuditEngine.ts
+extracted/snapshot-2026-10-03/src/utils/splunkConfigParser.ts
+extracted/snapshot-2026-10-03/src/utils/splunkPathResolver.ts
+extracted/snapshot-2026-10-03/tsconfig.json
+extracted/snapshot-2026-10-03/vite.config.ts
+
+## Package manifests
+extracted/snapshot-2026-10-03/package.json
+
+## Potential simulation/default-secret markers
+extracted/snapshot-2026-10-03/server/securityEngine.ts:425:    id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+extracted/snapshot-2026-10-03/REAL-OFFLINE-CONTROL-PLANE.md:3:This branch keeps the existing Dr-Splunk UI/navigation/components and replaces selected simulated execution paths with real, verifiable host operations.
+extracted/snapshot-2026-10-03/REAL-OFFLINE-CONTROL-PLANE.md:26:## Deliberate non-simulation rule
+extracted/snapshot-2026-10-03/REAL-OFFLINE-CONTROL-PLANE.md:28:A missing Splunk binary, missing package/image, failed SSH connection, failed Kubernetes rollout, or failed command is reported as a failure. The backend no longer reports a successful "sandbox" action for those cases.
+extracted/snapshot-2026-10-03/server.ts:232:    const entryId = 'cmd-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+extracted/snapshot-2026-10-03/server.ts:1293:      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+extracted/snapshot-2026-10-03/server.ts:1695:      'server.conf': `# server.conf — Splunk Server & Clustering Engine\n[general]\nserverName = hf01.corp.net\npass4SymmKey = changeme\n\n[sslConfig]\nsslVersionsToSupport = ssl3, tls1.0\nallowSslCompression = true\nallowSslRenegotiation = true\n\n[diskUsage]\nminFreeSpaceMB = 1000\n\n[license]\nmanager_uri = https://10.20.30.40:8089\n\n[clustering]\nmode = forwarder\n`,
+extracted/snapshot-2026-10-03/server.ts:1717:      return res.status(404).json({ success:false, sandboxed:false, targetDir:splunkHome, errors:[], error:'Splunk binary not found.' });
+extracted/snapshot-2026-10-03/server.ts:1734:        sandboxed: false,
+extracted/snapshot-2026-10-03/server.ts:1867:        success:false, sandboxed:false, targetDir:splunkHome,
+extracted/snapshot-2026-10-03/server.ts:1877:        sandboxed: false,
+extracted/snapshot-2026-10-03/server.ts:2007:      credentials: { username: 'admin', password: 'changeme' }
+extracted/snapshot-2026-10-03/server.ts:2290:    const { webPort = 8001, restPort = 8090, tcpPort = 9998, password = 'changeme' } = req.body;
+extracted/snapshot-2026-10-03/server.ts:2347:pass4SymmKey = changeme-passkey
+extracted/snapshot-2026-10-03/server.ts:2780:    const { ports = { web: 8001, rest: 8090, splunkTcp: 9998 }, password = 'changeme' } = req.body;
+extracted/snapshot-2026-10-03/server.ts:3025:    const serverConf = `[general]\nserverName = splunk-parallel-staging\nmgmtHostPort = 127.0.0.1:${ports.rest}\npass4SymmKey = changeme-parallel-key\nactive_group = Free\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${ports.rest}\n\n[kvstore]\nport = ${ports.kvstore}\n`;
+extracted/snapshot-2026-10-03/server.ts:3083:    log.push(`[LOGIN URL] http://<SERVER-IP>:${ports.web}/en-US/account/login (Username: admin | Password: changeme)`);
+extracted/snapshot-2026-10-03/server.ts:3092:      credentials: { username: 'admin', password: 'changeme' },
+extracted/snapshot-2026-10-03/server.ts:3481:        if (/pass4SymmKey\s*=\s*(changeme|default)/i.test(sContent)) {
+extracted/snapshot-2026-10-03/server.ts:3486:            titleFa: 'استفاده از کلید احراز هویت پیش‌فرض کارخانه‌ای (pass4SymmKey = changeme)',
+extracted/snapshot-2026-10-03/server.ts:3487:            titleEn: 'Factory Default Shared Secret (pass4SymmKey = changeme)',
+extracted/snapshot-2026-10-03/server.ts:3490:            descriptionFa: 'کلید اشتراکی میان نودهای کلاستر برابر با مقدار پیش‌فرض changeme قرار دارد.',
+extracted/snapshot-2026-10-03/server.ts:3491:            descriptionEn: 'Cluster authentication secret is set to default factory string changeme in server.conf.',
+extracted/snapshot-2026-10-03/server.ts:3543:      adminPassword = 'changeme'
+extracted/snapshot-2026-10-03/server.ts:3629:      const serverConf = `[general]\nserverName = splunk-parallel-staging-01\nmgmtHostPort = 127.0.0.1:${restPort}\npass4SymmKey = changeme-parallel-key\nactive_group = Enterprise\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${restPort}\n\n[kvstore]\nport = ${kvPort}\n`;
+extracted/snapshot-2026-10-03/server.ts:3795:      commandToRun = `mkdir -p "${targetDir}/etc/system/local" && echo -e "[user_info]\\nUSERNAME = admin\\nPASSWORD = changeme" > "${targetDir}/etc/system/local/user-seed.conf" && chmod 600 "${targetDir}/etc/system/local/user-seed.conf" && echo "[SUCCESS] user-seed.conf initialized with admin credentials"`;
+extracted/snapshot-2026-10-03/server.ts:3938:      latencyMs: Math.floor(Math.random() * 8) + 4,
+extracted/snapshot-2026-10-03/server.ts:3983:        latencyMs: Math.floor(Math.random() * 10) + 3,
+extracted/snapshot-2026-10-03/server.ts:4030:    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password = 'changeme' } = req.body;
+extracted/snapshot-2026-10-03/server.ts:4817:      // 3. If Docker sandbox containers are selected
+extracted/snapshot-2026-10-03/server.ts:4820:        await runCommand('docker stop splunk_test splunk_sandbox splunk_virtual 2>/dev/null || true');
+extracted/snapshot-2026-10-03/server.ts:4821:        await runCommand('docker rm -f splunk_test splunk_sandbox splunk_virtual 2>/dev/null || true');
+extracted/snapshot-2026-10-03/scripts/reset-splunk-password.sh:11:NEW_PASSWORD="${3:-changeme}"
+extracted/snapshot-2026-10-03/scripts/install-real-parallel-splunk.sh:66:PASSWORD = changeme
+extracted/snapshot-2026-10-03/scripts/install-real-parallel-splunk.sh:86:pass4SymmKey = changeme-parallel-passkey
+extracted/snapshot-2026-10-03/scripts/install-real-parallel-splunk.sh:137:    echo "  Username: admin | Password: changeme"
+extracted/snapshot-2026-10-03/scripts/fix-parallel-web.sh:64:pass4SymmKey = changeme-parallel-passkey
+extracted/snapshot-2026-10-03/scripts/fix-parallel-web.sh:77:PASSWORD = changeme
+extracted/snapshot-2026-10-03/scripts/fix-parallel-web.sh:170:echo "  Username: admin | Password: changeme"
+extracted/snapshot-2026-10-03/scripts/deploy-splunk-k8s-offline.sh:11:ADMIN_PASSWORD="${4:-changeme}"
+extracted/snapshot-2026-10-03/scripts/deploy-splunk-k8s-offline.sh:49:pass4SymmKey = changeme-k8s-passkey
+extracted/snapshot-2026-10-03/scripts/deploy-splunk-k8s-offline.sh:346:pass4SymmKey = changeme-offline-passkey
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx:106:  const [adminPassword, setAdminPassword] = useState('changeme');
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx:403:        const simulatedLogs = [
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx:419:          outputLogs: simulatedLogs,
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx:468:              'server.conf': `[general]\nserverName = splunk-parallel-node\nmgmtHostPort = 127.0.0.1:${targetRestPort}\npass4SymmKey = changeme-pass\nactive_group = Free\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${targetRestPort}\n\n[kvstore]\nport = ${targetKvPort}\n`,
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx:574:        const simulatedLogs = [
+extracted/snapshot-2026-10-03/src/components/SplunkAutonomousAIAgent.tsx:593:          outputLogs: simulatedLogs,
+extracted/snapshot-2026-10-03/src/components/SplunkVisualArchitectureDiagram.tsx:56:  // Active Nodes State (allows dynamic simulation of provisioning ghost nodes)
+extracted/snapshot-2026-10-03/src/components/SplunkVisualArchitectureDiagram.tsx:70:  // Handler to simulate provisioning a ghost recommended node into an active online node
+extracted/snapshot-2026-10-03/src/components/RemoteManagementGateway.tsx:85:        result = `splunkd is running (PID ${Math.floor(10000 + Math.random() * 20000)}).\nsplunk helpers are running.\nMemory: 842MB RSS | CPU: 1.4% | mTLS Telemetry: Active.`;
+extracted/snapshot-2026-10-03/src/components/RemoteManagementGateway.tsx:91:        result = `Stopping splunkd...\nShutting down. [OK]\nStarting splunkd...\nChecking prerequisites...\nChecking conf files for problems...\nValidating databases...\nAll checks passed.\nsplunkd started successfully (PID ${Math.floor(20000 + Math.random() * 10000)}).`;
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectureAuditor.tsx:64:  const [activeSubTab, setActiveSubTab] = useState<'interactive_topology' | 'sva_audit' | 'resource_sizing' | 'future_risks' | 'growth_simulator' | 'executive_report'>('interactive_topology');
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectureAuditor.tsx:225:            onClick={() => setActiveSubTab('growth_simulator')}
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectureAuditor.tsx:227:              activeSubTab === 'growth_simulator'
+extracted/snapshot-2026-10-03/src/components/SplunkArchitectureAuditor.tsx:738:      {activeSubTab === 'growth_simulator' && (
+extracted/snapshot-2026-10-03/src/components/AppModulesManagerModal.tsx:217:    const id = `custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+extracted/snapshot-2026-10-03/src/components/ParallelSplunkProvisioningStudio.tsx:553:      containerId: Math.random().toString(16).substring(2, 14),
+extracted/snapshot-2026-10-03/src/components/HeartbeatMonitoringMatrix.tsx:287:          ...currentStepConfig.simulatedOutput
+extracted/snapshot-2026-10-03/src/components/SplunkAppPackageCenter.tsx:336:            if (content.includes('pass4SymmKey = changeme') || content.includes('pass4SymmKey=changeme')) {
+extracted/snapshot-2026-10-03/src/components/SplunkAppPackageCenter.tsx:341:                title: isFa ? 'رمز پیش‌فرض خطرناک کلاستر (pass4SymmKey = changeme)' : 'Insecure Factory Cluster Secret',
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:47:      commandText = `bash /scripts/reset-splunk-password.sh ${targetDir} admin changeme`;
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:92:            newPassword: 'changeme'
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:101:            `User: admin | Password: changeme`,
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:147:      console.log('Failing over to interactive local sandbox log pipeline...', err);
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:150:    // Fallback sandbox simulation if backend not available or call fails
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:166:      logs.push('[3/3] Admin credentials updated: user=admin pass=changeme');
+extracted/snapshot-2026-10-03/src/components/ServiceControlModal.tsx:292:              <span>{isFa ? 'ریست پسورد به admin/changeme' : 'Reset Password'}</span>
+extracted/snapshot-2026-10-03/src/components/SplunkClusterDeployerWizard.tsx:181:      ip: `192.168.10.${50 + roleCount + Math.floor(Math.random() * 20)}`,
+extracted/snapshot-2026-10-03/src/components/SplunkClusterDeployerWizard.tsx:182:      lomIp: `192.168.100.${50 + roleCount + Math.floor(Math.random() * 20)}`,
+extracted/snapshot-2026-10-03/src/components/SplunkCertificateAnalyzer.tsx:42:  const [simulatedRenewalSuccess, setSimulatedRenewalSuccess] = useState<string | null>(null);
+extracted/snapshot-2026-10-03/src/components/SplunkCertificateAnalyzer.tsx:235:      {simulatedRenewalSuccess && (
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx:430:          password: 'changeme'
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx:583:pass4SymmKey = changeme-parallel-key
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx:593:PASSWORD = changeme
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx:612:echo "[CREDENTIALS] Username: admin | Password: changeme"`;
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx:809:                    ? 'به دلیل تداخل‌های متعدد در outputs.conf، عدم رمزنگاری TLS، کلید پیش‌فرض changeme و ارجاع‌های شکسته، اصلاح دستی ریسک قطع لاگ‌های زنده SOC را دارد. سیستم پیشنهاد می‌دهد یک نسخه موازی از اسپلنک روی همین سرور با مشخصات یکسان و پورت‌های موازی بالا آورده شده، کانفیگ‌های پاک‌سازی‌شده به آن منتقل و سپس ترافیک بدون قطعی سوئیچ شود.'
+extracted/snapshot-2026-10-03/src/components/HealthAuditDashboard.tsx:1895:                      <span>{isFa ? 'رمز عبور:' : 'Password:'} <strong className="text-cyan-300 font-mono">changeme</strong></span>
+extracted/snapshot-2026-10-03/src/components/AlertNotificationCenter.tsx:79:        latencyMs: Math.floor(Math.random() * 200) + 80
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:277:      const mockIssues: DiagnosticIssue[] = isReal ? [
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:295:          titleFa: 'استفاده از کلید احراز هویت پیش‌فرض کارخانه‌ای (pass4SymmKey = changeme)',
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:296:          titleEn: 'Factory Default Shared Secret (pass4SymmKey = changeme)',
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:299:          descriptionFa: 'کلید اشتراکی میان نودهای کلاستر و سرچ‌هدها برابر با مقدار پیش‌فرض changeme قرار دارد و اتصال هر نود نامعتبر به کلاستر ممکن است.',
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:300:          descriptionEn: 'Cluster authentication secret is set to default factory string changeme in server.conf.',
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:394:      const processedIssues = mockIssues.map(issue => {
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:440:          adminPassword: 'changeme'
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:468:      // Fallback simulation with realistic step progression
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:483:            `[${new Date().toLocaleTimeString()}] [3/6] ایجاد فایل user-seed.conf با admin/changeme و پاکسازی هش‌های قدیمی etc/passwd...`,
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:538:pass4SymmKey = changeme-passkey
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:567:bash /opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh 8001 8090 9998 changeme
+extracted/snapshot-2026-10-03/src/components/SplunkDiagnosticAndAIAutoHealer.tsx:1240:                <span className="font-mono font-bold text-cyan-300 mt-1 block">changeme</span>
+extracted/snapshot-2026-10-03/src/components/SplunkContainerK8sHub.tsx:704:  --from-literal=password="SplunkEnterprisePass123!" \\
+extracted/snapshot-2026-10-03/src/components/BentoGridConsole.tsx:76:  // Jitter EPS slightly to simulate live ingestion
+extracted/snapshot-2026-10-03/src/components/BentoGridConsole.tsx:79:      setPulseCount(16400 + Math.floor(Math.random() * 180));
+extracted/snapshot-2026-10-03/src/components/SplunkSystemDebugModal.tsx:333:                  { id: 'crit-server-pass4symmkey', title: 'Rule 2: server.conf — pass4SymmKey Authentication Secret', file: 'server.conf', stanza: '[general]', expect: 'pass4SymmKey != changeme' },
+extracted/snapshot-2026-10-03/src/components/BackendOperationInspectorModal.tsx:164:          latencyMs: Math.floor(Math.random() * 8) + 8,
+extracted/snapshot-2026-10-03/src/components/ToolValidationModal.tsx:89:      // Fallback client-side simulated validation if offline
+extracted/snapshot-2026-10-03/src/components/ToolValidationModal.tsx:140:      const simulated: Record<string, ToolValidationResult> = {};
+extracted/snapshot-2026-10-03/src/components/ToolValidationModal.tsx:142:        simulated[m.id] = {
+extracted/snapshot-2026-10-03/src/components/ToolValidationModal.tsx:146:          latencyMs: Math.floor(Math.random() * 10) + 5,
+extracted/snapshot-2026-10-03/src/components/ToolValidationModal.tsx:160:      setAllResults(simulated);
+extracted/snapshot-2026-10-03/src/components/IssueDetailModal.tsx:608:                  {isFa ? 'اعمال روی محیط سرور مجازی داکر و سندباکس ابری' : 'Apply to docker virtual server sandbox environment'}
+extracted/snapshot-2026-10-03/src/App.tsx:849:      id: `op-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+extracted/snapshot-2026-10-03/src/App.tsx:1200:        addLog(isFa ? "🛠️ راه‌اندازی مجدد و ریبوت کانتینر در شبکه ابر ایزوله شده..." : "🛠️ Performing clean reboot of virtual container inside sandbox network...");
+extracted/snapshot-2026-10-03/src/App.tsx:1292:      addLog(isFa ? "📂 ایجاد پوشه‌های ایزوله برای ذخیره‌سازی ایندکس‌ها (/var/lib/splunk_virtual)..." : "📂 Creating sandboxed volume directories at /var/lib/splunk_virtual...");
+extracted/snapshot-2026-10-03/src/App.tsx:1591:        console.log('Running in standalone simulated sandbox mode.', err);
+extracted/snapshot-2026-10-03/src/utils/splunkAuditEngine.ts:77:    if (/pass4SymmKey\s*=\s*(changeme|default)/i.test(newText)) {
+extracted/snapshot-2026-10-03/src/utils/splunkAuditEngine.ts:78:      newText = newText.replace(/pass4SymmKey\s*=\s*(changeme|default)/gi, 'pass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a');
+extracted/snapshot-2026-10-03/src/utils/splunkAuditEngine.ts:332:        if (['changeme', 'default', '123456', 'splunk', 'password'].includes(val)) {
+extracted/snapshot-2026-10-03/src/server/splunkWebHtml.ts:565:        const randCount = Math.floor(Math.random() * 40) + 15;
+extracted/snapshot-2026-10-03/src/server/splunkWebHtml.ts:567:        timeEl.innerText = '(' + (Math.random() * 0.05 + 0.015).toFixed(3) + ' seconds)';
+extracted/snapshot-2026-10-03/src/server/splunkWebHtml.ts:580:                09-29-2026 \${timeNow} \${q.includes('error') ? '<span class=\"text-rose-400 font-bold\">ERROR</span>' : '<span class=\"text-cyan-400 font-bold\">INFO</span>'} MetricsProcessor - name=index_thruput, rate=\${(Math.random() * 5 + 2).toFixed(2)} MB/s, cpu_usage=0.6%
+extracted/snapshot-2026-10-03/src/types.ts:1059:  simulatedAddedNodes: string[];
+extracted/snapshot-2026-10-03/src/data/splunkDockerK8sData.ts:50:    architectureSummaryEn: 'Ideal for test/dev, sandbox PoC, and dedicated lightweight logging nodes.',
+extracted/snapshot-2026-10-03/src/data/splunkDockerK8sData.ts:208:    architectureSummaryEn: 'Production-like sandbox for disaster recovery drills, zero-downtime rolling restarts, and SmartStore testing.',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:84:pass4SymmKey = changeme
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:285:        diffSnippet: '# Executing via Splunk CLI command:\n# $SPLUNK_HOME/bin/splunk enable listen 9997 -auth admin:changeme\n# $SPLUNK_HOME/bin/splunk set ssl-forwarding on',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:297:    titleFa: 'استفاده از کلید هم‌سانی پیش‌فرض (pass4SymmKey = changeme)',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:298:    titleEn: 'Default Cluster Secret in Use (pass4SymmKey = changeme)',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:301:    culpritCode: 'pass4SymmKey = changeme',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:302:    whyFlaggedFa: 'کلید pass4SymmKey مقدار پیش‌فرض "changeme" دارد. این کلید محرمانه برای تصدیق هویت میان نودهای کلاستر و ارتباطات درونی اسپلانک به کار می‌رود.',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:303:    whyFlaggedEn: 'pass4SymmKey contains the well-known default string "changeme". This pre-shared key authenticates nodes in the cluster.',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:310:    splQuery: `index=_internal sourcetype=splunkd (component=ServerConfig OR component=ClusterMaster OR component=SHClusterMgr) ("pass4SymmKey" OR "changeme" OR "default secret" OR "authentication failed")
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:313:    splExplanationFa: 'این کوئری خطاهای عدم تطابق کلید احراز هویت داخلی یا هشدارهای امنیتی مربوط به وجود کلید پیش‌فرض changeme را در لاگ‌های سرور ردگیری می‌کند.',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:322:        descriptionFa: 'جایگزینی changeme با رشته رمزنگاری شده قوی با آنتروپی بالا (اسپلانک پس از استارت خودکار آن را هش می‌کند).',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:326:        diffSnippet: '- pass4SymmKey = changeme\n+ pass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:338:        diffSnippet: '- pass4SymmKey = changeme\n+ pass4SymmKey = SplunkClusterSecret2026_x89!',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:350:        diffSnippet: '- pass4SymmKey = changeme\n+ pass4SymmKey = a8b7c6d5e4f3a2b10987654321fedcba0123456789abcdef0123456789abcdef',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:362:        diffSnippet: '# Executing via bash:\n# sed -i \'s/pass4SymmKey = changeme/pass4SymmKey = SecureHexPass_$(openssl rand -hex 12)/\' server.conf',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:595:        cliCommand: 'curl -s -k -u admin:changeme https://localhost:8089/services/admin/transforms-reload/_reload -X POST'
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:748:        diffSnippet: '# Executing via Splunk CLI:\n# $SPLUNK_HOME/bin/splunk add index os_win -auth admin:changeme',
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:750:        cliCommand: '$SPLUNK_HOME/bin/splunk add index os_win -auth admin:changeme || true'
+extracted/snapshot-2026-10-03/src/data/initialConfigs.ts:995:        cliCommand: '$SPLUNK_HOME/bin/splunk http-event-collector update -enable-ssl 1 -auth admin:changeme'
+extracted/snapshot-2026-10-03/src/data/splunkAppFiles.ts:164:search = index=_internal sourcetype=splunkd "pass4SymmKey" "changeme" | stats count by host
+extracted/snapshot-2026-10-03/src/data/splunkAppFiles.ts:168:description = Flags clusters using the default factory encryption key 'changeme'.
+extracted/snapshot-2026-10-03/src/data/splunkAppFiles.ts:249:            if "pass4SymmKey = changeme" in content:
+extracted/snapshot-2026-10-03/src/data/splunkAppFiles.ts:254:                    "message": "Default insecure pass4SymmKey 'changeme' detected."
+extracted/snapshot-2026-10-03/src/data/commercialLicense.ts:132:  const randomHex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
+extracted/snapshot-2026-10-03/src/data/commercialLicense.ts:137:    certificateId: `CERT-SPLK-${now.getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
+extracted/snapshot-2026-10-03/src/data/offlineAiConsultant.ts:82:      codeSnippet: `# Docker Run Air-Gapped Standalone Instance:\ndocker run -d --name splunk-staging \\\n  -p ${webPort}:8000 -p ${restPort}:8089 -p ${tcpPort}:9997 \\\n  -e "SPLUNK_START_ARGS=--accept-license" \\\n  -e "SPLUNK_PASSWORD=changeme" \\\n  -v /var/lib/splunk_container_data:/opt/splunk/var \\\n  splunk/splunk:latest`,
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:164:    defaultValue: 'changeme (پیش‌فرض ناامن)',
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:169:    securityImpactFa: 'باقی ماندن کلید پیش‌فرض "changeme" به هر فردی در شبکه اجازه می‌دهد خود را به عنوان عضو کلاستر معرفی کند و به داده‌ها دسترسی یابد.',
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:170:    securityImpactEn: 'Default changeme key enables unauthorized nodes to join the cluster and siphon/alter data.',
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:459:  if (server.includes('pass4SymmKey = changeme')) {
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:465:      currentValue: 'changeme',
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:470:      recommendationFa: 'طبق سند Splunk Hardening Checklist، کلید pass4SymmKey باید فوراً از مقدار changeme به یک کلید امن با آنتروپی بالا تغییر کند.',
+extracted/snapshot-2026-10-03/src/data/splunkDocs.ts:472:      whyTroubleFa: 'کلید changeme در تمام راهنماهای هک و اسکریپت‌های اسکن شبکه شناخته شده است. هر گره غیرمجاز می‌تواند خود را به عنوان کامپوننت داخلی جا بزند و ترافیک را مخدوش یا افشا کند.',
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:10:  simulatedOutput: string[];
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:69:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:85:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:102:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:118:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:133:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:182:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:199:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:216:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:232:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:248:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:299:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:316:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:333:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:350:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:368:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:418:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:435:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:452:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:469:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:486:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:536:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:552:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:568:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:584:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:600:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:648:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:663:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:679:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:694:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:707:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:753:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:769:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:784:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:799:        simulatedOutput: [
+extracted/snapshot-2026-10-03/src/data/roleRemediationWorkflows.ts:813:        simulatedOutput: [

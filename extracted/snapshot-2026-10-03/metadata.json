@@ -1,0 +1,6 @@
+{
+  "name": "Cyber Attacks Threat Monitoring Dashboard",
+  "description": "Enterprise SOC Threat Intelligence and Cyber Attack Monitoring Dashboard with real-time global attack visualization, incident triage, bandwidth analytics, vulnerability defense, and active mitigation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
