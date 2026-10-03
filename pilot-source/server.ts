@@ -2011,7 +2011,7 @@ async function startServer() {
       lastEventTime: parallelLastEventTime,
       splunkHome: targetDir,
       officialWebUrl: `http://localhost:${parallelActivePorts.web || 8001}/en-US/account/login`,
-      credentials: { username: 'admin', password: 'changeme' }
+      credentialsConfigured: fs.existsSync(path.join(targetDir, 'etc/system/local/user-seed.conf'))
     });
   });
 
@@ -3152,7 +3152,7 @@ PASSWORD = ${password}
 
   // API: Download Standalone RHEL Studio & Offline AI Doctor Package (.tar.gz)
   app.get('/api/download/rhel-package', (req, res) => {
-    const pkgPath1 = path.join(process.cwd(), 'public', 'splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
+    const pkgPath1 = path.join(process.cwd(), 'public', 'splunk_cluster_doctor_rhel_v1.4.0.tar.gz');
     const pkgPath2 = path.join(process.cwd(), 'public', 'splunk_doctor_standalone_ui.tar.gz');
 
     let targetFile = '';
@@ -3170,7 +3170,7 @@ PASSWORD = ${password}
 
     if (targetFile && fs.existsSync(targetFile)) {
       res.setHeader('Content-Type', 'application/gzip');
-      res.setHeader('Content-Disposition', 'attachment; filename="splunk_cluster_doctor_rhel_v1.3.0.tar.gz"');
+      res.setHeader('Content-Disposition', 'attachment; filename="splunk_cluster_doctor_rhel_v1.4.0.tar.gz"');
       const stream = fs.createReadStream(targetFile);
       return stream.pipe(res);
     }
@@ -3180,7 +3180,7 @@ PASSWORD = ${password}
 
   // API: Get Package Metadata
   app.get('/api/download/package-info', (req, res) => {
-    const pkgPath = path.join(process.cwd(), 'public', 'splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
+    const pkgPath = path.join(process.cwd(), 'public', 'splunk_cluster_doctor_rhel_v1.4.0.tar.gz');
     let sizeMb = '1.7';
     if (fs.existsSync(pkgPath)) {
       try {
@@ -3190,10 +3190,10 @@ PASSWORD = ${password}
     }
 
     res.json({
-      version: '1.3.0',
+      version: '1.4.0',
       buildDate: new Date().toISOString().slice(0, 10),
       sizeMb: `${sizeMb} MB`,
-      filename: 'splunk_cluster_doctor_rhel_v1.3.0.tar.gz',
+      filename: 'splunk_cluster_doctor_rhel_v1.4.0.tar.gz',
       features: [
         'Standalone RHEL/CentOS Offline UI & Node Server',
         'Built-in Offline AI Auto-Healer & Rule Engine',
@@ -5025,7 +5025,7 @@ disabled = 0
   // API: Get latest RHEL package metadata
   app.get('/api/download/package-info', (req, res) => {
     const appRootDir = getAppProjectRoot();
-    const pkgPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
+    const pkgPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.4.0.tar.gz');
     const fallbackPath = path.join(appRootDir, 'public/splunk_doctor_standalone_ui.tar.gz');
     
     let target = fs.existsSync(pkgPath) ? pkgPath : fallbackPath;
@@ -5039,11 +5039,11 @@ disabled = 0
 
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({
-      version: '1.3.0',
+      version: '1.4.0',
       buildDate: modifiedAt,
       sizeBytes: size,
       sizeMb: (size / (1024 * 1024)).toFixed(2),
-      filename: 'splunk_cluster_doctor_rhel_v1.3.0.tar.gz',
+      filename: 'splunk_cluster_doctor_rhel_v1.4.0.tar.gz',
       features: [
         'Added: Master setup.sh & reinstall-and-run.sh (100% automated clean uninstall, chmod 755, and systemd install)',
         'Fixed: Splunk Enterprise authentication active_group=Enterprise and password hash reset',
@@ -5057,8 +5057,8 @@ disabled = 0
   // API: Download the latest RHEL standalone tar.gz package with cache-busting headers
   app.get('/api/download/rhel-package', (req, res) => {
     const appRootDir = getAppProjectRoot();
-    const primaryPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
-    const legacyPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.2.0.tar.gz');
+    const primaryPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.4.0.tar.gz');
+    const legacyPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.4.0.tar.gz');
     const fallbackPath = path.join(appRootDir, 'public/splunk_doctor_standalone_ui.tar.gz');
     
     let filePath = fs.existsSync(primaryPath) ? primaryPath : (fs.existsSync(legacyPath) ? legacyPath : fallbackPath);
@@ -5068,6 +5068,9 @@ disabled = 0
       try {
         const buildScript = getScriptPath('build-rhel-package.js');
         console.log(`[API] RHEL package not found at ${primaryPath}, running build-rhel-package.js from ${buildScript} (cwd: ${appRootDir})...`);
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(409).json({ error: 'RHEL package rebuild is a build-time operation and is disabled in the production offline controller.' });
+        }
         execSync(`node "${buildScript}"`, { cwd: appRootDir, stdio: 'inherit' });
         filePath = fs.existsSync(primaryPath) ? primaryPath : fallbackPath;
       } catch (err: any) {
@@ -5082,7 +5085,7 @@ disabled = 0
     res.setHeader('Expires', '0');
     res.setHeader('Surrogate-Control', 'no-store');
     res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', 'attachment; filename="splunk_cluster_doctor_rhel_v1.3.0.tar.gz"');
+    res.setHeader('Content-Disposition', 'attachment; filename="splunk_cluster_doctor_rhel_v1.4.0.tar.gz"');
 
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
@@ -5094,15 +5097,18 @@ disabled = 0
       const appRootDir = getAppProjectRoot();
       const buildScript = getScriptPath('build-rhel-package.js');
       console.log(`[API] User requested on-demand rebuild of RHEL package in ${appRootDir} using ${buildScript}...`);
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(409).json({ success: false, error: 'Package rebuild is disabled on the production offline controller.' });
+      }
       execSync('npm run build', { cwd: appRootDir, stdio: 'inherit' });
       execSync(`node "${buildScript}"`, { cwd: appRootDir, stdio: 'inherit' });
-      const pkgPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
+      const pkgPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.4.0.tar.gz');
       const fallbackPath = path.join(appRootDir, 'public/splunk_doctor_standalone_ui.tar.gz');
       const targetPath = fs.existsSync(pkgPath) ? pkgPath : fallbackPath;
       const stats = fs.statSync(targetPath);
       res.json({
         success: true,
-        version: '1.3.0',
+        version: '1.4.0',
         sizeBytes: stats.size,
         sizeMb: (stats.size / (1024 * 1024)).toFixed(2),
         message: 'Successfully rebuilt fresh RHEL standalone package v1.3.0!'
