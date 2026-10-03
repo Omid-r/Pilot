@@ -1916,45 +1916,40 @@ async function startServer() {
       lastEventTime: parallelLastEventTime,
       splunkHome: targetDir,
       officialWebUrl: `http://localhost:${parallelActivePorts.web || 8001}/en-US/account/login`,
-      credentials: { username: 'admin', password: 'changeme' }
+      credentialsConfigured: fs.existsSync(path.join(targetDir,'etc/system/local/user-seed.conf')) || fs.existsSync(path.join(targetDir,'etc/auth/passwd'))
     });
   });
 
   // API: Start Real Splunk Parallel Instance
   app.post('/api/parallel-cluster/start', async (req, res) => {
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) return res.status(403).json({success:false,error:'Root privileges are required.'});
     const targetDir = '/opt/splunk_parallel';
-    const binary = path.join(targetDir, 'bin/splunk');
+    const binary = path.join(targetDir,'bin/splunk');
     try {
-      if (fs.existsSync(binary)) {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binary}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1`);
-        return res.json({ success: true, output: cmdRes.stdout || cmdRes.stderr });
-      }
-      const scriptPath = getScriptPath('install-real-parallel-splunk.sh');
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const result = await runCommand(`bash "${scriptPath}" /opt/splunk "${targetDir}" ${parallelActivePorts.web} ${parallelActivePorts.rest} ${parallelActivePorts.splunkTcp} ${parallelActivePorts.kvstore}`);
-        return res.json({ success: true, output: result.stdout });
-      }
-      res.json({ success: true, message: 'Parallel Splunk initialized' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+      if (!fs.existsSync(binary)) return res.status(404).json({success:false,error:'Real Splunk binary not found at /opt/splunk_parallel/bin/splunk.'});
+      const r = await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binary}" start --accept-license --answer-yes --no-prompt --run-as-root`);
+      const status = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" status`,{cwd:targetDir,timeout:15000});
+      const textOut=(status.stdout||status.stderr||'').toString();
+      const running=/splunkd is running|splunkweb is running/i.test(textOut);
+      const success=r.code===0 && running;
+      res.status(success?200:500).json({success,output:r.stdout||r.stderr,exitCode:r.code,verification:textOut});
+    } catch(err:any){ res.status(500).json({success:false,error:err.message}); }
   });
 
   // API: Stop Real Splunk Parallel Instance
   app.post('/api/parallel-cluster/stop', async (req, res) => {
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) return res.status(403).json({success:false,error:'Root privileges are required.'});
     const targetDir = '/opt/splunk_parallel';
-    const binary = path.join(targetDir, 'bin/splunk');
+    const binary = path.join(targetDir,'bin/splunk');
+    if (!fs.existsSync(binary)) return res.status(404).json({success:false,error:'Real Splunk binary not found at /opt/splunk_parallel/bin/splunk.'});
     try {
-      if (fs.existsSync(binary)) {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" stop 2>&1 || true`);
-        return res.json({ success: true, output: cmdRes.stdout });
-      }
-      await runCommand(`fuser -k ${parallelActivePorts.web}/tcp ${parallelActivePorts.rest}/tcp 2>/dev/null || true`);
-      res.json({ success: true, message: 'Parallel processes stopped' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+      const r = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" stop`,{cwd:targetDir,timeout:30000});
+      const status = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" status`,{cwd:targetDir,timeout:15000});
+      const textOut=(status.stdout||status.stderr||'').toString();
+      const stopped=/splunkd is not running|splunkweb is not running|splunkd is not running./i.test(textOut);
+      const success=r.code===0 && stopped;
+      res.status(success?200:500).json({success,output:r.stdout||r.stderr,exitCode:r.code,verification:textOut});
+    } catch(err:any){ res.status(500).json({success:false,error:err.message}); }
   });
 
   // API: Deep Diagnostics Scanner for Splunk Parallel & Container Environment
