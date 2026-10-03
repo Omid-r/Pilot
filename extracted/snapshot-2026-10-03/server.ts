@@ -3505,7 +3505,7 @@ async function startServer() {
         const result = await runCommand(`python3 "${scriptPath}" connections`);
         if (result.code === 0 && result.stdout.trim().startsWith('[')) return res.json(JSON.parse(result.stdout));
       }
-      const raw = await runCommand('ss',['-H','-tanp'],{timeout:10000});
+      const raw = await runCommand('ss -H -tanp',{timeout:10000});
       if (raw.code !== 0) return res.status(500).json({success:false,error:raw.stderr||raw.stdout});
       const rows = raw.stdout.split('\n').filter(Boolean).map(line=>{
         const p=line.trim().split(/\s+/);
