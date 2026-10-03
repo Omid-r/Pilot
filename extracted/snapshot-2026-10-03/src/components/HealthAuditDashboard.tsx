@@ -580,7 +580,7 @@ cat << 'EOF' > "$PARALLEL_DIR/etc/system/local/server.conf"
 [general]
 serverName = splunk-parallel-staging
 mgmtHostPort = 127.0.0.1:8090
-pass4SymmKey = changeme-parallel-key
+pass4SymmKey = <GENERATE_REAL_SHARED_SECRET>
 active_group = Free
 
 [kvstore]
@@ -590,7 +590,7 @@ EOF
 cat << 'EOF' > "$PARALLEL_DIR/etc/system/local/user-seed.conf"
 [user_info]
 USERNAME = admin
-PASSWORD = changeme
+PASSWORD = <SET_REAL_ADMIN_PASSWORD>
 EOF
 
 cat << 'EOF' > "$PARALLEL_DIR/etc/system/local/inputs.conf"
