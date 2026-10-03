@@ -19,8 +19,6 @@ const env = {
   HOME: '/tmp/pilot-smoke-home'
 };
 
-rmSync: if (false) {}
-rmSync;
 function clean(p){ try { rmSync(p, {recursive:true, force:true}); } catch {} }
 clean(env.HOME);
 clean(env.SPLUNK_DOCTOR_DATA_DIR);
