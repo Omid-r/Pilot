@@ -36,6 +36,62 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ env.APP_ROOT }}
         run: npm install --no-audit --no-fund --no-package-lock
+      - name: Stage all offline RHEL user-space prerequisites
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          mkdir -p offline-prereqs/rhel8/x86_64/rpms offline-prereqs/rhel8/x86_64/bin
+          mkdir -p offline-prereqs/rhel9/x86_64/rpms offline-prereqs/rhel9/x86_64/bin
+
+          PACKAGES="curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman"
+
+          docker run --rm \
+            -v "$PWD/offline-prereqs/rhel8/x86_64/rpms:/out" \
+            rockylinux:8 bash -lc "
+              set -e
+              dnf -y install dnf-plugins-core
+              dnf download --resolve --alldeps --destdir /out $PACKAGES
+            "
+
+          docker run --rm \
+            -v "$PWD/offline-prereqs/rhel9/x86_64/rpms:/out" \
+            rockylinux:9 bash -lc "
+              set -e
+              dnf -y install dnf-plugins-core
+              dnf download --resolve --alldeps --destdir /out $PACKAGES
+            "
+
+          KUBECTL_VERSION="v1.37.1"
+          KUBECTL_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          KUBECTL_SHA_URL="${KUBECTL_URL}.sha256"
+
+          for rhel in 8 9; do
+            curl -fL "${KUBECTL_URL}" -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+            curl -fL "${KUBECTL_SHA_URL}" -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256"
+            (cd "offline-prereqs/rhel${rhel}/x86_64/bin" && sha256sum -c kubectl.sha256)
+            chmod 0755 "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+          done
+
+          cat > offline-prereqs/README.md <<'EOF'
+          # Offline RHEL prerequisite media
+
+          This directory is populated during the release build with all user-space RPM dependencies required by Splunk Cluster Doctor on RHEL-compatible 8 and 9 x86_64 systems.
+
+          Included command families:
+          - networking and sockets: iproute, iputils, nmap-ncat, lsof
+          - shell/file tools: bash, coreutils, findutils, gawk, sed, grep, tar, gzip, util-linux
+          - security/SELinux: openssl, policycoreutils, policycoreutils-python-utils, ca-certificates
+          - remote/admin: openssh-clients, rsync, curl
+          - firewall: firewalld, iptables
+          - scripting: python3
+          - container runtime: Podman and its resolved RPM dependencies
+          - Kubernetes client: kubectl v1.37.1
+
+          Runtime installation is local-only: dnf is invoked with --disablerepo='*'.
+          RHEL kernel/systemd remain host OS components and are not replaced by the application.
+          Splunk Enterprise itself is not redistributed; its licensed installer/package remains operator-supplied.
+          EOF
+
       - name: TypeScript check
         working-directory: ${{ env.APP_ROOT }}
         run: npm run lint
@@ -51,12 +107,14 @@ jobs:
           set -euo pipefail
           test -f dist/index.html
           test -f dist/server.cjs
+          test -d offline-prereqs/rhel8/x86_64/rpms
+          test -d offline-prereqs/rhel9/x86_64/rpms
       - name: Build final self-contained RHEL tarball
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
           mkdir -p release/splunk-doctor
-          cp -a dist scripts package.json README.md metadata.json release/splunk-doctor/
+          cp -a dist scripts package.json README.md metadata.json offline-prereqs release/splunk-doctor/
           cp -a node_modules release/splunk-doctor/ 2>/dev/null || true
           mkdir -p release/splunk-doctor/node-runtime/bin
           cp "$(command -v node)" release/splunk-doctor/node-runtime/bin/node
@@ -71,7 +129,34 @@ jobs:
           set -euo pipefail
           sha256sum -c release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
           tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -E 'splunk-doctor/(dist/server.cjs|dist/index.html|scripts/setup.sh|node-runtime/bin/node)$'
-          if tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -Eq '(security-db\.json|master-signing\.key)$'; then exit 1; fi
+          if tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -Eq '(security-db\.json|master-signing\.key)      - name: Upload offline RHEL release
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
+          if-no-files-found: error
+; then exit 1; fi
+          test "$(tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -c '/offline-prereqs/rhel8/x86_64/rpms/.*\.rpm      - name: Upload offline RHEL release
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
+          if-no-files-found: error
+)" -gt 0
+          test "$(tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -c '/offline-prereqs/rhel9/x86_64/rpms/.*\.rpm      - name: Upload offline RHEL release
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
+          if-no-files-found: error
+)" -gt 0
+          tar -xOzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl.sha256 | sha256sum -c
       - name: Upload offline RHEL release
         uses: actions/upload-artifact@v6
         with:
