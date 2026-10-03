@@ -4112,68 +4112,6 @@ PASSWORD = ${password}
     return res.json(flows);
   });
 
-  // Fall through
-    }
-
-    // Default flow sample matching conntrack structure
-    const flows = [
-      {
-        dir: 'OUT',
-        proto: 'TCP',
-        origSrc: '10.18.23.56',
-        origDst: '10.18.32.74',
-        origSport: '48220',
-        origDport: '9997',
-        replySrc: '10.18.32.74',
-        replyDst: '10.18.23.56',
-        replySport: '9997',
-        replyDport: '48220',
-        state: 'ESTABLISHED [ASSURED]'
-      },
-      {
-        dir: 'OUT',
-        proto: 'TCP',
-        origSrc: '10.18.23.56',
-        origDst: '10.18.32.74',
-        origSport: '51204',
-        origDport: '8089',
-        replySrc: '10.18.32.74',
-        replyDst: '10.18.23.56',
-        replySport: '8089',
-        replyDport: '51204',
-        state: 'ESTABLISHED'
-      },
-      {
-        dir: 'IN',
-        proto: 'TCP',
-        origSrc: '10.18.20.10',
-        origDst: '10.18.23.56',
-        origSport: '58120',
-        origDport: '8088',
-        replySrc: '10.18.23.56',
-        replyDst: '10.18.20.10',
-        replySport: '8088',
-        replyDport: '58120',
-        state: 'ESTABLISHED'
-      },
-      {
-        dir: 'IN',
-        proto: 'UDP',
-        origSrc: '10.18.20.15',
-        origDst: '10.18.23.56',
-        origSport: '49152',
-        origDport: '514',
-        replySrc: '10.18.23.56',
-        replyDst: '10.18.20.15',
-        replySport: '514',
-        replyDport: '49152',
-        state: 'UNREPLIED'
-      }
-    ];
-
-    res.json(flows);
-  });
-
   // API: Multi-port scanner & reachability check (nc / netcat equivalent)
   app.post('/api/toolbox/port-scan', async (req, res) => {
     const { target, ports, proto = 'tcp', timeout = 2500 } = req.body;
