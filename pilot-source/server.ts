@@ -3941,81 +3941,7 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Single Tool Validation
-  app.post('/api/tools/validate', (req, res) => {
-    const { toolId } = req.body;
-    const tId = toolId || 'architect_overseer';
-    res.json({
-      toolId: tId,
-      status: 'healthy',
-      score: 100,
-      latencyMs: Math.floor(Math.random() * 8) + 4,
-      checks: [
-        {
-          nameFa: 'پاسخ‌دهی وب‌سرویس و درگاه محلی API',
-          nameEn: 'Web Service Endpoint Readiness',
-          status: 'pass',
-          detailFa: 'پردازش‌های مربوط به ابزار به درستی بارگذاری شده و به درخواست‌ها پاسخ می‌دهند.',
-          detailEn: 'Tool backend handlers operational and responding.'
-        },
-        {
-          nameFa: 'سینتکس و ساختار فایل‌های کانفیگ',
-          nameEn: 'Config Stanza Integrity & Syntax',
-          status: 'pass',
-          detailFa: 'فایل‌های استنزا فاقد هرگونه خطای ساختاری و مغایرت پارامتر هستند.',
-          detailEn: 'No stanza syntax collisions detected.'
-        },
-        {
-          nameFa: 'سطح دسترسی سیستم‌عامل و هسته لینوکس',
-          nameEn: 'OS & Linux Runtime Permissions',
-          status: 'pass',
-          detailFa: 'مجوزهای خواندن و نوشتن دایرکتوری‌های ایزوله تایید شد.',
-          detailEn: 'Read/write rights verified across runtime directories.'
-        }
-      ],
-      summaryFa: 'ابزار کاملاً سالم است و به صورت فعال در حال کار می‌باشد.',
-      summaryEn: 'Tool is operating at 100% health in runtime.'
-    });
-  });
-
-  // API: All Tools Validation
-  app.post('/api/tools/validate-all', (req, res) => {
-    const modules = [
-      'architect_overseer', 'autonomous_agent', 'ai_diagnostics', 'bento_overview',
-      'cluster_deployer', 'architecture_auditor', 'topology', 'management_nodes',
-      'docker_k8s', 'commercial_license', 'health_audit', 'live_logs', 'config_editor',
-      'doc_reference', 'heartbeat_radar', 'alert_manager', 'network_sources',
-      'component_agents', 'remote_gateway', 'package_center', 'backup_archive',
-      'network_toolbox', 'admin_security'
-    ];
-    const results: Record<string, any> = {};
-    modules.forEach(mId => {
-      results[mId] = {
-        toolId: mId,
-        status: 'healthy',
-        score: 100,
-        latencyMs: Math.floor(Math.random() * 10) + 3,
-        checks: [
-          {
-            nameFa: 'پاسخ‌دهی وب‌سرویس و API',
-            nameEn: 'API Health',
-            status: 'pass',
-            detailFa: 'نودها و ابزار متصل است.',
-            detailEn: 'Tool endpoints connected.'
-          }
-        ],
-        summaryFa: 'ابزار سالم است و کار می‌کند.',
-        summaryEn: 'Tool verified and active.'
-      };
-    });
-
-    res.json({
-      success: true,
-      totalTools: modules.length,
-      healthyCount: modules.length,
-      results
-    });
-  });
+  // Legacy synthetic tool validation handlers removed. The real validator is registered later in this file.
 
   // API: Start / Restart Isolated Splunk Daemon
   app.post('/api/parallel-cluster/start-daemon', async (req, res) => {
@@ -4041,7 +3967,7 @@ PASSWORD = ${password}
 
   // API: Autonomous workflow step executor
   app.post('/api/autonomous/execute-step', async (req, res) => {
-    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password = 'changeme' } = req.body;
+    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password } = req.body;
     const logs: string[] = [];
 
     logs.push(`[AI_AGENT] Executing Step: ${stepId}`);
