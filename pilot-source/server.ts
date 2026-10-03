@@ -3626,33 +3626,43 @@ async function startServer() {
     }
   });
 
-  // API: Network Discovery Map
-  app.get('/api/toolbox/network-map', async (req, res) => {
+  // API: Network Discovery Map — real local state only.
+  app.get('/api/toolbox/network-map', async (_req, res) => {
     try {
       const scriptPath = getScriptPath('traffic-tools.py');
       if (fs.existsSync(scriptPath)) {
         const result = await runCommand(`python3 "${scriptPath}" map`);
-        if (result.stdout && result.stdout.trim().startsWith('[')) {
-          const list = JSON.parse(result.stdout);
-          if (list.length > 0) {
-            return res.json(list);
-          }
+        if (result.code===0 && result.stdout.trim().startsWith('[')) {
+          return res.json(JSON.parse(result.stdout));
         }
       }
-    } catch (e) {
-      // Fall through
+    } catch {}
+
+    const netInfo=getSystemNetworkInfo();
+    const audit=getSystemAudit();
+    const routesRaw=await runCommand('ip',['-j','route']);
+    const neighRaw=await runCommand('ip',['-j','neigh']);
+
+    const routeRows=routesRaw.code===0?parseJsonSafe<any[]>(routesRaw.stdout,[]):[];
+    const neighRows=neighRaw.code===0?parseJsonSafe<any[]>(neighRaw.stdout,[]):[];
+    const nodes:any[]=[];
+
+    for(const iface of netInfo.ipv4List||[]){
+      nodes.push({ip:iface.ip,kind:'host',note:`Interface ${iface.iface}`,priority:0,iface:iface.iface});
+    }
+    for(const n of neighRows){
+      if(n.dst) nodes.push({ip:String(n.dst),kind:'peer',note:`Neighbor on ${n.dev||'unknown'} (${n.state||'unknown'})`,priority:2,iface:n.dev,state:n.state,mac:n.lladdr||null});
+    }
+    for(const r of routeRows){
+      if(r.gateway){
+        nodes.push({ip:String(r.gateway),kind:'gateway',note:`Default/route gateway on ${r.dev||'unknown'}`,priority:1,iface:r.dev});
+      }
     }
 
-    const netInfo = getSystemNetworkInfo();
-    const mapNodes = [
-      { ip: '10.18.32.1', kind: 'gateway', note: 'Default Network Gateway (L3)', priority: 0 },
-      { ip: '10.18.32.74', kind: 'splunk', note: 'Splunk Primary Indexer Peer (Port 9997 & 8089)', priority: 1 },
-      { ip: '10.18.23.56', kind: 'splunk', note: 'Splunk Heavy Forwarder Node (Host)', priority: 1 },
-      { ip: '10.18.10.4', kind: 'dns', note: 'Enterprise DNS Resolver (Port 53)', priority: 2 },
-      { ip: '10.18.20.15', kind: 'peer', note: 'Active Syslog Source Client', priority: 3 }
-    ];
+    const unique=new Map<string,any>();
+    for(const n of nodes) if(n.ip && !unique.has(n.ip)) unique.set(n.ip,n);
 
-    res.json(mapNodes);
+    res.json([...unique.values()].sort((a,b)=>(a.priority??9)-(b.priority??9)));
   });
 
   // API: Execute One-Click Heavy Forwarder Fix (incorporates fix.sh logic)
@@ -3674,7 +3684,11 @@ async function startServer() {
 
     const { indexerHost = '10.18.32.74', indexerPort = 9997, dryRun = false } = req.body;
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
+    const splunkBin = path.join(splunkHome, 'bin', 'splunk');
     const logs: string[] = [];
+    if (!dryRun && !fs.existsSync(splunkBin)) {
+      return res.status(404).json({ success:false, logs, error:'Real Splunk binary not found. Dry-run is available for a configuration preview only.' });
+    }
 
     logs.push(`[+] Starting Heavy Forwarder Automated Fixer (dryRun=${dryRun})`);
     logs.push(`[+] Initiated by User: ${user ? user.username : 'LOCAL_ADMIN'}`);
@@ -3766,7 +3780,7 @@ index = _thefishbucket
       logs.push(`[+] (DRY RUN) Would disable listen 9997 and restart splunkd.`);
     }
 
-    logs.push(`[+] Heavy Forwarder Fix Routine completed successfully!`);
+    logs.push(`[+] Heavy Forwarder Fix Routine completed successfully.`);
     res.json({
       success: true,
       dryRun,
@@ -3795,7 +3809,11 @@ index = _thefishbucket
 
     const { listenPort = 9997, dryRun = false } = req.body;
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
+    const splunkBin = path.join(splunkHome, 'bin', 'splunk');
     const logs: string[] = [];
+    if (!dryRun && !fs.existsSync(splunkBin)) {
+      return res.status(404).json({ success:false, logs, error:'Real Splunk binary not found. Dry-run is available for a configuration preview only.' });
+    }
 
     logs.push(`[+] Starting Indexer Automated Fixer (dryRun=${dryRun})`);
     logs.push(`[+] Initiated by User: ${user ? user.username : 'LOCAL_ADMIN'}`);
@@ -3839,8 +3857,10 @@ disabled = 0
         const fwState = await runCommand('firewall-cmd --state');
         if (fwState.stdout.trim() === 'running') {
           logs.push(`[+] firewalld is active. Adding ${listenPort}/tcp to permanent allowed ports...`);
-          await runCommand(`firewall-cmd --add-port=${listenPort}/tcp --permanent`);
-          await runCommand('firewall-cmd --reload');
+          const fwAdd=await runCommand(`firewall-cmd --add-port=${listenPort}/tcp --permanent`);
+          if(fwAdd.code!==0) throw new Error('firewall-cmd add-port failed');
+          const fwReload=await runCommand('firewall-cmd --reload');
+          if(fwReload.code!==0) throw new Error('firewall-cmd reload failed');
           logs.push(`[+] Firewall reloaded. Port ${listenPort}/tcp is now open.`);
         } else {
           logs.push(`[+] firewalld is not running. No firewall modification needed.`);
@@ -3850,12 +3870,12 @@ disabled = 0
         const splunkBin = path.join(splunkHome, 'bin/splunk');
         if (fs.existsSync(splunkBin)) {
           logs.push(`[+] Enabling listen via CLI: splunk enable listen ${listenPort}`);
-          await runCommand(`"${splunkBin}" enable listen ${listenPort}`);
+          const listenRes=await runCommand(`"${splunkBin}" enable listen ${listenPort}`);
+          if(listenRes.code!==0) throw new Error('Splunk enable listen failed');
           logs.push(`[+] Restarting indexer splunkd service...`);
-          await runCommand(`"${splunkBin}" restart`);
+          const restartRes=await runCommand(`"${splunkBin}" restart`);
+          if(restartRes.code!==0) throw new Error('Splunk restart failed');
           logs.push(`[+] Indexer service restarted.`);
-        } else {
-          logs.push(`[+] (Sandbox Mode): Local configuration files saved.`);
         }
       } catch (err: any) {
         logs.push(`[-] ERROR: ${err.message}`);
@@ -3867,7 +3887,7 @@ disabled = 0
       logs.push(`[+] (DRY RUN) Would restart splunkd on Indexer.`);
     }
 
-    logs.push(`[+] Indexer Fix Routine completed successfully!`);
+    logs.push(`[+] Indexer Fix Routine completed successfully.`);
     res.json({
       success: true,
       dryRun,
