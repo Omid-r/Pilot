@@ -38,7 +38,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
 
     try {
       if (cmdKey === 'restart' || cmdKey === 'start' || cmdKey === 'stop') {
-        const res = await fetch('/api/splunk/control', {
+        const res = await fetch('/api/real/splunk/control', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: cmdKey, serverType: selectedServerType, targetDir })
@@ -52,7 +52,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
         ]);
         if (!res.ok || data.success !== true) throw new Error(data.error || `splunk ${cmdKey} failed`);
       } else if (cmdKey === 'status') {
-        const res = await fetch(`/api/splunk/status?serverType=${selectedServerType}&targetDir=${encodeURIComponent(targetDir)}`);
+        const res = await fetch(`/api/real/splunk/status?targetDir=${encodeURIComponent(targetDir)}`);
         const data = await res.json().catch(() => ({}));
         setTerminalOutput(prev => [
           ...prev,
@@ -63,7 +63,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
         ]);
         if (!res.ok) throw new Error(data.error || 'Status query failed');
       } else if (cmdKey === 'btool') {
-        const res = await fetch(`/api/splunk/btool?serverType=${selectedServerType}&targetDir=${encodeURIComponent(targetDir)}`);
+        const res = await fetch(`/api/real/splunk/btool?targetDir=${encodeURIComponent(targetDir)}`);
         const data = await res.json().catch(() => ({}));
         const errors = Array.isArray(data.errors) ? data.errors : [];
         setTerminalOutput(prev => [
@@ -76,7 +76,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
         if (newPassword.length < 12) throw new Error(isFa ? 'رمز باید حداقل 12 کاراکتر باشد.' : 'Password must be at least 12 characters.');
         const currentPassword = window.prompt(isFa ? 'رمز فعلی ادمین را وارد کنید:' : 'Enter the current admin password:') || '';
         if (!currentPassword) throw new Error(isFa ? 'رمز فعلی لازم است.' : 'Current password is required.');
-        const res = await fetch('/api/splunk/reset-password', {
+        const res = await fetch('/api/real/splunk/reset-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetDir, currentPassword, newPassword })
@@ -85,7 +85,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
         if (!res.ok || data.success !== true) throw new Error(data.error || 'Password reset failed.');
         setTerminalOutput(prev => [...prev, data.message || 'Admin password changed successfully.']);
       } else if (cmdKey === 'bootstart_troubleshoot') {
-        const res = await fetch('/api/splunk/troubleshoot', {
+        const res = await fetch('/api/real/splunk/troubleshoot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetDir })
