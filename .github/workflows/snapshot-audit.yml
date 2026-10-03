@@ -106,11 +106,27 @@ jobs:
               print(p)
           PY
 
-          # Verify that no Slack webhook remains in the publish tree.
-          if grep -RInE 'https://hooks[.]slack[.]com/services/[A-Za-z0-9_/-]+' extracted/snapshot-2026-10-03 --exclude='*.map' --exclude='*.min.js'; then
-            echo "ERROR: Slack webhook still present after sanitization."
-            exit 1
-          fi
+          # Verify that no real Slack webhook remains in the publish tree.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("extracted/snapshot-2026-10-03")
+          webhook = re.compile(r"https://hooks[.]slack[.]com/services/[A-Za-z0-9_/-]+")
+          placeholder = "https://hooks.slack.com/services/REDACTED/OFFLINE/WEBHOOK"
+
+          for p in root.rglob("*"):
+              if not p.is_file():
+                  continue
+              try:
+                  text = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              for match in webhook.findall(text):
+                  if match != placeholder:
+                      raise SystemExit(f"ERROR: unsanitized Slack webhook found in {p}")
+          print("Slack webhook verification passed.")
+          PY
 
       - name: Publish extracted snapshot for analysis
         if: always()
