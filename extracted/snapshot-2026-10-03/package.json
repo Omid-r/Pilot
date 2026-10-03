@@ -10,7 +10,7 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "smoke": "node scripts/smoke-test-real-control-plane.mjs"
+    "smoke": "node scripts/smoke-api.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
