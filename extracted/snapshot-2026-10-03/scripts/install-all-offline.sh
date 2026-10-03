@@ -10,6 +10,15 @@ echo "======================================================================"
 echo " [AIR-GAPPED MASTER INSTALLER] Splunk Cluster Doctor & Studio Tools"
 echo "======================================================================"
 
+# Install the bundled RHEL user-space prerequisites before configuring the application tools.
+if [ -x "${SCRIPTS_DIR}/install-offline-prereqs.sh" ]; then
+    echo "[0/6] Installing bundled offline RHEL prerequisites (no external repositories)..."
+    bash "${SCRIPTS_DIR}/install-offline-prereqs.sh"
+else
+    echo "[-] install-offline-prereqs.sh is missing from the offline bundle."
+    exit 1
+fi
+
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 SCRIPTS_DIR="${INSTALL_DIR}/scripts"
 PACKAGES_DIR="/opt/splunk_packages"
