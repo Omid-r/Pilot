@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -9,7 +9,8 @@
     "package:rhel": "node scripts/build-rhel-package.js",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "smoke": "node scripts/smoke-test-real.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -30,7 +31,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
