@@ -1,7 +1,7 @@
 # Pilot extracted source
 
 - Source branch: `audit/extract-and-verify-2026-10-03`
-- Source commit: `e2c46cdccede7d2d011ebd0de4257f8050d87764`
+- Source commit: `8bed1dbeb6580be79504fbbd6145e2be88c86a74`
 - Original ZIP: `splunk-cluster-doctor-&-architecture-studio.zip`
 
 ## File inventory
