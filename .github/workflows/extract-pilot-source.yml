@@ -36,6 +36,10 @@ jobs:
             cp -a /tmp/pilot-unpack/. pilot-source/
           fi
 
+          # Remove embedded credentials/secrets from extracted source before committing it.
+          # These values are treated as compromised and must be rotated outside the repository.
+          find pilot-source -type f -print0 | xargs -0 perl -pi -e 's#https://hooks\\.slack\\.com/services/[A-Za-z0-9_/-]+#\${SLACK_WEBHOOK_URL}#g; s#(sk-[A-Za-z0-9_-]{20,})#\${OPENAI_API_KEY}#g; s#(AIza[0-9A-Za-z_-]{20,})#\${GOOGLE_API_KEY}#g'
+          grep -RInE 'hooks\\.slack\\.com/services/|sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}' pilot-source && { echo "Potential embedded secret remains"; exit 1; } || true
           rm -rf pilot-source/__MACOSX
           find pilot-source -type f -name '.DS_Store' -delete
 
