@@ -61,7 +61,12 @@ if [ ! -d "${RPM_DIR}" ]; then
   exit 1
 fi
 
-RPM_COUNT="$(find "${RPM_DIR}" -maxdepth 1 -type f -name '*.rpm' | wc -l | tr -d ' ')"
+RPM_COUNT=0
+for rpm_file in "${RPM_DIR}"/*.rpm; do
+  if [ -f "${rpm_file}" ]; then
+    RPM_COUNT=$((RPM_COUNT + 1))
+  fi
+done
 if [ "${RPM_COUNT}" -lt 1 ]; then
   echo "[-] No RPMs were found in ${RPM_DIR}"
   exit 1
