@@ -1232,6 +1232,36 @@ async function startServer() {
     res.json({ success: true, message: 'خروج با موفقیت انجام شد.' });
   });
 
+  // API: Reset Splunk administrator password on a real installation.
+  app.post('/api/parallel-cluster/reset-password', requireAuth, requireRoles('super_admin'), async (req,res) => {
+    const targetDir = String(req.body?.targetDir || '/opt/splunk_parallel');
+    if (!['/opt/splunk','/opt/splunk_parallel'].includes(targetDir)) {
+      return res.status(400).json({success:false,error:'Unsupported Splunk target directory.'});
+    }
+    const newPassword = String(req.body?.newPassword || '');
+    if (newPassword.length < 12) {
+      return res.status(400).json({success:false,error:'New password must be at least 12 characters.'});
+    }
+    const script = getScriptPath('reset-splunk-password.sh');
+    if (!fs.existsSync(script)) {
+      return res.status(404).json({success:false,error:'reset-splunk-password.sh is not available.'});
+    }
+    const q=(v:string)=>"'" + String(v).replace(/'/g,"'\\''") + "'";
+    const command='SPLUNK_ADMIN_PASSWORD='+q(newPassword)+' bash '+q(script)+' '+q(targetDir)+' admin';
+    const result=await runCommand(command,{
+      toolId:'security_password_reset',
+      toolNameFa:'تغییر رمز واقعی مدیر Splunk',
+      toolNameEn:'Real Splunk Admin Password Reset',
+      cwd:targetDir,
+      category:'security',
+      timeout:120000
+    });
+    if(result.code!==0){
+      return res.status(500).json({success:false,exitCode:result.code,stdout:result.stdout,stderr:result.stderr});
+    }
+    return res.json({success:true,targetDir,username:'admin',message:'Splunk administrator password was changed and the service was verified.'});
+  });
+
   // API: Change Self Password
   app.post('/api/auth/change-password', requireAuth, (req, res) => {
     const user = (req as any).user as UserAccount;
