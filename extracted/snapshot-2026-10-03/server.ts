@@ -3515,6 +3515,23 @@ async function startServer() {
     } catch(err:any){ res.status(500).json({success:false,error:err.message}); }
   });
 
+  // API: Network Map data derived from the actual host.
+  app.get('/api/toolbox/network-map', async (_req,res) => {
+    try {
+      const ifs=os.networkInterfaces();
+      const interfaces:any[]=[];
+      for(const [name,addrs] of Object.entries(ifs)){ for(const a of addrs||[]){ if(a.family==='IPv4') interfaces.push({name,ip:a.address,internal:a.internal}); } }
+      const route=await runCommand('ip -json route');
+      const neigh=await runCommand('ip -json neigh');
+      const sock=await runCommand('ss -H -lntup');
+      let routes:any[]=[]; let neighbors:any[]=[];
+      try{routes=JSON.parse(route.stdout||'[]');}catch{}
+      try{neighbors=JSON.parse(neigh.stdout||'[]');}catch{}
+      const listeners=(sock.stdout||'').split('\n').filter(Boolean).map(line=>{const p=line.trim().split(/\s+/);return {proto:p[0]||'',state:p[1]||'',local:p[4]||'',processInfo:p.slice(6).join(' ')};});
+      res.json({success:true,interfaces,routes,neighbors,listeners,source:'host-native',checkedAt:new Date().toISOString()});
+    }catch(err:any){res.status(500).json({success:false,error:err.message});}
+  });
+
   // API: Get Conntrack Active Flow Table
   app.post('/api/toolbox/flows', async (req, res) => {
     const { fproto = 'any', fstate = '', fdir = 'all', fmax = 100 } = req.body;
