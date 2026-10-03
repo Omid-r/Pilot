@@ -289,6 +289,65 @@ function seedInitialStore(): SecurityStore {
   const operatorPass = hashPassword(initialPassword + '-operator');
   const auditorPass = hashPassword(initialPassword + '-auditor');
 
+  const users: InternalUserAccount[] = [
+    {
+      id: 'user-super-admin',
+      username: 'admin',
+      fullName: 'Local Super Administrator',
+      role: 'super_admin',
+      createdAt: now.toISOString(),
+      expiresAt: inOneYear.toISOString(),
+      isNeverExpires: true,
+      isActive: true,
+      notes: 'Bootstrap administrator. Password is generated/provided at installation time.',
+      permissions: getDefaultPermissionsForRole('super_admin'),
+      passwordHash: adminPass.hash,
+      salt: adminPass.salt
+    },
+    {
+      id: 'user-cluster-admin',
+      username: 'cluster-admin',
+      fullName: 'Cluster Administrator',
+      role: 'cluster_admin',
+      createdAt: now.toISOString(),
+      expiresAt: inOneYear.toISOString(),
+      isNeverExpires: true,
+      isActive: true,
+      notes: 'Initial cluster administration account.',
+      permissions: getDefaultPermissionsForRole('cluster_admin'),
+      passwordHash: engineerPass.hash,
+      salt: engineerPass.salt
+    },
+    {
+      id: 'user-operator',
+      username: 'operator',
+      fullName: 'Operations Operator',
+      role: 'operator',
+      createdAt: now.toISOString(),
+      expiresAt: inOneYear.toISOString(),
+      isNeverExpires: true,
+      isActive: true,
+      notes: 'Initial operations account.',
+      permissions: getDefaultPermissionsForRole('operator'),
+      passwordHash: operatorPass.hash,
+      salt: operatorPass.salt
+    },
+    {
+      id: 'user-auditor',
+      username: 'auditor',
+      fullName: 'Security Auditor',
+      role: 'auditor',
+      createdAt: now.toISOString(),
+      expiresAt: inOneYear.toISOString(),
+      isNeverExpires: true,
+      isActive: true,
+      notes: 'Initial audit account.',
+      permissions: getDefaultPermissionsForRole('auditor'),
+      passwordHash: auditorPass.hash,
+      salt: auditorPass.salt
+    }
+  ];
+
   const hwId = getHardwareFingerprint();
   // New installations start unlicensed. Real commercial licenses are operator-supplied.
   const initialLogs: AuditLogEntry[] = [
