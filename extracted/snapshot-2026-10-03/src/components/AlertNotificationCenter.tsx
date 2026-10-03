@@ -91,7 +91,7 @@ export const AlertNotificationCenter: React.FC<AlertNotificationCenterProps> = (
         messagePreview: data?.success
           ? (isFa ? 'تحویل واقعی توسط gateway تأیید شد.' : 'Live gateway delivery confirmed.')
           : (data?.error || (isFa ? 'تحویل واقعی انجام نشد.' : 'Live delivery failed.')),
-        deliveryStatus: data?.success ? 'DELIVERED_SUCCESS' : 'DELIVERY_FAILED',
+        deliveryStatus: data?.success ? 'DELIVERED_SUCCESS' : 'FAILED',
         latencyMs: Number(data?.latencyMs || (Date.now() - started))
       };
 
