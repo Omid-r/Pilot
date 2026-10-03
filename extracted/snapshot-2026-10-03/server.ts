@@ -3943,95 +3943,22 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Get Live Connections & Peers (equivalent to peer-traffic / ss -tunap / now)
-  app.get('/api/toolbox/connections', async (req, res) => {
+  // API: Get Live Connections & Peers (real socket state only)
+  app.get('/api/toolbox/connections', async (_req, res) => {
     try {
       const scriptPath = getScriptPath('traffic-tools.py');
       if (fs.existsSync(scriptPath)) {
         const result = await runCommand(`python3 "${scriptPath}" connections`);
-        if (result.stdout && result.stdout.trim().startsWith('[')) {
-          const list = JSON.parse(result.stdout);
-          if (list.length > 0) {
-            return res.json(list);
-          }
-        }
+        if (result.code === 0 && result.stdout.trim().startsWith('[')) return res.json(JSON.parse(result.stdout));
       }
-    } catch (e) {
-      // Fall through
-    }
-
-    // High fidelity connections list matching user's peer-traffic format
-    const netInfo = getSystemNetworkInfo();
-    const connections = [
-      {
-        remoteIp: '10.18.32.74',
-        remotePort: '9997',
-        localPort: '48220',
-        proto: 'TCP',
-        dir: 'OUT',
-        action: 'ACCEPT*',
-        packets: 1420,
-        proc: 'splunkd',
-        purpose: 'Splunk-S2S: outbound forwarding to Indexer'
-      },
-      {
-        remoteIp: '10.18.32.74',
-        remotePort: '8089',
-        localPort: '51204',
-        proto: 'TCP',
-        dir: 'OUT',
-        action: 'ACCEPT*',
-        packets: 340,
-        proc: 'splunkd',
-        purpose: 'Splunk-Mgmt: REST API management heartbeat'
-      },
-      {
-        remoteIp: '10.18.20.10',
-        remotePort: '58120',
-        localPort: '8088',
-        proto: 'TCP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 680,
-        proc: 'splunkd',
-        purpose: 'Splunk-HEC: inbound HTTP Event Collector tokens'
-      },
-      {
-        remoteIp: '10.18.20.15',
-        remotePort: '49152',
-        localPort: '514',
-        proto: 'UDP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 5240,
-        proc: 'syslog-ng',
-        purpose: 'Syslog: network firewalls event stream'
-      },
-      {
-        remoteIp: '192.168.1.100',
-        remotePort: '54320',
-        localPort: '8000',
-        proto: 'TCP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 180,
-        proc: 'splunkd',
-        purpose: 'Splunk-Web: User browser Web UI session'
-      },
-      {
-        remoteIp: '10.18.30.99',
-        remotePort: '61432',
-        localPort: '22',
-        proto: 'TCP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 88,
-        proc: 'sshd',
-        purpose: 'SSH: administrator remote terminal session'
-      }
-    ];
-
-    res.json(connections);
+      const raw = await runCommand('ss',['-H','-tanp'],{timeout:10000});
+      if (raw.code !== 0) return res.status(500).json({success:false,error:raw.stderr||raw.stdout});
+      const rows = raw.stdout.split('\n').filter(Boolean).map(line=>{
+        const p=line.trim().split(/\s+/);
+        return { proto:p[0]||'', state:p[1]||'', local:p[4]||'', remote:p[5]||'', processInfo:p.slice(6).join(' ') };
+      });
+      res.json(rows);
+    } catch(err:any){ res.status(500).json({success:false,error:err.message}); }
   });
 
   // API: Get Conntrack Active Flow Table
