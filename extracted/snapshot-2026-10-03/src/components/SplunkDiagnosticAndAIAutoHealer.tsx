@@ -278,7 +278,7 @@ cat << 'EOF' > /opt/splunk_parallel/etc/system/local/server.conf
 [general]
 serverName = splunk-parallel-node
 mgmtHostPort = 127.0.0.1:8090
-pass4SymmKey = changeme-passkey
+pass4SymmKey = <GENERATE_REAL_SHARED_SECRET>
 active_group = Free
 
 [sslConfig]
