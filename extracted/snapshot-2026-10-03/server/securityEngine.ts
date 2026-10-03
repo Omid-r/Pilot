@@ -123,24 +123,20 @@ export function generateSignedLicenseKey(
 
 export function verifySignedLicenseKey(licenseKey: string, currentHwId: string): LicenseInfo {
   const hwId = currentHwId.toUpperCase();
-  const fallbackDate = new Date();
-  fallbackDate.setDate(fallbackDate.getDate() + 30); // 30-day default evaluation
-
   if (!licenseKey || !licenseKey.startsWith('LIC-')) {
-    const daysRemaining = 30;
     return {
       hardwareId: hwId,
-      companyName: 'Evaluation Customer',
-      licenseKey: 'NONE (Evaluation Mode)',
-      status: 'TRIAL',
-      tier: 'TRIAL',
-      maxNodes: 10,
+      companyName: 'Unlicensed',
+      licenseKey: 'NONE',
+      status: 'UNLICENSED',
+      tier: 'COMMUNITY',
+      maxNodes: 2,
       issuedAt: new Date().toISOString(),
-      expiresAt: fallbackDate.toISOString(),
-      daysRemaining,
-      features: ['Full Topology', 'Port Probes', 'Config Editor', 'Diagnostic Tools'],
+      expiresAt: '',
+      daysRemaining: 0,
+      features: [],
       isTampered: false,
-      watermarkNote: 'TRIAL EVALUATION MODE (Active on Node: ' + hwId + ')'
+      watermarkNote: 'COMMUNITY / UNLICENSED MODE (explicit license activation required)'
     };
   }
 
@@ -265,11 +261,38 @@ function seedInitialStore(): SecurityStore {
   const in14Days = new Date(now);
   in14Days.setDate(now.getDate() + 14);
 
-  // Default Users with cryptographically salted PBKDF2 hashes
-  const adminPass = hashPassword('Splunk@Doctor2026!');
-  const engineerPass = hashPassword('Splunk@Engineer2026!');
-  const operatorPass = hashPassword('Splunk@Operator2026!');
-  const auditorPass = hashPassword('Splunk@Auditor2026!');
+  // Bootstrap credentials are operator-supplied or generated once locally.
+  const bootstrapPath = path.join(DATA_DIR, 'bootstrap-credentials.txt');
+  const bootstrapEnv = (process.env.SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD || '').trim();
+  const bootstrapPasswords: Record<string, string> = {};
+  if (fs.existsSync(bootstrapPath)) {
+    try {
+      for (const line of fs.readFileSync(bootstrapPath, 'utf8').split(/\r?\n/)) {
+        const m = line.match(/^([a-zA-Z0-9_-]+)=(.*)$/);
+        if (m && m[2]) bootstrapPasswords[m[1]] = m[2].trim();
+      }
+    } catch (_) {}
+  }
+  const getBootstrapPassword = (username: string): string => {
+    if (username === 'admin' && bootstrapEnv) {
+      if (bootstrapEnv.length < 12) throw new Error('SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD must be at least 12 characters.');
+      bootstrapPasswords.admin = bootstrapEnv;
+    }
+    const existing = bootstrapPasswords[username];
+    if (existing && existing.length >= 12) return existing;
+    const generated = crypto.randomBytes(24).toString('base64url');
+    bootstrapPasswords[username] = generated;
+    return generated;
+  };
+  const adminPass = hashPassword(getBootstrapPassword('admin'));
+  const engineerPass = hashPassword(getBootstrapPassword('sec_engineer'));
+  const operatorPass = hashPassword(getBootstrapPassword('net_operator'));
+  const auditorPass = hashPassword(getBootstrapPassword('compliance_auditor'));
+  try {
+    const body = Object.entries(bootstrapPasswords).map(([key, value]) => key + '=' + value).join('\n') + '\n';
+    fs.writeFileSync(bootstrapPath, body, { encoding: 'utf8', mode: 0o600 });
+    fs.chmodSync(bootstrapPath, 0o600);
+  } catch (_) {}
 
   const users: InternalUserAccount[] = [
     {
@@ -335,10 +358,8 @@ function seedInitialStore(): SecurityStore {
   ];
 
   const hwId = getHardwareFingerprint();
-  // Auto-generate a valid initial commercial trial license for this specific hardware ID
-  const trialExp = new Date(now);
-  trialExp.setDate(now.getDate() + 90);
-  const initialKey = generateSignedLicenseKey(hwId, 'Splunk Enterprise Customer', 'ENTERPRISE_COMMERCIAL', trialExp.toISOString(), 100);
+  // Start unlicensed/community. Commercial licensing must be activated explicitly.
+  const initialKey = '';
 
   const initialLogs: AuditLogEntry[] = [
     {
@@ -355,23 +376,23 @@ function seedInitialStore(): SecurityStore {
       id: 'log-seed-02',
       timestamp: now.toISOString(),
       username: 'SYSTEM',
-      action: 'COMMERCIAL_LICENSE_BINDING',
+      action: 'LICENSE_STATE_INITIALIZED',
       category: 'LICENSE',
       status: 'SUCCESS',
       ip: '127.0.0.1',
-      details: `لایسنس تجاری روی اثرانگشت سخت‌افزاری ${hwId} قفل و فعال شد.`
+      details: 'License store initialized in unlicensed/community mode; explicit activation is required.'
     }
   ];
 
   return {
     users,
     license: {
-      companyName: 'Splunk Enterprise Customer',
+      companyName: 'Unlicensed',
       licenseKey: initialKey,
-      tier: 'ENTERPRISE_COMMERCIAL',
-      expiresAt: trialExp.toISOString(),
-      maxNodes: 100,
-      activatedAt: now.toISOString()
+      tier: 'COMMUNITY',
+      expiresAt: '',
+      maxNodes: 2,
+      activatedAt: ''
     },
     auditLogs: initialLogs
   };
@@ -407,7 +428,8 @@ export function getSecurityStore(): SecurityStore {
 export function saveSecurityStore(): void {
   if (!memoryStore) return;
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(memoryStore, null, 2), 'utf8');
+    fs.writeFileSync(DB_PATH, JSON.stringify(memoryStore, null, 2), { encoding: 'utf8', mode: 0o600 });
+    fs.chmodSync(DB_PATH, 0o600);
   } catch (_) {}
 }
 
