@@ -420,26 +420,43 @@ export const HealthAuditDashboard: React.FC<HealthAuditDashboardProps> = ({
   // Deploy Splunk on Kubernetes / Docker (Offline Isolated Pipeline)
   const handleDeployK8sSplunk = async () => {
     setIsDeployingK8s(true);
-    setK8sDeployLogs(['[1/4] Preparing offline Kubernetes YAML and Container configurations...']);
+    setK8sDeployLogs(['[REAL] Preparing offline Splunk container deployment...']);
     try {
-      const res = await fetch('/api/k8s/deploy-splunk', {
+      const password = window.prompt(isFa ? 'رمز ادمین واقعی Splunk (حداقل ۱۲ کاراکتر):' : 'Real Splunk admin password (minimum 12 characters):') || '';
+      if (password.length < 12) throw new Error(isFa ? 'رمز معتبر وارد نشد.' : 'A valid password is required.');
+
+      const imageRef = window.prompt(isFa ? 'Image Ref واقعی و لوکال (مثلاً splunk-enterprise:10.4.0):' : 'Real local image reference (for example splunk-enterprise:10.4.0):') || '';
+      if (!imageRef.trim()) throw new Error(isFa ? 'Image Ref وارد نشد.' : 'Image Ref is required.');
+
+      const imageArchive = window.prompt(isFa ? 'مسیر archive ایمیج روی سرور:' : 'Full local image archive path on the server:') || '';
+      if (!imageArchive.trim()) throw new Error(isFa ? 'مسیر archive وارد نشد.' : 'Local image archive path is required.');
+
+      const res = await fetch('/api/real/deploy/container', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ports: { web: 8001, rest: 8090, splunkTcp: 9998 },
-          password: 'changeme'
+          runtime: 'podman',
+          image: imageArchive,
+          imageRef: imageRef.trim(),
+          adminPassword: password
         })
       });
-      const data = await res.json();
-      if (data.logs) {
-        setK8sDeployLogs(data.logs);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || data.message || `Deployment failed (HTTP ${res.status})`);
       }
+      setK8sDeployLogs([
+        '[REAL] Container deployment completed.',
+        `Runtime: ${data.runtime}`,
+        `Image: ${data.imageRef}`,
+        `Container: ${data.container}`,
+        `Verified: ${data.verified ? 'yes' : 'no'}`
+      ]);
       setK8sDeployed(true);
-      if (onInstallParallelCluster) {
-        onInstallParallelCluster();
-      }
+      onInstallParallelCluster?.();
     } catch (err: any) {
-      setK8sDeployLogs(prev => [...prev, `[ERROR] K8s/Docker deployment failed: ${err.message}`]);
+      setK8sDeployed(false);
+      setK8sDeployLogs(prev => [...prev, `[ERROR] Real container deployment failed: ${err.message}`]);
     } finally {
       setIsDeployingK8s(false);
     }
