@@ -32,6 +32,21 @@ interface ToolValidationResult {
   checks: ToolValidationCheck[];
   summaryFa: string;
   summaryEn: string;
+  installed?: boolean;
+  operational?: boolean;
+}
+
+interface OfflineReadinessSummary {
+  overallStatus: 'healthy' | 'warning' | 'error';
+  score: number;
+  totalTools: number;
+  healthyCount: number;
+  warningCount: number;
+  errorCount: number;
+  checkedAt: string;
+  durationMs: number;
+  messageFa: string;
+  messageEn: string;
 }
 
 interface ToolValidationModalProps {
@@ -48,6 +63,8 @@ interface ToolValidationModalProps {
     badge?: string;
   }>;
   onNavigateToTool?: (toolId: string) => void;
+  initialTab?: 'current' | 'all';
+  autoRunAllOnOpen?: boolean;
 }
 
 export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
@@ -56,7 +73,9 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
   isFa,
   currentToolId,
   allModules,
-  onNavigateToTool
+  onNavigateToTool,
+  initialTab = 'current',
+  autoRunAllOnOpen = false
 }) => {
   const [activeTab, setActiveTab] = useState<'current' | 'all'>('current');
   const [selectedTool, setSelectedTool] = useState<string>(currentToolId);
@@ -64,13 +83,19 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
   const [singleResult, setSingleResult] = useState<ToolValidationResult | null>(null);
   const [allResults, setAllResults] = useState<Record<string, ToolValidationResult>>({});
   const [totalTested, setTotalTested] = useState<number>(0);
+  const [offlineSummary, setOfflineSummary] = useState<OfflineReadinessSummary | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSelectedTool(currentToolId);
-      runValidationForTool(currentToolId);
+      setActiveTab(autoRunAllOnOpen ? 'all' : initialTab);
+      if (autoRunAllOnOpen || initialTab === 'all') {
+        runValidateAll();
+      } else {
+        runValidationForTool(currentToolId);
+      }
     }
-  }, [isOpen, currentToolId]);
+  }, [isOpen, currentToolId, initialTab, autoRunAllOnOpen]);
 
   const runValidationForTool = async (tId: string) => {
     setIsValidating(true);
@@ -102,19 +127,43 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
 
   const runValidateAll = async () => {
     setIsValidating(true);
+    setOfflineSummary(null);
     try {
-      const res = await fetch('/api/tools/validate-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAllResults(data.results || {});
-        setTotalTested(data.totalTools || allModules.length);
+      const res = await fetch('/api/tools/offline-readiness');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || ('Offline validation failed (HTTP ' + res.status + ')'));
       }
+      const validatedResults = data.results || data.tools || {};
+      setAllResults(validatedResults);
+      setTotalTested(data.totalTools || Object.keys(validatedResults).length || allModules.length);
+      setOfflineSummary({
+        overallStatus: data.overallStatus || 'warning',
+        score: Number(data.score || 0),
+        totalTools: Number(data.totalTools || 0),
+        healthyCount: Number(data.healthyCount || 0),
+        warningCount: Number(data.warningCount || 0),
+        errorCount: Number(data.errorCount || 0),
+        checkedAt: data.checkedAt || new Date().toISOString(),
+        durationMs: Number(data.durationMs || 0),
+        messageFa: data.messageFa || 'اعتبارسنجی آفلاین کامل شد.',
+        messageEn: data.messageEn || 'Offline readiness validation completed.'
+      });
     } catch (e: any) {
       setAllResults({});
       setTotalTested(0);
+      setOfflineSummary({
+        overallStatus: 'error',
+        score: 0,
+        totalTools: 0,
+        healthyCount: 0,
+        warningCount: 0,
+        errorCount: 1,
+        checkedAt: new Date().toISOString(),
+        durationMs: 0,
+        messageFa: 'اعتبارسنجی آفلاین انجام نشد: ' + (e?.message || 'خطای ارتباط با backend'),
+        messageEn: 'Offline validation failed: ' + (e?.message || 'backend communication error')
+      });
     } finally {
       setIsValidating(false);
     }
@@ -139,10 +188,21 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-black text-white">
-                  {isFa ? 'اعتبار سنجی و تست زنده عملکرد ابزارها' : 'Tool Health & Validation Engine'}
+                  {isFa ? 'اعتبارسنجی واقعی و آفلاین ابزارها' : 'Real Offline Tool Validation'}
                 </h2>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                  {isFa ? '۱۰۰٪ سالم' : '100% Healthy'}
+                <span className={
+                  'text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ' +
+                  (offlineSummary?.overallStatus === 'healthy'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : offlineSummary?.overallStatus === 'error'
+                      ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30')
+                }>
+                  {offlineSummary
+                    ? (isFa
+                      ? offlineSummary.healthyCount + '/' + offlineSummary.totalTools + ' سالم'
+                      : offlineSummary.healthyCount + '/' + offlineSummary.totalTools + ' healthy')
+                    : (isFa ? 'در حال بررسی' : 'Validating')}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -294,9 +354,11 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                     {isFa ? 'گزارش تجمیعی اعتبارسنجی تمامی ابزارهای سامانه' : 'Suite-wide Comprehensive Health Audit'}
                   </h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    {isFa 
-                      ? `${allModules.length} ابزار تخصصی کلاستر بررسی و همگی تایید صلاحیت شدند.`
-                      : `All ${allModules.length} modules probed and certified active.`}
+                    {offlineSummary
+                      ? (isFa ? offlineSummary.messageFa : offlineSummary.messageEn)
+                      : (isFa
+                        ? 'آزمون فقط با داده‌های محلی سرور، فایل‌ها، Runtime، routeها و وابستگی‌های واقعی اجرا می‌شود.'
+                        : 'Validation uses only local server files, runtime, routes and installed dependencies.')}
                   </p>
                 </div>
                 <button
@@ -309,47 +371,53 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                 </button>
               </div>
 
+              {offlineSummary && (
+                <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-black text-white">{isFa ? 'نتیجه کنترل آمادگی آفلاین سرور' : 'Offline Server Readiness Result'}</div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        {isFa ? 'امتیاز ' + offlineSummary.score + '/100 • سالم ' + offlineSummary.healthyCount + ' • نیازمند بررسی ' + offlineSummary.warningCount + ' • خطا ' + offlineSummary.errorCount : 'Score ' + offlineSummary.score + '/100 • Healthy ' + offlineSummary.healthyCount + ' • Warning ' + offlineSummary.warningCount + ' • Error ' + offlineSummary.errorCount}
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-300">{offlineSummary.durationMs}ms</div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {allModules.map(mod => {
-                  const res = allResults[mod.id];
+                  const result = allResults[mod.id];
+                  const isHealthy = result?.status === 'healthy';
                   return (
-                    <div 
-                      key={mod.id} 
-                      className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06] hover:border-violet-500/40 transition flex flex-col justify-between gap-2"
-                    >
+                    <div key={mod.id} className={
+                      'p-3 rounded-2xl bg-white/[0.02] border transition flex flex-col justify-between gap-2 ' +
+                      (isHealthy ? 'border-emerald-500/20 hover:border-emerald-500/40' : 'border-amber-500/20 hover:border-amber-500/40')
+                    }>
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-0.5">
-                          <span className="font-bold text-white text-[11px] block leading-tight">
-                            {isFa ? mod.titleFa : mod.titleEn}
-                          </span>
-                          <span className="text-[10px] text-slate-500 block">
-                            {isFa ? mod.categoryNameFa : mod.categoryNameEn}
-                          </span>
+                          <span className="font-bold text-white text-[11px] block leading-tight">{isFa ? mod.titleFa : mod.titleEn}</span>
+                          <span className="text-[10px] text-slate-500 block">{isFa ? mod.categoryNameFa : mod.categoryNameEn}</span>
                         </div>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        {isHealthy ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
                       </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] text-[10px]">
-                        <span className="font-mono text-emerald-400 font-bold">
-                          {isFa ? '✓ ۱۰۰٪ معتبر' : '✓ 100% OK'}
-                        </span>
-                        <button
-                          onClick={() => {
-                            if (onNavigateToTool) {
-                              onNavigateToTool(mod.id);
-                              onClose();
-                            }
-                          }}
-                          className="text-violet-400 hover:text-violet-300 font-bold flex items-center gap-0.5 cursor-pointer"
-                        >
+                      <div className="space-y-1.5 pt-2 border-t border-white/[0.04]">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className={isHealthy ? 'font-mono text-emerald-400 font-bold' : 'font-mono text-amber-400 font-bold'}>{isHealthy ? '✓' : '⚠'} {result?.score ?? 0}/100</span>
+                          <span className="text-slate-500">{result?.operational === false ? (isFa ? 'نیازمند توجه' : 'Needs attention') : (isFa ? 'Backend OK' : 'Backend OK')}</span>
+                        </div>
+                        {result?.summaryFa && <p className="text-[10px] text-slate-500 leading-relaxed line-clamp-2">{isFa ? result.summaryFa : result.summaryEn}</p>}
+                      </div>
+                      <div className="flex items-center justify-end pt-1 text-[10px]">
+                        <button onClick={() => { if (onNavigateToTool) { onNavigateToTool(mod.id); onClose(); } }} className="text-violet-400 hover:text-violet-300 font-bold flex items-center gap-0.5 cursor-pointer">
                           <span>{isFa ? 'مشاهده ابزار' : 'Open'}</span>
-                          <ArrowRight className={`w-3 h-3 ${isFa ? 'rotate-180' : ''}`} />
+                          <ArrowRight className={isFa ? 'w-3 h-3 rotate-180' : 'w-3 h-3'} />
                         </button>
                       </div>
                     </div>
                   );
                 })}
-              </div>
+              </div>              </div>
             </div>
           )}
         </div>
@@ -358,7 +426,9 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         <div className="p-4 bg-[#090c14] border-t border-white/[0.08] flex items-center justify-between">
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>{isFa ? 'موتور اعتبارسنجی زنده پس‌زمینه لینوکس فعال است' : 'Live background test suite ready'}</span>
+            <span>{isFa
+              ? 'این گزارش فقط از وضعیت واقعی همین سرور و بدون دسترسی اینترنت ساخته شده است.'
+              : 'This report is based only on this server’s real local state; no internet access is used.'}</span>
           </div>
 
           <button
