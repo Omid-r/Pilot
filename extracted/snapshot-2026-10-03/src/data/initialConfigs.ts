@@ -81,7 +81,7 @@ autoLBFrequency = 15
 [general]
 serverName = hf01.corp.net
 # ISSUE: Default insecure pass4SymmKey
-pass4SymmKey = changeme
+pass4SymmKey = <REPLACE_WITH_REAL_SECRET>
 
 [sslConfig]
 # ISSUE: Deprecated protocols enabled (SSLv3 and TLS 1.0)
@@ -294,11 +294,11 @@ export const INITIAL_FINDINGS: SplunkFinding[] = [
     categoryFa: 'امنیت و تنظیمات سرور (server.conf)',
     categoryEn: 'Server & Clustering Security (server.conf)',
     severity: 'critical',
-    titleFa: 'استفاده از کلید هم‌سانی پیش‌فرض (pass4SymmKey = changeme)',
-    titleEn: 'Default Cluster Secret in Use (pass4SymmKey = changeme)',
+    titleFa: 'استفاده از کلید هم‌سانی پیش‌فرض (pass4SymmKey = <REPLACE_WITH_REAL_SECRET>)',
+    titleEn: 'Default Cluster Secret in Use (pass4SymmKey = <REPLACE_WITH_REAL_SECRET>)',
     file: 'server.conf',
     line: 7,
-    culpritCode: 'pass4SymmKey = changeme',
+    culpritCode: 'pass4SymmKey = <REPLACE_WITH_REAL_SECRET>',
     whyFlaggedFa: 'کلید pass4SymmKey مقدار پیش‌فرض "changeme" دارد. این کلید محرمانه برای تصدیق هویت میان نودهای کلاستر و ارتباطات درونی اسپلانک به کار می‌رود.',
     whyFlaggedEn: 'pass4SymmKey contains the well-known default string "changeme". This pre-shared key authenticates nodes in the cluster.',
     potentialImpactFa: 'هر کلاینت یا مهاجم در شبکه می‌تواند خود را به عنوان عضو قانونی کلاستر معرفی کند و داده‌ها را بخواند یا تغییر دهد.',
@@ -323,7 +323,7 @@ export const INITIAL_FINDINGS: SplunkFinding[] = [
         descriptionEn: 'Replaces default with a secure high-entropy hex secret.',
         targetFile: 'server.conf',
         targetStanza: '[general]',
-        diffSnippet: '- pass4SymmKey = changeme\n+ pass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a',
+        diffSnippet: '- pass4SymmKey = <REPLACE_WITH_REAL_SECRET>\n+ pass4SymmKey = <GENERATED_AT_DEPLOYMENT>',
         replacementConfigSnippet: 'pass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a'
       },
       {
@@ -335,7 +335,7 @@ export const INITIAL_FINDINGS: SplunkFinding[] = [
         descriptionEn: 'Configures distinct secret tokens for clustering vs general daemon management.',
         targetFile: 'server.conf',
         targetStanza: '[general]',
-        diffSnippet: '- pass4SymmKey = changeme\n+ pass4SymmKey = SplunkClusterSecret2026_x89!',
+        diffSnippet: '- pass4SymmKey = <REPLACE_WITH_REAL_SECRET>\n+ pass4SymmKey = <GENERATED_AT_DEPLOYMENT>',
         replacementConfigSnippet: 'pass4SymmKey = SplunkClusterSecret2026_x89!'
       },
       {
@@ -347,7 +347,7 @@ export const INITIAL_FINDINGS: SplunkFinding[] = [
         descriptionEn: '64-character military-grade hex token meeting strict zero-trust audit compliance.',
         targetFile: 'server.conf',
         targetStanza: '[general]',
-        diffSnippet: '- pass4SymmKey = changeme\n+ pass4SymmKey = a8b7c6d5e4f3a2b10987654321fedcba0123456789abcdef0123456789abcdef',
+        diffSnippet: '- pass4SymmKey = <REPLACE_WITH_REAL_SECRET>\n+ pass4SymmKey = <GENERATED_AT_DEPLOYMENT>',
         replacementConfigSnippet: 'pass4SymmKey = a8b7c6d5e4f3a2b10987654321fedcba0123456789abcdef0123456789abcdef'
       },
       {
@@ -359,7 +359,7 @@ export const INITIAL_FINDINGS: SplunkFinding[] = [
         descriptionEn: 'Injects encrypted secret via Linux shell sed/btool command without downtime.',
         targetFile: 'server.conf',
         targetStanza: '[general]',
-        diffSnippet: '# Executing via bash:\n# sed -i \'s/pass4SymmKey = changeme/pass4SymmKey = SecureHexPass_$(openssl rand -hex 12)/\' server.conf',
+        diffSnippet: '# Executing via bash:\n# sed -i \'s/pass4SymmKey = <REPLACE_WITH_REAL_SECRET>/pass4SymmKey = $(openssl rand -hex 32)/\' server.conf',
         replacementConfigSnippet: 'pass4SymmKey = SecureHexPass_2026a7b8c9d0',
         cliCommand: 'openssl rand -hex 16 | awk \'{print "pass4SymmKey = " $1}\''
       }
