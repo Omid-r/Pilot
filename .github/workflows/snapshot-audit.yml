@@ -68,6 +68,53 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Sanitize snapshot before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("extracted/snapshot-2026-10-03")
+
+          # Runtime security state must never be committed back into source control.
+          for p in [root / "data" / "security-db.json", root / "data" / "master-signing.key"]:
+              if p.exists():
+                  p.unlink()
+
+          # Remove real webhook/token material while preserving the application structure.
+          patterns = [
+              (re.compile(r'https://hooks\\.slack\\.com/services/[A-Z0-9_\\-/]+', re.I),
+               'https://hooks.slack.com/services/REDACTED/OFFLINE/WEBHOOK'),
+              (re.compile(r'Bearer\\s+[A-Za-z0-9._~+/-]{20,}', re.I),
+               'Bearer REDACTED'),
+              (re.compile(r'(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*["\\\'][^"\\\']+["\\\']'),
+               r'\\1: "REDACTED"'),
+          ]
+
+          text_ext = {".ts",".tsx",".js",".jsx",".mjs",".cjs",".json",".yml",".yaml",".md",".sh",".py",".env",".example"}
+          changed = []
+
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in text_ext:
+                  continue
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except UnicodeDecodeError:
+                  continue
+              old = s
+              for pat, repl in patterns:
+                  s = pat.sub(repl, s)
+              if s != old:
+                  p.write_text(s, encoding="utf-8")
+                  changed.append(str(p))
+
+          print("Sanitized files:")
+          for p in changed:
+              print(p)
+          PY
+
       - name: Publish extracted snapshot for analysis
         if: always()
         shell: bash
@@ -78,8 +125,8 @@ jobs:
           BRANCH="snapshot-2026-10-03"
           git checkout -B "$BRANCH"
           git add extracted snapshot-audit.txt
-          git add -f "$APP_ROOT/package.json" 2>/dev/null || true
-          git commit -m "chore: publish extracted 2026-10-03 snapshot for audit" || true
+          git status --short
+          git commit -m "chore: publish sanitized 2026-10-03 snapshot for audit" || true
           git push --force origin "$BRANCH"
 
       - name: Install dependencies
