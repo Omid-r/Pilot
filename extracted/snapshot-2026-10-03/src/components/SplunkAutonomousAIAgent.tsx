@@ -103,7 +103,7 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
   const [targetRestPort, setTargetRestPort] = useState(8090);
   const [targetTcpPort, setTargetTcpPort] = useState(9998);
   const [targetKvPort, setTargetKvPort] = useState(8193);
-  const [adminPassword, setAdminPassword] = useState('changeme');
+  const [adminPassword, setAdminPassword] = useState('');
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
 
   // Local Offline AI Chat Consultation
@@ -139,31 +139,27 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
 
   // Server & System Discovery State
   const [discoveryData, setDiscoveryData] = useState<ServerDiscoveryInfo>({
-    hostname: 'rhel-enterprise-node',
-    primaryIp: '192.168.232.101',
-    osRelease: 'Red Hat Enterprise Linux 9.4 (Plow) / Linux 6.6-x86_64',
-    kernel: 'Linux 6.6.137+ x86_64',
-    cpuCores: 8,
-    memoryTotalGb: 32,
-    diskFreeGb: 184,
-    interfaces: [
-      { name: 'eth0', ip: '192.168.232.101', mac: '52:54:00:fa:8c:12', status: 'UP / ACTIVE' },
-      { name: 'lo', ip: '127.0.0.1', mac: '00:00:00:00:00:00', status: 'UP / LOOPBACK' }
-    ],
+    hostname: 'Not detected',
+    primaryIp: '127.0.0.1',
+    osRelease: 'Not detected',
+    kernel: 'Not detected',
+    cpuCores: 0,
+    memoryTotalGb: 0,
+    diskFreeGb: 0,
+    interfaces: [],
     existingSplunk: {
-      installed: true,
-      path: '/opt/splunk',
-      version: 'Splunk Enterprise 10.4.0 (Build 9b3d04e)',
-      runningPorts: [8000, 8089, 9997, 8191]
+      installed: false,
+      path: '',
+      version: '',
+      runningPorts: []
     },
     containerRuntimes: {
       docker: false,
-      podman: true,
-      podmanVersion: 'Podman v4.9.4-rhel (Air-Gapped)',
+      podman: false,
       k8s: false
     },
-    openPorts: [8000, 8089, 9997, 8191, 22, 3000],
-    firewallActive: true
+    openPorts: [],
+    firewallActive: false
   });
 
   // 6 Comprehensive Workflow Steps with AI Reasoning & Approval Gates
@@ -376,16 +372,29 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
 
   const fetchSystemDiscovery = async () => {
     try {
-      const res = await fetch('/api/toolbox/overview');
-      if (res.ok) {
-        const data = await res.json();
-        setDiscoveryData(prev => ({
-          ...prev,
-          primaryIp: data.interfaces?.[0]?.ip || prev.primaryIp,
-          firewallActive: data.firewallStatus?.includes('running') || true
-        }));
-      }
-    } catch (_) {}
+      const response = await fetch('/api/real/system');
+      if (!response.ok) throw new Error(`System discovery failed (HTTP ${response.status})`);
+      const data = await response.json();
+      const interfaces = Object.entries(data.networkInterfaces || {}).flatMap(([name, list]: [string, any]) =>
+        (Array.isArray(list) ? list : []).map((entry: any) => ({
+          name,
+          ip: entry.address || '',
+          mac: entry.mac || '',
+          status: entry.internal ? 'UP / LOOPBACK' : 'UP / ACTIVE'
+        }))
+      );
+      setDiscoveryData(prev => ({
+        ...prev,
+        hostname: data.hostname || prev.hostname,
+        primaryIp: data.primaryIp || prev.primaryIp,
+        osRelease: data.os?.PRETTY_NAME || data.os?.NAME || data.release || prev.osRelease,
+        kernel: data.release || prev.kernel,
+        interfaces,
+        firewallActive: false
+      }));
+    } catch (error) {
+      console.error('[REAL DISCOVERY]', error);
+    }
   };
 
   // User authorizes AI to execute the specific step
@@ -399,29 +408,50 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
     
     try {
       if (stepId === 'step-discovery') {
-        // Step 1: Discovery execution
-        const simulatedLogs = [
-          `[AI_ORCHESTRATOR] Initializing Deep Server Telemetry Scan...`,
-          `[+] Kernel Release: ${discoveryData.kernel}`,
-          `[+] OS: ${discoveryData.osRelease}`,
-          `[+] Hardware: ${discoveryData.cpuCores} vCPUs, ${discoveryData.memoryTotalGb}GB RAM, ${discoveryData.diskFreeGb}GB Free Disk`,
-          `[+] Network Interface eth0: ${discoveryData.primaryIp} (State: UP)`,
-          `[+] Primary Splunk detected at /opt/splunk (Listening on Ports 8000, 8089, 9997, 8191)`,
-          `[+] Target Parallel Allocation: Web=${targetWebPort}, REST=${targetRestPort}, SplunkTCP=${targetTcpPort}, KVStore=${targetKvPort}`,
-          `[SUCCESS] Server discovery completed. Hardware sizing verified compliant for Splunk Enterprise.`
+        const res = await fetch('/api/real/overseer/step', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ step: 'environment' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.error || `Discovery failed (HTTP ${res.status})`);
+
+        const sys = data.system || {};
+        const ifaceEntries = Object.entries(sys.interfaces || {}).flatMap(([name, list]: [string, any]) =>
+          (Array.isArray(list) ? list : []).map((entry: any) => ({
+            name,
+            ip: entry.address || '',
+            mac: entry.mac || '',
+            status: entry.internal ? 'UP / LOOPBACK' : 'UP / ACTIVE'
+          }))
+        );
+
+        const primaryIp = Object.values(sys.interfaces || {})
+          .flatMap((list: any) => Array.isArray(list) ? list : [])
+          .find((entry: any) => entry.family === 'IPv4' && !entry.internal)?.address || discoveryData.primaryIp;
+
+        const realLogs = [
+          '[REAL] Environment inspection completed.',
+          `[REAL] Hostname: ${sys.os?.PRETTY_NAME || 'detected'}`,
+          `[REAL] Primary IP: ${primaryIp}`,
+          `[REAL] Interfaces inspected: ${ifaceEntries.length}`
         ];
 
-        await new Promise(r => setTimeout(r, 900));
+        setDiscoveryData(prev => ({
+          ...prev,
+          primaryIp,
+          osRelease: sys.os?.PRETTY_NAME || sys.os?.NAME || prev.osRelease,
+          interfaces: ifaceEntries
+        }));
 
         setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
           ...s,
           status: 'completed',
-          outputLogs: simulatedLogs,
-          resultsSummaryFa: `سرور با موفقیت شناسایی شد. ${discoveryData.cpuCores} هسته CPU و ${discoveryData.memoryTotalGb}GB رم تایید شد. پورت‌های پیشنهادی کاملاً آزاد و بدون تداخل هستند.`,
-          resultsSummaryEn: `Server discovery passed. ${discoveryData.cpuCores} CPU cores & ${discoveryData.memoryTotalGb}GB RAM confirmed. Target ports are non-conflicting.`
+          outputLogs: realLogs,
+          resultsSummaryFa: 'شناسایی محیط بر اساس داده زنده میزبان انجام شد.',
+          resultsSummaryEn: 'Environment discovery completed from live host data.'
         } : s));
 
-        // Unlock next step for approval
         unlockNextStep(stepIdx + 1);
 
       } else if (stepId === 'step-container-k8s') {
@@ -546,18 +576,10 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
         });
 
         const data = await res.json().catch(() => ({}));
-        const healLogs = data.logs && Array.isArray(data.logs) && data.logs.length > 0
-          ? data.logs
-          : [
-            `[AI_AUTO_HEAL] Starting autonomous healing cycle...`,
-            `[1/6] Freeing stale sockets: fuser -k ${targetWebPort}/tcp ${targetRestPort}/tcp ${targetTcpPort}/tcp`,
-            `[2/6] Cleaning legacy lockfiles in /var/run/splunk...`,
-            `[3/6] Rewriting synchronized web.conf and server.conf stanzas...`,
-            `[4/6] Updating firewall rules in firewalld (ports ${targetWebPort}, ${targetRestPort}, ${targetTcpPort})...`,
-            `[5/6] Starting Splunk Enterprise daemon with --run-as-root flag...`,
-            `[6/6] Splunk> Winning the War on Error. Web UI service listening on port ${targetWebPort}!`,
-            `[SUCCESS] Auto-healing finished. HTTP status code returned 200 OK.`
-          ];
+        if (!res.ok || data.success !== true) {
+          throw new Error(data.error || `Auto-heal failed (HTTP ${res.status})`);
+        }
+        const healLogs = Array.isArray(data.logs) ? data.logs : ['[REAL] Auto-heal returned without logs.'];
 
         setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
           ...s,
@@ -570,29 +592,27 @@ export function SplunkAutonomousAIAgent({ isFa, onOpenWebModal }: SplunkAutonomo
         unlockNextStep(stepIdx + 1);
 
       } else if (stepId === 'step-verification-delivery') {
-        // Step 6: Final Verification & Handover
-        const simulatedLogs = [
-          `[READINESS_PROBE] Testing Web Interface at http://127.0.0.1:${targetWebPort}/en-US/account/login...`,
-          `[+] TCP Handshake: CONNECTED to 127.0.0.1:${targetWebPort} (Latency: 0.8ms)`,
-          `[+] HTTP Response Status: 200 OK`,
-          `[+] HTTP Headers: Server=Splunkd, Content-Type=text/html; charset=UTF-8`,
-          `[+] UI Login Page ready and rendering properly.`,
-          `======================================================================`,
-          `  SPLUNK WEB SERVICE IS ACTIVE AND LIVE!`,
-          `  Web URL: http://${discoveryData.primaryIp}:${targetWebPort}/en-US/account/login`,
-          `  Username: admin`,
-          `  Password: ${adminPassword}`,
-          `======================================================================`
+        const res = await fetch('/api/real/node/probe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host: '127.0.0.1', ports: [targetWebPort] })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.probes?.[String(targetWebPort)]?.open) {
+          throw new Error(data.error || `Target Web port ${targetWebPort} is not reachable`);
+        }
+        const probe = data.probes[String(targetWebPort)];
+        const realLogs = [
+          `[REAL] TCP probe: 127.0.0.1:${targetWebPort} OPEN`,
+          `[REAL] Latency: ${probe.latencyMs} ms`,
+          '[REAL] Final verification completed from live socket state.'
         ];
-
-        await new Promise(r => setTimeout(r, 800));
-
         setWorkflowSteps(prev => prev.map(s => s.id === stepId ? {
           ...s,
           status: 'completed',
-          outputLogs: simulatedLogs,
-          resultsSummaryFa: `راستی‌آزمایی با وضعیت ۲۰۰ OK با موفقیت انجام شد. پنل وب هم‌اکنون آماده بهره‌برداری است!`,
-          resultsSummaryEn: `Readiness verified with 200 OK status. Web interface is fully ready for login!`
+          outputLogs: realLogs,
+          resultsSummaryFa: `پورت وب هدف با داده زنده قابل دسترسی است (latency ${probe.latencyMs}ms).`,
+          resultsSummaryEn: `Target web port is reachable from live socket probe (latency ${probe.latencyMs}ms).`
         } : s));
       }
 
