@@ -3993,155 +3993,62 @@ PASSWORD = ${password}
   // TOOLBOX & NETWORK DIAGNOSTIC ENGINE API ROUTES
   // =========================================================================
 
-  // API: Get comprehensive Node Overview & Role Detection (Router, Switch, Firewall, Server, Forwarder, Client)
-  app.get('/api/toolbox/overview', async (req, res) => {
-    try {
-      const scriptPath = getScriptPath('traffic-tools.py');
-      if (fs.existsSync(scriptPath)) {
-        const result = await runCommand(`python3 "${scriptPath}" role`);
-        if (result.stdout && result.stdout.trim().startsWith('{')) {
-          return res.json(JSON.parse(result.stdout));
-        }
-      }
-    } catch (e) {
-      // Fall through to native node fallback
-    }
-
-    // Native Node.js fallback
+  // API: Get comprehensive Node Overview & Role Detection
+  app.get('/api/toolbox/overview', async (_req, res) => {
     const netInfo = getSystemNetworkInfo();
     const audit = getSystemAudit();
-    const isForwarder = audit.splunkHome.path.includes('forwarder');
+    const role = audit.splunkHome.detected
+      ? (audit.splunkHome.path.includes('forwarder') ? 'forwarder' : 'server')
+      : (audit.listeningPorts.length > 1 ? 'server' : 'client');
 
-    res.json({
-      role: isForwarder ? 'forwarder' : (audit.listeningPorts.length > 2 ? 'server' : 'client'),
-      score: { server: 4, forwarder: isForwarder ? 6 : 2, firewall: 1, router: 1, switch: 0, client: 2 },
+    return res.json({
+      role,
+      score: { server: role === 'server' ? 1 : 0, forwarder: role === 'forwarder' ? 1 : 0, firewall: audit.tools.firewallCmd ? 1 : 0, router: 0, switch: 0, client: role === 'client' ? 1 : 0 },
       evidence: [
         `Primary Host IP: ${netInfo.primaryIp}`,
-        `${audit.listeningPorts.length} listening ports detected`,
+        `${audit.listeningPorts.length} real listening ports detected`,
         audit.user.isRoot ? 'Root execution privilege confirmed (UID: 0)' : `Running as user: ${audit.user.username}`,
-        audit.tools.procfs ? 'Linux kernel /proc filesystem is mounted and accessible' : 'Limited container environment'
+        audit.tools.procfs ? 'Linux /proc network tables are accessible' : 'Linux /proc network tables are unavailable'
       ],
       ifacesCount: netInfo.ipv4List.length,
       interfaces: netInfo.ipv4List.map(i => ({ iface: i.iface, ip: i.ip, status: 'UP' })),
       listenersCount: audit.listeningPorts.length,
-      establishedCount: audit.listeningPorts.length * 2,
-      routes: ['default via gateway dev eth0', '10.0.0.0/8 dev eth0 proto kernel scope link'],
-      neighbors: [
-        { ip: '10.18.32.74', dev: 'eth0', lladdr: '52:54:00:12:34:56', state: 'REACHABLE' },
-        { ip: '10.18.23.56', dev: 'eth0', lladdr: '52:54:00:ab:cd:ef', state: 'REACHABLE' }
-      ],
-      dnsServers: ['8.8.8.8', '1.1.1.1'],
-      firewallStatus: audit.tools.firewallCmd ? 'firewalld running' : 'Standard Linux iptables'
+      establishedCount: audit.establishedConnections,
+      routes: audit.routes || [],
+      neighbors: audit.neighbors || [],
+      dnsServers: audit.dnsServers || [],
+      firewallStatus: audit.firewallStatus || 'unknown',
+      tools: audit.tools,
+      splunkHome: audit.splunkHome
     });
   });
 
-  // API: Get Live Connections & Peers (equivalent to peer-traffic / ss -tunap / now)
-  app.get('/api/toolbox/connections', async (req, res) => {
-    try {
-      const scriptPath = getScriptPath('traffic-tools.py');
-      if (fs.existsSync(scriptPath)) {
-        const result = await runCommand(`python3 "${scriptPath}" connections`);
-        if (result.stdout && result.stdout.trim().startsWith('[')) {
-          const list = JSON.parse(result.stdout);
-          if (list.length > 0) {
-            return res.json(list);
-          }
-        }
-      }
-    } catch (e) {
-      // Fall through
-    }
-
-    // High fidelity connections list matching user's peer-traffic format
-    const netInfo = getSystemNetworkInfo();
-    const connections = [
-      {
-        remoteIp: '10.18.32.74',
-        remotePort: '9997',
-        localPort: '48220',
-        proto: 'TCP',
-        dir: 'OUT',
-        action: 'ACCEPT*',
-        packets: 1420,
-        proc: 'splunkd',
-        purpose: 'Splunk-S2S: outbound forwarding to Indexer'
-      },
-      {
-        remoteIp: '10.18.32.74',
-        remotePort: '8089',
-        localPort: '51204',
-        proto: 'TCP',
-        dir: 'OUT',
-        action: 'ACCEPT*',
-        packets: 340,
-        proc: 'splunkd',
-        purpose: 'Splunk-Mgmt: REST API management heartbeat'
-      },
-      {
-        remoteIp: '10.18.20.10',
-        remotePort: '58120',
-        localPort: '8088',
-        proto: 'TCP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 680,
-        proc: 'splunkd',
-        purpose: 'Splunk-HEC: inbound HTTP Event Collector tokens'
-      },
-      {
-        remoteIp: '10.18.20.15',
-        remotePort: '49152',
-        localPort: '514',
-        proto: 'UDP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 5240,
-        proc: 'syslog-ng',
-        purpose: 'Syslog: network firewalls event stream'
-      },
-      {
-        remoteIp: '192.168.1.100',
-        remotePort: '54320',
-        localPort: '8000',
-        proto: 'TCP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 180,
-        proc: 'splunkd',
-        purpose: 'Splunk-Web: User browser Web UI session'
-      },
-      {
-        remoteIp: '10.18.30.99',
-        remotePort: '61432',
-        localPort: '22',
-        proto: 'TCP',
-        dir: 'IN',
-        action: 'ACCEPT',
-        packets: 88,
-        proc: 'sshd',
-        purpose: 'SSH: administrator remote terminal session'
-      }
-    ];
-
-    res.json(connections);
+  // API: Get Live Connections & Peers
+  app.get('/api/toolbox/connections', async (_req, res) => {
+    const audit = getSystemAudit();
+    return res.json((audit.establishedConnectionsList || []).map((x:any) => ({
+      remoteIp: x.remoteIp || x.peerIp || '',
+      remotePort: x.remotePort || x.peerPort || '',
+      localPort: x.localPort || '',
+      proto: x.proto || '',
+      state: x.state || '',
+      proc: x.process || '',
+      purpose: x.process || 'kernel socket'
+    })));
   });
 
   // API: Get Conntrack Active Flow Table
-  app.post('/api/toolbox/flows', async (req, res) => {
-    const { fproto = 'any', fstate = '', fdir = 'all', fmax = 100 } = req.body;
-    try {
-      const scriptPath = getScriptPath('traffic-tools.py');
-      if (fs.existsSync(scriptPath)) {
-        const result = await runCommand(`python3 "${scriptPath}" flows`);
-        if (result.stdout && result.stdout.trim().startsWith('[')) {
-          const list = JSON.parse(result.stdout);
-          if (list.length > 0) {
-            return res.json(list);
-          }
-        }
-      }
-    } catch (e) {
-      // Fall through
+  app.post('/api/toolbox/flows', async (_req, res) => {
+    const result = await runCommand('ss',['-H','-tanp'],{timeout:10000});
+    if (result.code !== 0) return res.status(500).json({success:false,error:'Unable to read live socket flow table.',details:result.stderr});
+    const flows = result.stdout.split('\\n').filter(Boolean).map((line:string) => {
+      const p=line.trim().split(/\\s+/);
+      return { proto:p[0]||'', state:p[1]||'', local:p[4]||'', peer:p[5]||'', process:p.slice(6).join(' ') };
+    });
+    return res.json(flows);
+  });
+
+  // Fall through
     }
 
     // Default flow sample matching conntrack structure
