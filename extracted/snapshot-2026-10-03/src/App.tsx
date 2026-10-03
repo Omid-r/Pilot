@@ -677,11 +677,12 @@ export default function App() {
     return null;
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [sessionValidated, setSessionValidated] = useState<boolean>(false);
   // Virtual Server Wipe & Lifecycle Modal State (مدیریت و حذف سرور مجازی)
   const [isVirtualWipeModalOpen, setIsVirtualWipeModalOpen] = useState<boolean>(false);
   // Tool Validation & Diagnostic Health Modal State (اعتبار سنجی ابزارهای سامانه)
   const [isToolValidationModalOpen, setIsToolValidationModalOpen] = useState<boolean>(false);
-  const [validatingToolId, setValidatingToolId] = useState<string>('autonomous_agent');
+  const [validatingToolId, setValidatingToolId] = useState<string>('bento_overview');
 
   // Splunk System Debugger & Telemetry Modal State
   const [isDebugModalOpen, setIsDebugModalOpen] = useState<boolean>(false);
@@ -981,37 +982,55 @@ export default function App() {
     }
   }, [activeEnvironment, parallelClusterState.isInstalled, virtualClusterState.isInstalled]);
 
-  // Validate session on mount
+  // Validate session on mount, then launch the real offline readiness check.
   useEffect(() => {
-    if (authToken) {
-      fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      })
-        .then(res => {
-          if (!res.ok) {
-            setAuthToken('');
-            setCurrentUser(null);
-            localStorage.removeItem('splunk_doctor_auth_token');
-            localStorage.removeItem('splunk_doctor_user');
-          } else {
-            return res.json();
-          }
-        })
-        .then(data => {
-          if (data && data.user) {
-            setCurrentUser(data.user);
-            localStorage.setItem('splunk_doctor_user', JSON.stringify(data.user));
-          }
-        })
-        .catch(() => {});
+    setSessionValidated(false);
+    if (!authToken) {
+      return;
     }
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${authToken}` }
+    })
+      .then(res => {
+        if (!res.ok) {
+          setAuthToken('');
+          setCurrentUser(null);
+          localStorage.removeItem('splunk_doctor_auth_token');
+          localStorage.removeItem('splunk_doctor_user');
+          throw new Error('Session expired');
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem('splunk_doctor_user', JSON.stringify(data.user));
+          setSessionValidated(true);
+        } else {
+          setAuthToken('');
+          setCurrentUser(null);
+        }
+      })
+      .catch(() => {
+        setSessionValidated(false);
+      });
   }, [authToken]);
+
+  // First authenticated action after UI startup: verify the real offline server/tool state.
+  useEffect(() => {
+    if (!sessionValidated || !authToken || !currentUser) return;
+    setValidatingToolId('bento_overview');
+    setIsToolValidationModalOpen(true);
+  }, [sessionValidated, authToken, currentUser]);
 
   const handleLoginSuccess = (session: AuthSession) => {
     setAuthToken(session.token);
     setCurrentUser(session.user);
+    setSessionValidated(true);
     localStorage.setItem('splunk_doctor_auth_token', session.token);
     localStorage.setItem('splunk_doctor_user', JSON.stringify(session.user));
+    setValidatingToolId('bento_overview');
+    setIsToolValidationModalOpen(true);
     setIsLoginModalOpen(false);
     showToast(isFa ? `خوش آمدید ${session.user.fullName} (${session.user.role})` : `Welcome, ${session.user.username}`);
   };
@@ -1027,6 +1046,7 @@ export default function App() {
     }
     setAuthToken('');
     setCurrentUser(null);
+    setSessionValidated(false);
     localStorage.removeItem('splunk_doctor_auth_token');
     localStorage.removeItem('splunk_doctor_user');
     if (activeTab === 'admin_security') {
@@ -3446,6 +3466,8 @@ export default function App() {
             isFa={isFa}
             currentToolId={validatingToolId}
             allModules={ALL_MODULES}
+            initialTab="all"
+            autoRunAllOnOpen={true}
             onNavigateToTool={(tId) => handleSelectModule(tId as any)}
           />
 
@@ -3477,12 +3499,15 @@ export default function App() {
           <footer className="border-t border-white/[0.06] bg-[#111216] py-2.5 px-6 text-xs text-white/50 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setIsBackendInspectorOpen(true)}
+                onClick={() => {
+                  setValidatingToolId('bento_overview');
+                  setIsToolValidationModalOpen(true);
+                }}
                 className="flex items-center gap-1.5 hover:text-[#30d158] transition cursor-pointer text-[#30d158]"
-                title={isFa ? 'مشاهده ریز عملیات‌ها و اعتبارسنجی ابزارها' : 'Click to inspect backend telemetry & verify tools'}
+                title={isFa ? 'اجرای اعتبارسنجی واقعی آفلاین همه ابزارها' : 'Run real offline readiness validation for all tools'}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse"></span>
-                <span className="font-medium">{isFa ? 'وضعیت سرور: ۱۰۰٪ تایید شده' : 'Host Status: 100% Verified'}</span>
+                <span className="font-medium">{isFa ? 'بررسی آمادگی آفلاین سرور' : 'Offline Readiness Check'}</span>
               </button>
             </div>
             <div className="flex items-center gap-4 text-[11px] text-white/40">
