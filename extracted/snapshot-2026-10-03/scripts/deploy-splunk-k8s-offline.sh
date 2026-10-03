@@ -8,13 +8,27 @@
 WEB_PORT="${1:-8001}"
 REST_PORT="${2:-8090}"
 TCP_PORT="${3:-9998}"
-ADMIN_PASSWORD="${4:-changeme}"
+ADMIN_PASSWORD="${4:-${SPLUNK_OFFLINE_ADMIN_PASSWORD:-}}"
 
 WORKDIR="/opt/splunk_container_runtime"
+IMAGE_REF="${SPLUNK_OFFLINE_IMAGE_REF:-}"
+PASS4_SYM_KEY="${SPLUNK_PARALLEL_PASS4SYMKEY:-}"
 CONFIG_DIR="/opt/splunk_parallel_configs"
 mkdir -p "${WORKDIR}"
 mkdir -p "${CONFIG_DIR}"
 
+if [ -z "${ADMIN_PASSWORD}" ]; then
+  echo "[-] SPLUNK_OFFLINE_ADMIN_PASSWORD or argument 4 is required."
+  exit 1
+fi
+if [ -z "${IMAGE_REF}" ]; then
+  echo "[-] SPLUNK_OFFLINE_IMAGE_REF must identify a locally loaded Splunk image."
+  exit 1
+fi
+if [ -z "${PASS4_SYM_KEY}" ]; then
+  echo "[-] SPLUNK_PARALLEL_PASS4SYMKEY must be set for cluster authentication."
+  exit 1
+fi
 echo "======================================================================"
 echo "  [K8S / DOCKER OFFLINE DEPLOYER] Splunk Enterprise Container Instance"
 echo "======================================================================"
@@ -46,7 +60,7 @@ EOF
 cat << EOF > "${CONFIG_DIR}/server.conf"
 [general]
 serverName = splunk-k8s-parallel-node
-pass4SymmKey = changeme-k8s-passkey
+pass4SymmKey = ${PASS4_SYM_KEY}
 active_group = Free
 
 [kvstore]
@@ -116,7 +130,7 @@ spec:
     spec:
       containers:
       - name: splunk
-        image: splunk/splunk:latest
+        image: ${IMAGE_REF}
         imagePullPolicy: IfNotPresent
         env:
         - name: SPLUNK_START_ARGS
@@ -216,17 +230,17 @@ CONTAINER_SUCCESS="no"
 ensure_offline_image() {
     local RUNTIME="$1"
     if [ "$RUNTIME" = "podman" ]; then
-        if podman image exists splunk/splunk:latest 2>/dev/null || podman image exists localhost/splunk:latest 2>/dev/null; then
+        if podman image exists "${IMAGE_REF}" >/dev/null 2>&1; then
             return 0
         fi
         echo "  -> [OFFLINE] Checking local archive or building container image from local /opt/splunk..."
         if [ -d "/opt/splunk" ]; then
-            tar -C /opt/splunk -cf - . 2>/dev/null | podman import - splunk/splunk:latest 2>&1 || true
+            tar -C /opt/splunk -cf - . 2>/dev/null | podman import - ${IMAGE_REF}
         elif [ -d "/opt/splunk_parallel" ]; then
             tar -C /opt/splunk_parallel -cf - . 2>/dev/null | podman import - splunk/splunk:latest 2>&1 || true
         fi
     elif [ "$RUNTIME" = "docker" ]; then
-        if docker image inspect splunk/splunk:latest >/dev/null 2>&1 || docker image inspect localhost/splunk:latest >/dev/null 2>&1; then
+        if docker image inspect "${IMAGE_REF}" >/dev/null 2>&1; then
             return 0
         fi
         echo "  -> [OFFLINE] Building container image from local /opt/splunk..."
@@ -240,12 +254,12 @@ ensure_offline_image() {
 
 if command -v kubectl >/dev/null 2>&1; then
     echo "  -> Found kubectl. Applying Kubernetes Manifests..."
-    kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml" 2>&1 || true
+    kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml"
     DEPLOY_TYPE="kubernetes"
     CONTAINER_SUCCESS="yes"
 elif command -v k3s >/dev/null 2>&1; then
     echo "  -> Found k3s. Applying Kubernetes Manifests via k3s..."
-    k3s kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml" 2>&1 || true
+    k3s kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml"
     DEPLOY_TYPE="k3s"
     CONTAINER_SUCCESS="yes"
 elif command -v podman >/dev/null 2>&1; then
