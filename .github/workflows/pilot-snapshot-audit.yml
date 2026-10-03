@@ -30,6 +30,44 @@ jobs:
         working-directory: pilot-source
         run: npm run lint
 
+      - name: Verify text encodings
+        working-directory: pilot-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bad=0
+          while IFS= read -r -d '' f; do
+            case "$f" in
+              node_modules/*|dist/*) continue ;;
+            esac
+            if ! iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then
+              echo "INVALID_UTF8: $f"
+              file -bi "$f" || true
+              python3 - "$f" <<'PY'
+          import sys
+          p=sys.argv[1]
+          b=open(p,'rb').read()
+          bad=[]
+          i=0
+          while i < len(b):
+              try:
+                  n=1
+                  while i+n <= len(b):
+                      b[i:i+n].decode('utf-8')
+                      break
+                  else:
+                      n=1
+              except UnicodeDecodeError:
+                  bad.append(i)
+                  n=1
+              i += n
+          print("FIRST_BYTE_POSITIONS:", bad[:30])
+          PY
+              bad=1
+            fi
+          done < <(find . -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.css' -o -name '*.json' -o -name '*.html' \) -print0)
+          test "$bad" -eq 0
+
       - name: Production build
         working-directory: pilot-source
         run: npm run build
