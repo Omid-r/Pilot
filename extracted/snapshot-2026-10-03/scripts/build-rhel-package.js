@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
-const PACKAGE_VERSION = '1.3.0';
+const PACKAGE_VERSION = '1.4.0';
 const BUILD_DATE = new Date().toISOString();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +38,12 @@ if (fs.existsSync(stagingDir)) {
   fs.rmSync(stagingDir, { recursive: true, force: true });
 }
 fs.mkdirSync(stagingDir, { recursive: true });
+
+// Bundle the exact Node.js runtime used to build this release.
+const nodeRuntimeDir = path.join(stagingDir, 'node-runtime', 'bin');
+fs.mkdirSync(nodeRuntimeDir, { recursive: true });
+fs.copyFileSync(process.execPath, path.join(nodeRuntimeDir, 'node'));
+try { fs.chmodSync(path.join(nodeRuntimeDir, 'node'), 0o755); } catch (_) {}
 
 // 3. Copy compiled dist/ (excluding nested archives to keep package lightweight and fast)
 const distDir = path.join(rootDir, 'dist');
@@ -106,16 +112,15 @@ echo "=========================================================="
 echo " Starting Splunk Cluster Doctor (RHEL Standalone v${PACKAGE_VERSION})"
 echo "=========================================================="
 
-# Check Node.js
-if ! command -v node >/dev/null 2>&1; then
-    echo "[-] Node.js is not installed."
-    echo "[!] Run: sudo dnf install -y nodejs   (RHEL 8/9, Rocky, AlmaLinux)"
-    echo "[!] Or:  sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
+# Use the bundled runtime shipped with this offline release.
+NODE_BIN="$DIR/node-runtime/bin/node"
+if [ ! -x "$NODE_BIN" ]; then
+    echo "[-] Bundled Node.js runtime is missing or not executable."
     exit 1
 fi
 
-NODE_VER=$(node -v)
-echo "[+] Detected Node.js: $NODE_VER"
+NODE_VER=$("$NODE_BIN" -v)
+echo "[+] Bundled Node.js: $NODE_VER"
 
 # Auto-detect Splunk Home if not set
 if [ -z "$SPLUNK_HOME" ]; then
@@ -154,7 +159,7 @@ echo " Access UI in your browser at: http://$(hostname -I 2>/dev/null | awk '{pr
 echo " Press Ctrl+C to stop."
 echo "=========================================================="
 
-exec node dist/server.cjs
+exec "$DIR/node-runtime/bin/node" dist/server.cjs
 `;
 fs.writeFileSync(path.join(stagingDir, 'start.sh'), startSh, { encoding: 'utf8', mode: 0o755 });
 
@@ -171,7 +176,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/splunk-doctor
-ExecStart=/usr/bin/node /opt/splunk-doctor/dist/server.cjs
+ExecStart=/opt/splunk-doctor/node-runtime/bin/node /opt/splunk-doctor/dist/server.cjs
 Restart=always
 RestartSec=5
 KillMode=process
@@ -205,7 +210,10 @@ echo "[+] Installing Splunk Cluster Doctor to $TARGET_DIR..."
 
 mkdir -p "$TARGET_DIR"
 cp -r ./* "$TARGET_DIR/"
-chmod -R 755 "$TARGET_DIR"
+chown -R root:root "$TARGET_DIR"
+find "$TARGET_DIR" -type d -exec chmod 0755 {} +
+find "$TARGET_DIR" -type f -exec chmod 0644 {} +
+chmod 0755 "$TARGET_DIR/node-runtime/bin/node"
 chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
 
 # Dynamic Node.js path discovery
@@ -287,33 +295,18 @@ rm -rf "\${TARGET_DIR}/dist" "\${TARGET_DIR}/scripts" "\${TARGET_DIR}/systemd" 2
 echo "==> [۳/۶] کپی و استقرار فایل‌های بسته جدید..."
 cp -rf "\${SOURCE_DIR}"/* "\${TARGET_DIR}/"
 
-# 5. Fix ALL permissions automatically (No manual chmod required!)
-echo "==> [۴/۶] اعمال و تثبیت دسترسی‌های اجرایی کامل روی تمامی فایل‌ها و اسکریپت‌ها..."
-chmod -R 755 "\${TARGET_DIR}"
-chmod +x "\${TARGET_DIR}"/*.sh 2>/dev/null || true
-chmod +x "\${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
-chmod +x "\${TARGET_DIR}"/dist/server.cjs 2>/dev/null || true
-
-# Check / find Node.js binary path
-NODE_BIN="$(command -v node 2>/dev/null || which node 2>/dev/null || echo "")"
-if [ -z "\$NODE_BIN" ]; then
-  if [ -f "/usr/bin/node" ]; then NODE_BIN="/usr/bin/node";
-  elif [ -f "/usr/local/bin/node" ]; then NODE_BIN="/usr/local/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs18/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs18/root/usr/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs16/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs16/root/usr/bin/node";
-  elif [ -f "/opt/splunk/bin/node" ]; then NODE_BIN="/opt/splunk/bin/node";
-  fi
-fi
-
-if [ -z "\$NODE_BIN" ]; then
-  echo "[-] اخطار: نود جی‌اس (Node.js) یافت نشد."
-  echo "[!] لطفاً با یکی از دستورات زیر Node.js را نصب کنید و مجدداً setup.sh را اجرا نمایید:"
-  echo "    sudo dnf install -y nodejs   (RHEL 8 / RHEL 9 / Rocky Linux)"
-  echo "    sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
+# 5. Install the bundled runtime and apply least-privilege permissions
+NODE_BIN="/opt/splunk-doctor/node-runtime/bin/node"
+if [ ! -x "$NODE_BIN" ]; then
+  echo "[-] Bundled Node.js runtime is missing or not executable."
   exit 1
 fi
-echo "  -> مسیر شناسایی‌شده Node.js: \$NODE_BIN"
-
+find "$TARGET_DIR" -type d -exec chmod 0755 {} +
+find "$TARGET_DIR" -type f -exec chmod 0644 {} +
+chmod 0755 "$NODE_BIN"
+chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
+chown -R root:root "$TARGET_DIR"
+echo "  -> Bundled Node.js runtime: $NODE_BIN"
 # 6. Configure Systemd Service dynamically
 echo "==> [۵/۶] پیکربندی و فعال‌سازی سرویس دائمی Systemd (splunk-doctor.service)..."
 cat << EOF > /etc/systemd/system/splunk-doctor.service
@@ -498,6 +491,7 @@ execSync(`cp -r "${stagingDir}/"* "${path.join(wrappedDir, 'splunk-doctor')}/"`)
 
 execSync(`tar -czf "${targetTar1}" -C "${wrappedDir}" splunk-doctor`);
 execSync(`cp "${targetTar1}" "${targetTar2}"`);
+execSync(`sha256sum "${targetTar1}" > "${targetTar1}.sha256"`);
 
 console.log(`[RHEL Packager] Generated: ${targetTar1} (${fs.statSync(targetTar1).size} bytes)`);
 console.log(`[RHEL Packager] Generated: ${targetTar2} (${fs.statSync(targetTar2).size} bytes)`);
