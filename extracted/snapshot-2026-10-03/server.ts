@@ -2554,35 +2554,21 @@ mgmtHostPort = 127.0.0.1:${restPort}
 
   // Port 8001 is served only by a real Splunk installation. No synthetic daemon listener is created here.
 
-  // API: Deploy Splunk on Kubernetes / Docker (Offline Container Pipeline)
+  // API: Deploy Splunk on Kubernetes / Docker using real offline artifacts only.
   app.post('/api/k8s/deploy-splunk', async (req, res) => {
-    const { ports = { web: 8001, rest: 8090, splunkTcp: 9998 }, password = 'changeme' } = req.body;
-    const scriptPath = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
-    const runtimePath = '/opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh';
-    try {
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        try {
-          if (!fs.existsSync('/opt/splunk_container_runtime')) {
-            fs.mkdirSync('/opt/splunk_container_runtime', { recursive: true });
-          }
-          fs.copyFileSync(scriptPath, runtimePath);
-          await runCommand(`chmod +x "${runtimePath}" 2>/dev/null || true`);
-        } catch (_) {}
-
-        const result = await runCommand(`bash "${scriptPath}" ${ports.web || 8001} ${ports.rest || 8090} ${ports.splunkTcp || 9998} "${password}"`);
-        return res.json({
-          success: true,
-          logs: result.stdout.split('\n'),
-          webUrl: `http://localhost:${ports.web || 8001}/en-US/account/login`,
-          credentials: { username: 'admin', password }
-        });
-      }
-      res.status(500).json({ success: false, error: 'deploy-splunk-k8s-offline.sh not found' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) return res.status(403).json({success:false,error:'Root privileges are required.'});
+    const { ports={web:8001,rest:8090,splunkTcp:9998}, password, imageRef, namespace='splunk-parallel', imageArchive='' }=req.body||{};
+    if(typeof password!=='string'||password.length<12) return res.status(400).json({success:false,error:'A real admin password of at least 12 characters is required.'});
+    if(typeof imageRef!=='string'||!imageRef.trim()) return res.status(400).json({success:false,error:'imageRef is required. No registry lookup is performed.'});
+    const scriptPath=getScriptPath('deploy-splunk-k8s-offline.sh');
+    if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'Offline deployment script not found.'});
+    const safe=(s:string)=>String(s).replace(/"/g,'\\"');
+    const cmd=`bash "${scriptPath}" ${Number(ports.web)||8001} ${Number(ports.rest)||8090} ${Number(ports.splunkTcp)||9998} "${safe(password)}" "${safe(imageRef)}" "${String(namespace).replace(/[^a-z0-9-]/g,'')||'splunk-parallel'}" "${safe(imageArchive)}"`;
+    const result=await runCommand(cmd,{toolId:'k8s_real_deploy',toolNameFa:'استقرار واقعی اسپلانک با کانتینر/کوبرنتیز',toolNameEn:'Real Offline Splunk Container/Kubernetes Deployment',category:'k8s',timeout:300000});
+    const logs=(result.stdout||result.stderr||'').split('\n');
+    res.status(result.code===0?200:500).json({success:result.code===0,exitCode:result.code,logs,webUrl:result.code===0?`http://localhost:${Number(ports.web)||8001}/en-US/account/login`:undefined});
   });
+
 
   // API: Get Kubernetes / Docker Container Status
   app.get('/api/k8s/status', async (req, res) => {
