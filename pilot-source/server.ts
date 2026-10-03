@@ -2639,7 +2639,13 @@ async function startServer() {
         if(name==='web.conf' && String(targetPorts.web||'') && /httpport\s*=/.test(text)) text=text.replace(/httpport\s*=\s*\d+/g,`httpport = ${Number(targetPorts.web)}`);
         if(name==='inputs.conf' && String(targetPorts.splunkTcp||'') ) text=text.replace(/\[splunktcp:\/\/\d+\]/g,`[splunktcp://${Number(targetPorts.splunkTcp)}]`);
         const full=path.join(targetDir,name);
-        if(fs.existsSync(full)) backupFile(full,'/var/lib/splunk-doctor/backups');
+        if(fs.existsSync(full)){
+          const backupDir='/var/lib/splunk-doctor/backups';
+          fs.mkdirSync(backupDir,{recursive:true,mode:0o700});
+          const backupPath=path.join(backupDir,`${name}.${Date.now()}.bak`);
+          fs.copyFileSync(full,backupPath);
+          try{fs.chmodSync(backupPath,0o600);}catch{}
+        }
         fs.writeFileSync(full,text,{encoding:'utf8',mode:name==='user-seed.conf'?0o600:0o644});
         files.push(name); sanitized[name]=text;
       }
@@ -3502,11 +3508,13 @@ async function startServer() {
 
     const netInfo=getSystemNetworkInfo();
     const audit=getSystemAudit();
-    const routesRaw=await runCommand('ip',['-j','route']);
-    const neighRaw=await runCommand('ip',['-j','neigh']);
+    const routesRaw=await runCommand('ip -j route');
+    const neighRaw=await runCommand('ip -j neigh');
 
-    const routeRows=routesRaw.code===0?parseJsonSafe<any[]>(routesRaw.stdout,[]):[];
-    const neighRows=neighRaw.code===0?parseJsonSafe<any[]>(neighRaw.stdout,[]):[];
+    let routeRows:any[]=[];
+    let neighRows:any[]=[];
+    try{routeRows=routesRaw.code===0?JSON.parse(routesRaw.stdout||'[]'):[];}catch{}
+    try{neighRows=neighRaw.code===0?JSON.parse(neighRaw.stdout||'[]'):[];}
     const nodes:any[]=[];
 
     for(const iface of netInfo.ipv4List||[]){
