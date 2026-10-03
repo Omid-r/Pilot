@@ -44,7 +44,7 @@ jobs:
           const fs = require('fs');
           const file = 'server.ts';
           const text = fs.readFileSync(file, 'utf8');
-          const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+          const sf = ts.createSourceFile(file, text, 99, true);
           const ds = sf.parseDiagnostics || [];
           const lines = text.split(/\r?\n/);
           for (const d of ds) {
@@ -68,7 +68,7 @@ jobs:
           const p = 'server.ts';
           const original = fs.readFileSync(p, 'utf8');
           const diagnostics = (text) => {
-            const sf = ts.createSourceFile(p, text, ts.ScriptTarget.Latest, true);
+            const sf = ts.createSourceFile(p, text, 99, true);
             return sf.parseDiagnostics || [];
           };
           const lines = original.split(/\r?\n/);
@@ -79,13 +79,13 @@ jobs:
           }
           console.log('Initial parser diagnostics:');
           for (const d of initial) {
-            const lc = ts.createSourceFile(p, original, ts.ScriptTarget.Latest, true).getLineAndCharacterOfPosition(d.start ?? 0);
+            const lc = ts.createSourceFile(p, original, 99, true).getLineAndCharacterOfPosition(d.start ?? 0);
             console.log(`  ${lc.line + 1}:${lc.character + 1} ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
           }
           const candidates = [];
           const seen = new Set();
           for (const d of initial) {
-            const sf = ts.createSourceFile(p, original, ts.ScriptTarget.Latest, true);
+            const sf = ts.createSourceFile(p, original, 99, true);
             const line = sf.getLineAndCharacterOfPosition(d.start ?? 0).line;
             for (let delta = -12; delta <= 12; delta++) {
               const idx = line + delta;
