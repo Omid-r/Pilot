@@ -4309,5 +4309,6 @@ disabled = 0
   server.on('error', (err) => {
     console.error(`HTTP server error: ${err instanceof Error ? err.message : String(err)}`);
   });
+}
 
 startServer();
