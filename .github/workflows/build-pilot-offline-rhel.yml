@@ -156,7 +156,10 @@ jobs:
             ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
           if-no-files-found: error
 )" -gt 0
-          tar -xOzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl.sha256 | sha256sum -c
+          TMP_VALIDATE="$(mktemp -d)"
+          tar -xzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz -C "$TMP_VALIDATE" splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl.sha256
+          (cd "$TMP_VALIDATE/splunk-doctor/offline-prereqs/rhel9/x86_64/bin" && sha256sum -c kubectl.sha256)
+          rm -rf "$TMP_VALIDATE"
       - name: Upload offline RHEL release
         uses: actions/upload-artifact@v6
         with:
