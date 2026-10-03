@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+SOURCE_DIR="$BASE_DIR"
 TARGET_DIR="/opt/splunk-doctor"
 DATA_DIR="/var/lib/splunk-doctor"
 SERVICE_FILE="/etc/systemd/system/splunk-doctor.service"
