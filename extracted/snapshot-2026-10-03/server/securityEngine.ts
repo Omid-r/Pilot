@@ -372,11 +372,11 @@ function seedInitialStore(): SecurityStore {
       id: 'log-seed-02',
       timestamp: now.toISOString(),
       username: 'SYSTEM',
-      action: 'COMMERCIAL_LICENSE_BINDING',
+      action: 'COMMUNITY_MODE_INITIALIZATION',
       category: 'LICENSE',
       status: 'SUCCESS',
       ip: '127.0.0.1',
-      details: `لایسنس تجاری روی اثرانگشت سخت‌افزاری ${hwId} قفل و فعال شد.`
+      details: `سیستم در حالت Community/Unlicensed و بدون لایسنس تجاری مقداردهی اولیه شد (Hardware ID: ${hwId}).`
     }
   ];
 
