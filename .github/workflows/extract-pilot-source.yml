@@ -1,0 +1,70 @@
+name: extract-pilot-source
+
+on:
+  push:
+    branches:
+      - audit/extract-and-verify-2026-10-03
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    if: ${{ !contains(github.event.head_commit.message, '[bot] extract') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Locate and extract uploaded ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$ZIP" || { echo "No ZIP found in repository root"; exit 1; }
+
+          rm -rf /tmp/pilot-unpack pilot-source
+          mkdir -p /tmp/pilot-unpack pilot-source
+          unzip -q "$ZIP" -d /tmp/pilot-unpack
+
+          shopt -s dotglob nullglob
+          roots=(/tmp/pilot-unpack/*)
+          if [ "${#roots[@]}" -eq 1 ] && [ -d "${roots[0]}" ]; then
+            cp -a "${roots[0]}/." pilot-source/
+          else
+            cp -a /tmp/pilot-unpack/. pilot-source/
+          fi
+
+          rm -rf pilot-source/__MACOSX
+          find pilot-source -type f -name '.DS_Store' -delete
+
+          echo "=== Extracted tree ==="
+          find pilot-source -maxdepth 3 -type f -printf '%P\n' | sort | head -500
+
+          echo "=== Package/build candidates ==="
+          find pilot-source -type f \( -name 'package.json' -o -name 'package-lock.json' -o -name 'npm-shrinkwrap.json' -o -name 'pnpm-lock.yaml' -o -name 'yarn.lock' -o -name 'bun.lock' -o -name 'vite.config.*' -o -name 'tsconfig.json' -o -name 'Dockerfile' -o -name 'docker-compose*.yml' -o -name 'docker-compose*.yaml' \) -print | sort
+
+          {
+            echo "# Pilot extracted source"
+            echo
+            echo "- Source branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Original ZIP: \`$(basename "$ZIP")\`"
+            echo
+            echo "## File inventory"
+            echo
+            echo "\`\`\`text"
+            find pilot-source -type f -printf '%P\t%s bytes\n' | sort
+            echo "\`\`\`"
+          } > PILOT_SOURCE_MANIFEST.md
+
+      - name: Commit extracted source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pilot-source PILOT_SOURCE_MANIFEST.md
+          git commit -m "[bot] extract Pilot source for audit" || exit 0
+          git push
