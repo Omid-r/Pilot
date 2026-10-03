@@ -511,7 +511,7 @@ async function startServer() {
   });
 
   // API: Direct execute interactive shell command from in-app Command Prompt console
-  app.post('/api/system/terminal/exec', async (req, res) => {
+  app.post('/api/system/terminal/exec', requireAuth, requireRoles('super_admin'), async (req, res) => {
     const { command, cwd = '/opt/splunk', toolId = 'command_prompt', toolNameFa = 'خط فرمان تعاملی', toolNameEn = 'Interactive Shell' } = req.body;
     if (!command || typeof command !== 'string') {
       return res.status(400).json({ error: 'Command string is required.' });
@@ -1237,8 +1237,8 @@ async function startServer() {
     const user = (req as any).user as UserAccount;
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword || String(newPassword).length < 8) {
-      return res.status(400).json({ error: 'کلمه عبور جدید باید حداقل ۸ کاراکتر باشد.' });
+    if (!currentPassword || !newPassword || String(newPassword).length < 12) {
+      return res.status(400).json({ error: 'کلمه عبور جدید باید حداقل ۱۲ کاراکتر باشد.' });
     }
 
     const store = getSecurityStore();
@@ -1621,12 +1621,15 @@ async function startServer() {
 
   // Helper function to resolve Splunk home directory based on serverType
   function resolveSplunkDirectory(req: express.Request): string {
-    const serverType = (req.query.serverType || req.body.serverType || req.query.target || req.body.target) as string;
-    const explicitDir = (req.query.targetDir || req.body.targetDir) as string;
-    if (explicitDir && fs.existsSync(explicitDir)) return explicitDir;
+    const serverType = String(req.query.serverType || req.body?.serverType || req.query.target || req.body?.target || '');
+    const explicitDir = String(req.query.targetDir || req.body?.targetDir || '').trim();
+    const allowed = new Set(['/opt/splunk','/opt/splunk_parallel']);
+    if (explicitDir && allowed.has(explicitDir)) return explicitDir;
     if (serverType === 'parallel' || serverType === 'staging') return '/opt/splunk_parallel';
     if (serverType === 'real' || serverType === 'primary' || serverType === 'production') return '/opt/splunk';
-    return process.env.SPLUNK_HOME || (fs.existsSync('/opt/splunk') ? '/opt/splunk' : (fs.existsSync('/opt/splunk_parallel') ? '/opt/splunk_parallel' : '/opt/splunk'));
+    return process.env.SPLUNK_HOME && allowed.has(process.env.SPLUNK_HOME)
+      ? process.env.SPLUNK_HOME
+      : (fs.existsSync('/opt/splunk') ? '/opt/splunk' : '/opt/splunk_parallel');
   }
 
   // API: Get Splunk service status
@@ -2244,7 +2247,7 @@ mgmtHostPort = 127.0.0.1:${restPort}
   });
 
   // API: Execute Master Runbook Script on Server CLI
-  app.post('/api/parallel-cluster/execute-runbook', async (req, res) => {
+  app.post('/api/parallel-cluster/execute-runbook', requireAuth, requireRoles('super_admin'), async (req, res) => {
     const { script } = req.body;
     if (!script || typeof script !== 'string') {
       return res.status(400).json({ error: 'Script parameter is required.' });
