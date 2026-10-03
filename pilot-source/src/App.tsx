@@ -102,14 +102,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'bento_overview',
     category: 'architecture',
-    categoryNameFa: 'معماری و ارکستراسیون',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ ط§ط±ع©ط³طھط±ط§ط³غŒظˆظ†',
     categoryNameEn: 'Architecture & Orchestration',
     domainColor: 'amber',
     iconName: 'SlidersHorizontal',
-    titleFa: 'داشبورد بنتو کلاستر اسپلانک (Bento Grid)',
+    titleFa: 'ط¯ط§ط´ط¨ظˆط±ط¯ ط¨ظ†طھظˆ ع©ظ„ط§ط³طھط± ط§ط³ظ¾ظ„ط§ظ†ع© (Bento Grid)',
     titleEn: 'Splunk Bento Architecture Console',
     badge: 'Bento Grid',
-    descriptionFa: 'کنسول جامع و ماژولار بنتو گرید شامل پایش زنده سوکت‌ها، رادار هارت‌بیت، داکر و ممیزی SVA',
+    descriptionFa: 'ع©ظ†ط³ظˆظ„ ط¬ط§ظ…ط¹ ظˆ ظ…ط§عکظˆظ„ط§ط± ط¨ظ†طھظˆ ع¯ط±غŒط¯ ط´ط§ظ…ظ„ ظ¾ط§غŒط´ ط²ظ†ط¯ظ‡ ط³ظˆع©طھâ€Œظ‡ط§طŒ ط±ط§ط¯ط§ط± ظ‡ط§ط±طھâ€Œط¨غŒطھطŒ ط¯ط§ع©ط± ظˆ ظ…ظ…غŒط²غŒ SVA',
     descriptionEn: 'Modular Bento Grid operations console with live telemetry, port channels and SVA audit',
     isEnabled: true,
     order: 0
@@ -117,14 +117,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'architect_overseer',
     category: 'architecture',
-    categoryNameFa: 'ناظر و مدیر ارشد معمار',
+    categoryNameFa: 'ظ†ط§ط¸ط± ظˆ ظ…ط¯غŒط± ط§ط±ط´ط¯ ظ…ط¹ظ…ط§ط±',
     categoryNameEn: 'Master Architect Overseer',
     domainColor: 'amber',
     iconName: 'ShieldCheck',
-    titleFa: 'انجین ناظر و مدیر معمار اسپلانک (Overseer Engine)',
+    titleFa: 'ط§ظ†ط¬غŒظ† ظ†ط§ط¸ط± ظˆ ظ…ط¯غŒط± ظ…ط¹ظ…ط§ط± ط§ط³ظ¾ظ„ط§ظ†ع© (Overseer Engine)',
     titleEn: 'Splunk Master Architect Overseer Engine',
     badge: 'Overseer',
-    descriptionFa: 'پایش لایه به لایه، پایش گام‌های مرحله‌ای، عیب‌یابی خودکار کانفیگ‌ها و پاکسازی کش سرورهای حذف‌شده',
+    descriptionFa: 'ظ¾ط§غŒط´ ظ„ط§غŒظ‡ ط¨ظ‡ ظ„ط§غŒظ‡طŒ ظ¾ط§غŒط´ ع¯ط§ظ…â€Œظ‡ط§غŒ ظ…ط±ط­ظ„ظ‡â€Œط§غŒطŒ ط¹غŒط¨â€ŒغŒط§ط¨غŒ ط®ظˆط¯ع©ط§ط± ع©ط§ظ†ظپغŒع¯â€Œظ‡ط§ ظˆ ظ¾ط§ع©ط³ط§ط²غŒ ع©ط´ ط³ط±ظˆط±ظ‡ط§غŒ ط­ط°ظپâ€Œط´ط¯ظ‡',
     descriptionEn: 'Layered monitoring, step-by-step pipeline audit, auto-healing configs, and stale cache purge',
     isEnabled: true,
     order: 1
@@ -132,14 +132,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'autonomous_agent',
     category: 'health_logs',
-    categoryNameFa: 'هوش مصنوعی و ارکستراسیون',
+    categoryNameFa: 'ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ ظˆ ط§ط±ع©ط³طھط±ط§ط³غŒظˆظ†',
     categoryNameEn: 'Autonomous AI Orchestrator',
     domainColor: 'cyan',
     iconName: 'Sparkles',
-    titleFa: 'هوش مصنوعی خودکار و آفلاین مهندسی اسپلانک و کوبرنتیز',
+    titleFa: 'ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ ط®ظˆط¯ع©ط§ط± ظˆ ط¢ظپظ„ط§غŒظ† ظ…ظ‡ظ†ط¯ط³غŒ ط§ط³ظ¾ظ„ط§ظ†ع© ظˆ ع©ظˆط¨ط±ظ†طھغŒط²',
     titleEn: 'Autonomous Offline AI Splunk & K8s Architect',
     badge: 'AI Autonomous',
-    descriptionFa: 'شناسایی هوشمند سرورها، نصب خودکار کوبرنتیز و داکر، استقرار نسخه‌های اسپلانک، عیب‌یابی عمیق و اخذ تایید قبل از اجرا',
+    descriptionFa: 'ط´ظ†ط§ط³ط§غŒغŒ ظ‡ظˆط´ظ…ظ†ط¯ ط³ط±ظˆط±ظ‡ط§طŒ ظ†طµط¨ ط®ظˆط¯ع©ط§ط± ع©ظˆط¨ط±ظ†طھغŒط² ظˆ ط¯ط§ع©ط±طŒ ط§ط³طھظ‚ط±ط§ط± ظ†ط³ط®ظ‡â€Œظ‡ط§غŒ ط§ط³ظ¾ظ„ط§ظ†ع©طŒ ط¹غŒط¨â€ŒغŒط§ط¨غŒ ط¹ظ…غŒظ‚ ظˆ ط§ط®ط° طھط§غŒغŒط¯ ظ‚ط¨ظ„ ط§ط² ط§ط¬ط±ط§',
     descriptionEn: 'Fleet discovery, offline K8s/Docker provisioning, multi-version deploy, deep auto-healing with human-in-the-loop approvals',
     isEnabled: true,
     order: 2
@@ -147,14 +147,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'ai_diagnostics',
     category: 'health_logs',
-    categoryNameFa: 'عیب‌یابی و هوش مصنوعی',
+    categoryNameFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ ظˆ ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ',
     categoryNameEn: 'AI Diagnostics & Auto-Heal',
     domainColor: 'cyan',
     iconName: 'Sparkles',
-    titleFa: 'خطایاب دقیق و هوش مصنوعی لوکال (AI Auto-Healer)',
+    titleFa: 'ط®ط·ط§غŒط§ط¨ ط¯ظ‚غŒظ‚ ظˆ ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ ظ„ظˆع©ط§ظ„ (AI Auto-Healer)',
     titleEn: 'Splunk Deep Diagnostic & AI Auto-Healer',
     badge: 'AI Self-Heal',
-    descriptionFa: 'خطایابی عمیق ریشه‌ای، بررسی تداخل سوکت‌ها، همگام‌سازی web.conf، پودمن آفلاین و رفع خودکار تمام مشکلات',
+    descriptionFa: 'ط®ط·ط§غŒط§ط¨غŒ ط¹ظ…غŒظ‚ ط±غŒط´ظ‡â€Œط§غŒطŒ ط¨ط±ط±ط³غŒ طھط¯ط§ط®ظ„ ط³ظˆع©طھâ€Œظ‡ط§طŒ ظ‡ظ…ع¯ط§ظ…â€Œط³ط§ط²غŒ web.confطŒ ظ¾ظˆط¯ظ…ظ† ط¢ظپظ„ط§غŒظ† ظˆ ط±ظپط¹ ط®ظˆط¯ع©ط§ط± طھظ…ط§ظ… ظ…ط´ع©ظ„ط§طھ',
     descriptionEn: 'Deep root-cause diagnostics, socket lock freeing, web.conf sync & autonomous background local AI remediation',
     isEnabled: true,
     order: 3
@@ -162,14 +162,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'cluster_deployer',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'cyan',
     iconName: 'Zap',
-    titleFa: 'استقرار خودکار کلاستر (Deployer)',
+    titleFa: 'ط§ط³طھظ‚ط±ط§ط± ط®ظˆط¯ع©ط§ط± ع©ظ„ط§ط³طھط± (Deployer)',
     titleEn: 'End-to-End Cluster Deployer',
     badge: 'Zero-Touch',
-    descriptionFa: 'ارکستراسیون از پایه: دسترسی روت/LOM، محاسبه LOM، نصب OS، امن‌سازی، داکر، کوبر و کلاستر اسپلانک',
+    descriptionFa: 'ط§ط±ع©ط³طھط±ط§ط³غŒظˆظ† ط§ط² ظ¾ط§غŒظ‡: ط¯ط³طھط±ط³غŒ ط±ظˆطھ/LOMطŒ ظ…ط­ط§ط³ط¨ظ‡ LOMطŒ ظ†طµط¨ OSطŒ ط§ظ…ظ†â€Œط³ط§ط²غŒطŒ ط¯ط§ع©ط±طŒ ع©ظˆط¨ط± ظˆ ع©ظ„ط§ط³طھط± ط§ط³ظ¾ظ„ط§ظ†ع©',
     descriptionEn: 'Automated Bare-Metal LOM, Sizing, OS install, Hardening, Docker/K8s & Splunk',
     isEnabled: true,
     order: 4
@@ -177,14 +177,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'architecture_auditor',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'amber',
     iconName: 'Building2',
-    titleFa: 'ممیزی معماری SVA',
+    titleFa: 'ظ…ظ…غŒط²غŒ ظ…ط¹ظ…ط§ط±غŒ SVA',
     titleEn: 'SVA Architecture Audit',
     badge: 'SVA C11',
-    descriptionFa: 'سایزینگ سخت‌افزار، تطبیق با استانداردهای رسمی Splunk Validated Architectures',
+    descriptionFa: 'ط³ط§غŒط²غŒظ†ع¯ ط³ط®طھâ€Œط§ظپط²ط§ط±طŒ طھط·ط¨غŒظ‚ ط¨ط§ ط§ط³طھط§ظ†ط¯ط§ط±ط¯ظ‡ط§غŒ ط±ط³ظ…غŒ Splunk Validated Architectures',
     descriptionEn: 'Hardware sizing, node capacity and SVA C11 compliance auditor',
     isEnabled: true,
     order: 5
@@ -192,14 +192,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'topology',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'amber',
     iconName: 'Layers',
-    titleFa: 'توپولوژی و دیاگرام پورت‌ها',
+    titleFa: 'طھظˆظ¾ظˆظ„ظˆعکغŒ ظˆ ط¯غŒط§ع¯ط±ط§ظ… ظ¾ظˆط±طھâ€Œظ‡ط§',
     titleEn: 'Topology & Port Flow',
     badge: 'Ports',
-    descriptionFa: 'نمایش گرافیکی نودها، پورت‌های ارتباطی و مسیر جریان دیتا',
+    descriptionFa: 'ظ†ظ…ط§غŒط´ ع¯ط±ط§ظپغŒع©غŒ ظ†ظˆط¯ظ‡ط§طŒ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط§ط±طھط¨ط§ط·غŒ ظˆ ظ…ط³غŒط± ط¬ط±غŒط§ظ† ط¯غŒطھط§',
     descriptionEn: 'Visual node topology and port channel communications map',
     isEnabled: true,
     order: 6
@@ -207,14 +207,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'management_nodes',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'amber',
     iconName: 'Server',
-    titleFa: 'نودهای مدیریتی کلاستر',
+    titleFa: 'ظ†ظˆط¯ظ‡ط§غŒ ظ…ط¯غŒط±غŒطھغŒ ع©ظ„ط§ط³طھط±',
     titleEn: 'Management Nodes',
     badge: 'LM/CM/DS',
-    descriptionFa: 'مدیریت License Master، Cluster Master، Deployer و Deployment Server',
+    descriptionFa: 'ظ…ط¯غŒط±غŒطھ License MasterطŒ Cluster MasterطŒ Deployer ظˆ Deployment Server',
     descriptionEn: 'Cluster Master, License Master, Deployer and Deployment Server control',
     isEnabled: true,
     order: 7
@@ -222,14 +222,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'commercial_license',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'amber',
     iconName: 'Award',
-    titleFa: 'لایسنس تجاری و PKI',
+    titleFa: 'ظ„ط§غŒط³ظ†ط³ طھط¬ط§ط±غŒ ظˆ PKI',
     titleEn: 'Commercial PKI License',
     badge: 'PKI Cert',
-    descriptionFa: 'وضعیت لایسنس دیجیتال سازمانی و تحلیل زنجیره گواهینامه امنیتی',
+    descriptionFa: 'ظˆط¶ط¹غŒطھ ظ„ط§غŒط³ظ†ط³ ط¯غŒط¬غŒطھط§ظ„ ط³ط§ط²ظ…ط§ظ†غŒ ظˆ طھط­ظ„غŒظ„ ط²ظ†ط¬غŒط±ظ‡ ع¯ظˆط§ظ‡غŒظ†ط§ظ…ظ‡ ط§ظ…ظ†غŒطھغŒ',
     descriptionEn: 'Enterprise commercial license certificate and PKI verification',
     isEnabled: true,
     order: 8
@@ -237,14 +237,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'parallel_provisioning',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'cyan',
     iconName: 'Boxes',
-    titleFa: 'راه‌اندازی و کلاستر موازی (Docker/K8s)',
+    titleFa: 'ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ظˆ ع©ظ„ط§ط³طھط± ظ…ظˆط§ط²غŒ (Docker/K8s)',
     titleEn: 'Parallel Cluster Studio (Docker/K8s)',
     badge: 'Parallel 5-Step',
-    descriptionFa: 'ارکستراسیون گام‌به‌گام راه‌اندازی در داکر/کوبر، نصب اسپلانک، بازگشایی پورت‌ها، ورود به وب، خطایاب هوشمند و مدیریت ناوگان سرورها',
+    descriptionFa: 'ط§ط±ع©ط³طھط±ط§ط³غŒظˆظ† ع¯ط§ظ…â€Œط¨ظ‡â€Œع¯ط§ظ… ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ط¯ط± ط¯ط§ع©ط±/ع©ظˆط¨ط±طŒ ظ†طµط¨ ط§ط³ظ¾ظ„ط§ظ†ع©طŒ ط¨ط§ط²ع¯ط´ط§غŒغŒ ظ¾ظˆط±طھâ€Œظ‡ط§طŒ ظˆط±ظˆط¯ ط¨ظ‡ ظˆط¨طŒ ط®ط·ط§غŒط§ط¨ ظ‡ظˆط´ظ…ظ†ط¯ ظˆ ظ…ط¯غŒط±غŒطھ ظ†ط§ظˆع¯ط§ظ† ط³ط±ظˆط±ظ‡ط§',
     descriptionEn: '5-step guided pipeline for parallel Docker/K8s provisioning, zero-collision port mapping, web troubleshooter & multi-server fleet',
     isEnabled: true,
     order: 9
@@ -252,14 +252,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'docker_k8s',
     category: 'architecture',
-    categoryNameFa: 'معماری و SVA',
+    categoryNameFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
     categoryNameEn: 'Architecture & SVA',
     domainColor: 'cyan',
     iconName: 'Box',
-    titleFa: 'داکر، کوبرنتیز و Operator',
+    titleFa: 'ط¯ط§ع©ط±طŒ ع©ظˆط¨ط±ظ†طھغŒط² ظˆ Operator',
     titleEn: 'Docker, K8s & Splunk Operator',
     badge: 'Containers',
-    descriptionFa: 'مدیریت و استقرار کلاستر روی Docker Compose، کوبرنتیز و Splunk Operator (SOK)',
+    descriptionFa: 'ظ…ط¯غŒط±غŒطھ ظˆ ط§ط³طھظ‚ط±ط§ط± ع©ظ„ط§ط³طھط± ط±ظˆغŒ Docker ComposeطŒ ع©ظˆط¨ط±ظ†طھغŒط² ظˆ Splunk Operator (SOK)',
     descriptionEn: 'Deploy & manage Splunk on Docker Compose, Kubernetes and Splunk Operator',
     isEnabled: true,
     order: 9.5
@@ -267,14 +267,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'health_audit',
     category: 'health_logs',
-    categoryNameFa: 'عیب‌یابی و سلامت',
+    categoryNameFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ ظˆ ط³ظ„ط§ظ…طھ',
     categoryNameEn: 'Health & Diagnostics',
     domainColor: 'rose',
     iconName: 'Activity',
-    titleFa: 'تشخیص خطاها و سلامت',
+    titleFa: 'طھط´ط®غŒطµ ط®ط·ط§ظ‡ط§ ظˆ ط³ظ„ط§ظ…طھ',
     titleEn: 'Health Audit & Findings',
     badge: 'Audit',
-    descriptionFa: 'موتور ممیزی خودکار فایل‌های کانفیگ و ارائه راهکارهای رفع اشکال',
+    descriptionFa: 'ظ…ظˆطھظˆط± ظ…ظ…غŒط²غŒ ط®ظˆط¯ع©ط§ط± ظپط§غŒظ„â€Œظ‡ط§غŒ ع©ط§ظ†ظپغŒع¯ ظˆ ط§ط±ط§ط¦ظ‡ ط±ط§ظ‡ع©ط§ط±ظ‡ط§غŒ ط±ظپط¹ ط§ط´ع©ط§ظ„',
     descriptionEn: 'Config automated audit engine and multi-option remediation',
     isEnabled: true,
     order: 10
@@ -282,14 +282,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'live_logs',
     category: 'health_logs',
-    categoryNameFa: 'عیب‌یابی و سلامت',
+    categoryNameFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ ظˆ ط³ظ„ط§ظ…طھ',
     categoryNameEn: 'Health & Diagnostics',
     domainColor: 'rose',
     iconName: 'Terminal',
-    titleFa: 'پایش زنده splunkd.log',
+    titleFa: 'ظ¾ط§غŒط´ ط²ظ†ط¯ظ‡ splunkd.log',
     titleEn: 'Live splunkd.log Tails',
     badge: 'Live',
-    descriptionFa: 'بررسی ریل‌تایم لاگ‌های سرور و ارائه دستور و راهکار با کلیک روی لاگ',
+    descriptionFa: 'ط¨ط±ط±ط³غŒ ط±غŒظ„â€Œطھط§غŒظ… ظ„ط§ع¯â€Œظ‡ط§غŒ ط³ط±ظˆط± ظˆ ط§ط±ط§ط¦ظ‡ ط¯ط³طھظˆط± ظˆ ط±ط§ظ‡ع©ط§ط± ط¨ط§ ع©ظ„غŒع© ط±ظˆغŒ ظ„ط§ع¯',
     descriptionEn: 'Real-time log tail stream with interactive one-click fix',
     isEnabled: true,
     order: 11
@@ -297,14 +297,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'config_editor',
     category: 'health_logs',
-    categoryNameFa: 'عیب‌یابی و سلامت',
+    categoryNameFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ ظˆ ط³ظ„ط§ظ…طھ',
     categoryNameEn: 'Health & Diagnostics',
     domainColor: 'rose',
     iconName: 'FileCode',
-    titleFa: 'ویرایشگر فایل‌های کانفیگ',
+    titleFa: 'ظˆغŒط±ط§غŒط´ع¯ط± ظپط§غŒظ„â€Œظ‡ط§غŒ ع©ط§ظ†ظپغŒع¯',
     titleEn: 'Live Config Editor',
     badge: 'Editor',
-    descriptionFa: 'ویرایشگر حرفه‌ای فایل‌های .conf همراه با Syntax Validator و مقایسه تغییرات',
+    descriptionFa: 'ظˆغŒط±ط§غŒط´ع¯ط± ط­ط±ظپظ‡â€Œط§غŒ ظپط§غŒظ„â€Œظ‡ط§غŒ .conf ظ‡ظ…ط±ط§ظ‡ ط¨ط§ Syntax Validator ظˆ ظ…ظ‚ط§غŒط³ظ‡ طھط؛غŒغŒط±ط§طھ',
     descriptionEn: 'Real-time .conf editor with syntax check and diff viewer',
     isEnabled: true,
     order: 12
@@ -312,14 +312,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'doc_reference',
     category: 'health_logs',
-    categoryNameFa: 'عیب‌یابی و سلامت',
+    categoryNameFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ ظˆ ط³ظ„ط§ظ…طھ',
     categoryNameEn: 'Health & Diagnostics',
     domainColor: 'rose',
     iconName: 'BookOpen',
-    titleFa: 'مرکز مستندات رسمی اسپلانک',
+    titleFa: 'ظ…ط±ع©ط² ظ…ط³طھظ†ط¯ط§طھ ط±ط³ظ…غŒ ط§ط³ظ¾ظ„ط§ظ†ع©',
     titleEn: 'Splunk Docs Knowledge Base',
     badge: 'Docs',
-    descriptionFa: 'دسترسی آفلاین و آنلاین به مستندات رسمی، جستجو و اعمال مستقیم تنظیمات',
+    descriptionFa: 'ط¯ط³طھط±ط³غŒ ط¢ظپظ„ط§غŒظ† ظˆ ط¢ظ†ظ„ط§غŒظ† ط¨ظ‡ ظ…ط³طھظ†ط¯ط§طھ ط±ط³ظ…غŒطŒ ط¬ط³طھط¬ظˆ ظˆ ط§ط¹ظ…ط§ظ„ ظ…ط³طھظ‚غŒظ… طھظ†ط¸غŒظ…ط§طھ',
     descriptionEn: 'Official Splunk docs repository with offline package and direct search',
     isEnabled: true,
     order: 13
@@ -327,14 +327,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'heartbeat_radar',
     category: 'radar_ingest',
-    categoryNameFa: 'رادار و ورودی‌ها',
+    categoryNameFa: 'ط±ط§ط¯ط§ط± ظˆ ظˆط±ظˆط¯غŒâ€Œظ‡ط§',
     categoryNameEn: 'Radar & Ingestion',
     domainColor: 'emerald',
     iconName: 'Radio',
-    titleFa: 'رادار هارت‌بیت و قطعی لاگ',
+    titleFa: 'ط±ط§ط¯ط§ط± ظ‡ط§ط±طھâ€Œط¨غŒطھ ظˆ ظ‚ط·ط¹غŒ ظ„ط§ع¯',
     titleEn: 'Live Heartbeat Radar',
     badge: '30s Sweep',
-    descriptionFa: 'پایش بلادرنگ ضربان قلب نودها و شناسایی توقف جریان لاگ‌ها',
+    descriptionFa: 'ظ¾ط§غŒط´ ط¨ظ„ط§ط¯ط±ظ†ع¯ ط¶ط±ط¨ط§ظ† ظ‚ظ„ط¨ ظ†ظˆط¯ظ‡ط§ ظˆ ط´ظ†ط§ط³ط§غŒغŒ طھظˆظ‚ظپ ط¬ط±غŒط§ظ† ظ„ط§ع¯â€Œظ‡ط§',
     descriptionEn: 'Real-time heartbeat monitoring matrix & outage detector',
     isEnabled: true,
     order: 14
@@ -342,14 +342,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'alert_manager',
     category: 'radar_ingest',
-    categoryNameFa: 'رادار و ورودی‌ها',
+    categoryNameFa: 'ط±ط§ط¯ط§ط± ظˆ ظˆط±ظˆط¯غŒâ€Œظ‡ط§',
     categoryNameEn: 'Radar & Ingestion',
     domainColor: 'emerald',
     iconName: 'Bell',
-    titleFa: 'مرکز اعلان و هشدارها',
+    titleFa: 'ظ…ط±ع©ط² ط§ط¹ظ„ط§ظ† ظˆ ظ‡ط´ط¯ط§ط±ظ‡ط§',
     titleEn: 'Alert Notification Center',
     badge: 'Alerts',
-    descriptionFa: 'ارسال خودکار اعلان‌ها از طریق SMS، ایمیل و وب‌هوک SOC',
+    descriptionFa: 'ط§ط±ط³ط§ظ„ ط®ظˆط¯ع©ط§ط± ط§ط¹ظ„ط§ظ†â€Œظ‡ط§ ط§ط² ط·ط±غŒظ‚ SMSطŒ ط§غŒظ…غŒظ„ ظˆ ظˆط¨â€Œظ‡ظˆع© SOC',
     descriptionEn: 'Automated alert routing via SMS, Email and SOC Webhook',
     isEnabled: true,
     order: 15
@@ -357,14 +357,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'network_sources',
     category: 'radar_ingest',
-    categoryNameFa: 'رادار و ورودی‌ها',
+    categoryNameFa: 'ط±ط§ط¯ط§ط± ظˆ ظˆط±ظˆط¯غŒâ€Œظ‡ط§',
     categoryNameEn: 'Radar & Ingestion',
     domainColor: 'emerald',
     iconName: 'Wifi',
-    titleFa: 'نگاشت سورس‌ها و ایندکسرها',
+    titleFa: 'ظ†ع¯ط§ط´طھ ط³ظˆط±ط³â€Œظ‡ط§ ظˆ ط§غŒظ†ط¯ع©ط³ط±ظ‡ط§',
     titleEn: 'Source IPs & Ingest Map',
     badge: 'Ingest Map',
-    descriptionFa: 'مدیریت و نگاشت منابع لاگ به پایپ‌لاین‌ها و پورت‌های ایندکسر',
+    descriptionFa: 'ظ…ط¯غŒط±غŒطھ ظˆ ظ†ع¯ط§ط´طھ ظ…ظ†ط§ط¨ط¹ ظ„ط§ع¯ ط¨ظ‡ ظ¾ط§غŒظ¾â€Œظ„ط§غŒظ†â€Œظ‡ط§ ظˆ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط§غŒظ†ط¯ع©ط³ط±',
     descriptionEn: 'Network source IP topology and indexer pipeline mapping',
     isEnabled: true,
     order: 16
@@ -372,14 +372,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'component_agents',
     category: 'agents_gateway',
-    categoryNameFa: 'ایجنت‌ها و درگاه',
+    categoryNameFa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§ ظˆ ط¯ط±ع¯ط§ظ‡',
     categoryNameEn: 'Agents & Gateway',
     domainColor: 'cyan',
     iconName: 'Package',
-    titleFa: 'ایجنت‌های اختصاصی (UF/HF)',
+    titleFa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§غŒ ط§ط®طھطµط§طµغŒ (UF/HF)',
     titleEn: 'Component Agents Generator',
     badge: 'Zero-Trust',
-    descriptionFa: 'ژنراتور خودکار پکیج‌های نصبی آماده با کانفیگ، سرتیفیکت و اسکریپت نصب',
+    descriptionFa: 'عکظ†ط±ط§طھظˆط± ط®ظˆط¯ع©ط§ط± ظ¾ع©غŒط¬â€Œظ‡ط§غŒ ظ†طµط¨غŒ ط¢ظ…ط§ط¯ظ‡ ط¨ط§ ع©ط§ظ†ظپغŒع¯طŒ ط³ط±طھغŒظپغŒع©طھ ظˆ ط§ط³ع©ط±غŒظ¾طھ ظ†طµط¨',
     descriptionEn: 'Tailored agent packages with hardened configs and deployment scripts',
     isEnabled: true,
     order: 17
@@ -387,14 +387,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'remote_gateway',
     category: 'agents_gateway',
-    categoryNameFa: 'ایجنت‌ها و درگاه',
+    categoryNameFa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§ ظˆ ط¯ط±ع¯ط§ظ‡',
     categoryNameEn: 'Agents & Gateway',
     domainColor: 'cyan',
     iconName: 'Globe',
-    titleFa: 'درگاه کنترل از راه دور (mTLS)',
+    titleFa: 'ط¯ط±ع¯ط§ظ‡ ع©ظ†طھط±ظ„ ط§ط² ط±ط§ظ‡ ط¯ظˆط± (mTLS)',
     titleEn: 'Secure Remote Gateway',
     badge: 'mTLS',
-    descriptionFa: 'ترمینال امن mTLS و SSH برای اجرای دستورات و دیاگ از راه دور روی نودها',
+    descriptionFa: 'طھط±ظ…غŒظ†ط§ظ„ ط§ظ…ظ† mTLS ظˆ SSH ط¨ط±ط§غŒ ط§ط¬ط±ط§غŒ ط¯ط³طھظˆط±ط§طھ ظˆ ط¯غŒط§ع¯ ط§ط² ط±ط§ظ‡ ط¯ظˆط± ط±ظˆغŒ ظ†ظˆط¯ظ‡ط§',
     descriptionEn: 'Zero-trust remote command execution & diagnostics terminal',
     isEnabled: true,
     order: 18
@@ -402,14 +402,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'package_center',
     category: 'agents_gateway',
-    categoryNameFa: 'ایجنت‌ها و درگاه',
+    categoryNameFa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§ ظˆ ط¯ط±ع¯ط§ظ‡',
     categoryNameEn: 'Agents & Gateway',
     domainColor: 'cyan',
     iconName: 'HardDrive',
-    titleFa: 'مرکز تحویل پکیج‌های نصب',
+    titleFa: 'ظ…ط±ع©ط² طھط­ظˆغŒظ„ ظ¾ع©غŒط¬â€Œظ‡ط§غŒ ظ†طµط¨',
     titleEn: 'Package Delivery Center',
     badge: 'Binaries',
-    descriptionFa: 'دانلود پکیج‌های tar.gz، deb، rpm، msi و اسکریپت‌های استقرار خودکار',
+    descriptionFa: 'ط¯ط§ظ†ظ„ظˆط¯ ظ¾ع©غŒط¬â€Œظ‡ط§غŒ tar.gzطŒ debطŒ rpmطŒ msi ظˆ ط§ط³ع©ط±غŒظ¾طھâ€Œظ‡ط§غŒ ط§ط³طھظ‚ط±ط§ط± ط®ظˆط¯ع©ط§ط±',
     descriptionEn: 'Download native Splunk packages, binaries and auto-install scripts',
     isEnabled: true,
     order: 19
@@ -417,14 +417,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'backup_archive',
     category: 'tools_security',
-    categoryNameFa: 'ابزارها و امنیت',
+    categoryNameFa: 'ط§ط¨ط²ط§ط±ظ‡ط§ ظˆ ط§ظ…ظ†غŒطھ',
     categoryNameEn: 'Tools & Security',
     domainColor: 'purple',
     iconName: 'Archive',
-    titleFa: 'آرشیو نسخه‌های پشتیبان',
+    titleFa: 'ط¢ط±ط´غŒظˆ ظ†ط³ط®ظ‡â€Œظ‡ط§غŒ ظ¾ط´طھغŒط¨ط§ظ†',
     titleEn: 'Backup Snapshots Archive',
     badge: 'Rollback',
-    descriptionFa: 'مدیریت اسنپ‌شات‌های پیکربندی و بازگردانی سریع (Rollback) نسخه‌ها',
+    descriptionFa: 'ظ…ط¯غŒط±غŒطھ ط§ط³ظ†ظ¾â€Œط´ط§طھâ€Œظ‡ط§غŒ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ ظˆ ط¨ط§ط²ع¯ط±ط¯ط§ظ†غŒ ط³ط±غŒط¹ (Rollback) ظ†ط³ط®ظ‡â€Œظ‡ط§',
     descriptionEn: 'Configuration snapshot archive with one-click restore and rollback',
     isEnabled: true,
     order: 20
@@ -432,14 +432,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'network_toolbox',
     category: 'tools_security',
-    categoryNameFa: 'ابزارها و امنیت',
+    categoryNameFa: 'ط§ط¨ط²ط§ط±ظ‡ط§ ظˆ ط§ظ…ظ†غŒطھ',
     categoryNameEn: 'Tools & Security',
     domainColor: 'purple',
     iconName: 'Wrench',
-    titleFa: 'جعبه ابزار شبکه و تست پورت‌ها',
+    titleFa: 'ط¬ط¹ط¨ظ‡ ط§ط¨ط²ط§ط± ط´ط¨ع©ظ‡ ظˆ طھط³طھ ظ¾ظˆط±طھâ€Œظ‡ط§',
     titleEn: 'Network Toolbox & Ports',
     badge: 'Probes',
-    descriptionFa: 'ابزارهای تست سوکت TCP، اعتبارسنجی پورت‌ها و تحلیل تاخیر شبکه',
+    descriptionFa: 'ط§ط¨ط²ط§ط±ظ‡ط§غŒ طھط³طھ ط³ظˆع©طھ TCPطŒ ط§ط¹طھط¨ط§ط±ط³ظ†ط¬غŒ ظ¾ظˆط±طھâ€Œظ‡ط§ ظˆ طھط­ظ„غŒظ„ طھط§ط®غŒط± ط´ط¨ع©ظ‡',
     descriptionEn: 'TCP socket probing, port reachability checks and latency tests',
     isEnabled: true,
     order: 21
@@ -447,14 +447,14 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
   {
     id: 'admin_security',
     category: 'tools_security',
-    categoryNameFa: 'ابزارها و امنیت',
+    categoryNameFa: 'ط§ط¨ط²ط§ط±ظ‡ط§ ظˆ ط§ظ…ظ†غŒطھ',
     categoryNameEn: 'Tools & Security',
     domainColor: 'purple',
     iconName: 'Shield',
-    titleFa: 'پنل مدیریت، امنیت و کاربران',
+    titleFa: 'ظ¾ظ†ظ„ ظ…ط¯غŒط±غŒطھطŒ ط§ظ…ظ†غŒطھ ظˆ ع©ط§ط±ط¨ط±ط§ظ†',
     titleEn: 'Admin & Security Control',
     badge: 'RBAC',
-    descriptionFa: 'کنترل دسترسی مبتنی بر نقش (RBAC)، مدیریت کاربران و لاگ‌های ممیزی امنیتی',
+    descriptionFa: 'ع©ظ†طھط±ظ„ ط¯ط³طھط±ط³غŒ ظ…ط¨طھظ†غŒ ط¨ط± ظ†ظ‚ط´ (RBAC)طŒ ظ…ط¯غŒط±غŒطھ ع©ط§ط±ط¨ط±ط§ظ† ظˆ ظ„ط§ع¯â€Œظ‡ط§غŒ ظ…ظ…غŒط²غŒ ط§ظ…ظ†غŒطھغŒ',
     descriptionEn: 'Role-based access control (RBAC), user provisioning and audit trails',
     isEnabled: true,
     order: 22
@@ -490,13 +490,13 @@ export default function App() {
   const handleUpdateModules = (newModules: AppModuleConfig[]) => {
     setModulesConfig(newModules);
     localStorage.setItem('splunk_doctor_custom_modules', JSON.stringify(newModules));
-    showToast(isFa ? 'چیدمان و ماژول‌های سامانه با موفقیت ذخیره شد.' : 'Modules configuration saved.');
+    showToast(isFa ? 'ع†غŒط¯ظ…ط§ظ† ظˆ ظ…ط§عکظˆظ„â€Œظ‡ط§غŒ ط³ط§ظ…ط§ظ†ظ‡ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط°ط®غŒط±ظ‡ ط´ط¯.' : 'Modules configuration saved.');
   };
 
   const handleUpdateDefaultTab = (newDefault: string) => {
     setDefaultLaunchTab(newDefault);
     localStorage.setItem('splunk_doctor_default_tab', newDefault);
-    showToast(isFa ? 'صفحه پیش‌فرض ورود به برنامه تغییر یافت.' : 'Default startup screen updated.');
+    showToast(isFa ? 'طµظپط­ظ‡ ظ¾غŒط´â€Œظپط±ط¶ ظˆط±ظˆط¯ ط¨ظ‡ ط¨ط±ظ†ط§ظ…ظ‡ طھط؛غŒغŒط± غŒط§ظپطھ.' : 'Default startup screen updated.');
   };
 
   const handleResetToDefaults = () => {
@@ -504,7 +504,7 @@ export default function App() {
     setDefaultLaunchTab('bento_overview');
     localStorage.removeItem('splunk_doctor_custom_modules');
     localStorage.setItem('splunk_doctor_default_tab', 'bento_overview');
-    showToast(isFa ? 'تنظیمات و چیدمان برنامه به حالت اولیه بازنشانی شد.' : 'Restored factory default modules layout.');
+    showToast(isFa ? 'طھظ†ط¸غŒظ…ط§طھ ظˆ ع†غŒط¯ظ…ط§ظ† ط¨ط±ظ†ط§ظ…ظ‡ ط¨ظ‡ ط­ط§ظ„طھ ط§ظˆظ„غŒظ‡ ط¨ط§ط²ظ†ط´ط§ظ†غŒ ط´ط¯.' : 'Restored factory default modules layout.');
   };
 
   // Streamlined Consolidated Mode State
@@ -555,12 +555,12 @@ export default function App() {
 
   const handleToggleFloatingTool = (toolId: string) => {
     if (floatingTools.includes(toolId)) {
-      showToast(isFa ? 'این ابزار در حال حاضر در پنجره شناور در حال اجراست.' : 'This tool is already running in a floating window.');
+      showToast(isFa ? 'ط§غŒظ† ط§ط¨ط²ط§ط± ط¯ط± ط­ط§ظ„ ط­ط§ط¶ط± ط¯ط± ظ¾ظ†ط¬ط±ظ‡ ط´ظ†ط§ظˆط± ط¯ط± ط­ط§ظ„ ط§ط¬ط±ط§ط³طھ.' : 'This tool is already running in a floating window.');
       return;
     }
     setFloatingTools(prev => [...prev, toolId]);
     showToast(isFa 
-      ? 'ابزار در پنجره شناور (مشابه یوتیوب) قرار گرفت! می‌توانید آزادانه آن را جابه‌جا کرده و ابزارهای دیگر را همزمان اجرا کنید.' 
+      ? 'ط§ط¨ط²ط§ط± ط¯ط± ظ¾ظ†ط¬ط±ظ‡ ط´ظ†ط§ظˆط± (ظ…ط´ط§ط¨ظ‡ غŒظˆطھغŒظˆط¨) ظ‚ط±ط§ط± ع¯ط±ظپطھ! ظ…غŒâ€Œطھظˆط§ظ†غŒط¯ ط¢ط²ط§ط¯ط§ظ†ظ‡ ط¢ظ† ط±ط§ ط¬ط§ط¨ظ‡â€Œط¬ط§ ع©ط±ط¯ظ‡ ظˆ ط§ط¨ط²ط§ط±ظ‡ط§غŒ ط¯غŒع¯ط± ط±ط§ ظ‡ظ…ط²ظ…ط§ظ† ط§ط¬ط±ط§ ع©ظ†غŒط¯.' 
       : 'Tool popped into floating mini-player! You can drag it anywhere and run multiple tools simultaneously.');
   };
 
@@ -574,7 +574,7 @@ export default function App() {
       setActiveCategory(TAB_TO_CATEGORY[toolId]);
     }
     setFloatingTools(prev => prev.filter(id => id !== toolId));
-    showToast(isFa ? 'ابزار به صفحه اصلی بازگردانده شد.' : 'Tool restored to main workspace.');
+    showToast(isFa ? 'ط§ط¨ط²ط§ط± ط¨ظ‡ طµظپط­ظ‡ ط§طµظ„غŒ ط¨ط§ط²ع¯ط±ط¯ط§ظ†ط¯ظ‡ ط´ط¯.' : 'Tool restored to main workspace.');
   };
 
   // Global Ctrl+K / Cmd+K and Ctrl+B / Cmd+B Keyboard Shortcut Listener
@@ -618,7 +618,7 @@ export default function App() {
   const handleUpdateDigitalLicense = (updated: DigitalCertificateLicense) => {
     setDigitalLicense(updated);
     localStorage.setItem('splunk_doctor_commercial_license', JSON.stringify(updated));
-    showToast(isFa ? 'گواهینامه تجاری سازمان با موفقیت بروزرسانی و فعال شد.' : 'Commercial certificate updated.');
+    showToast(isFa ? 'ع¯ظˆط§ظ‡غŒظ†ط§ظ…ظ‡ طھط¬ط§ط±غŒ ط³ط§ط²ظ…ط§ظ† ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط¨ط±ظˆط²ط±ط³ط§ظ†غŒ ظˆ ظپط¹ط§ظ„ ط´ط¯.' : 'Commercial certificate updated.');
   };
 
   // Heartbeat & Live Ingestion Radar State
@@ -628,7 +628,7 @@ export default function App() {
 
   const handleAcknowledgeAlert = (alertId: string) => {
     setDropAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isAcknowledged: true } : a));
-    showToast(isFa ? 'هشدار تایید شد.' : 'Alert acknowledged.');
+    showToast(isFa ? 'ظ‡ط´ط¯ط§ط± طھط§غŒغŒط¯ ط´ط¯.' : 'Alert acknowledged.');
   };
 
   const handleSimulateDisconnect = (nodeId: string) => {
@@ -656,29 +656,29 @@ export default function App() {
         timestamp: new Date().toLocaleTimeString(),
         alertType: 'LOG_STREAM_HALTED',
         severity: 'CRITICAL',
-        messageFa: `قطع ناگهانی جریان لاگ و توقف ضربان قلب روی نود ${node.hostname}`,
+        messageFa: `ظ‚ط·ط¹ ظ†ط§ع¯ظ‡ط§ظ†غŒ ط¬ط±غŒط§ظ† ظ„ط§ع¯ ظˆ طھظˆظ‚ظپ ط¶ط±ط¨ط§ظ† ظ‚ظ„ط¨ ط±ظˆغŒ ظ†ظˆط¯ ${node.hostname}`,
         messageEn: `Sudden log stream halt & heartbeat timeout on ${node.hostname}`,
-        impactFa: 'احتمال توقف ایندکس‌گذاری لاگ‌های امنیتی این نود در SOC',
+        impactFa: 'ط§ط­طھظ…ط§ظ„ طھظˆظ‚ظپ ط§غŒظ†ط¯ع©ط³â€Œع¯ط°ط§ط±غŒ ظ„ط§ع¯â€Œظ‡ط§غŒ ط§ظ…ظ†غŒطھغŒ ط§غŒظ† ظ†ظˆط¯ ط¯ط± SOC',
         impactEn: 'Risk of security event blind spot in SOC ingestion pipeline',
-        recommendedActionFa: 'اتصال ریموت برقرار کرده و دستور splunk status / restart را اجرا نمایید.',
+        recommendedActionFa: 'ط§طھطµط§ظ„ ط±غŒظ…ظˆطھ ط¨ط±ظ‚ط±ط§ط± ع©ط±ط¯ظ‡ ظˆ ط¯ط³طھظˆط± splunk status / restart ط±ط§ ط§ط¬ط±ط§ ظ†ظ…ط§غŒغŒط¯.',
         recommendedActionEn: 'Connect via remote gateway and execute diagnostic commands.',
         isAcknowledged: false
       };
       setDropAlerts(prev => [newAlert, ...prev]);
-      showToast(isFa ? `هشدار: لاگ‌های ${node.hostname} قطع شدند!` : `Warning: Log stream halted on ${node.hostname}!`);
+      showToast(isFa ? `ظ‡ط´ط¯ط§ط±: ظ„ط§ع¯â€Œظ‡ط§غŒ ${node.hostname} ظ‚ط·ط¹ ط´ط¯ظ†ط¯!` : `Warning: Log stream halted on ${node.hostname}!`);
     }
   };
 
   const handleRecoverAllNodes = () => {
     setHeartbeatNodes(INITIAL_HEARTBEAT_NODES);
     setDropAlerts(prev => prev.map(a => ({ ...a, isAcknowledged: true })));
-    showToast(isFa ? 'تمام نودها به وضعیت آنلاین و پایدار بازیابی شدند.' : 'All nodes restored to healthy status.');
+    showToast(isFa ? 'طھظ…ط§ظ… ظ†ظˆط¯ظ‡ط§ ط¨ظ‡ ظˆط¶ط¹غŒطھ ط¢ظ†ظ„ط§غŒظ† ظˆ ظ¾ط§غŒط¯ط§ط± ط¨ط§ط²غŒط§ط¨غŒ ط´ط¯ظ†ط¯.' : 'All nodes restored to healthy status.');
   };
 
   const handleOpenRemoteTerminalFromNode = (node: HeartbeatNode) => {
     setRemoteTargetNode(node);
     setActiveTab('remote_gateway');
-    showToast(isFa ? `درگاه ریموت به نود ${node.hostname} متصل گردید.` : `Connected remote gateway to ${node.hostname}`);
+    showToast(isFa ? `ط¯ط±ع¯ط§ظ‡ ط±غŒظ…ظˆطھ ط¨ظ‡ ظ†ظˆط¯ ${node.hostname} ظ…طھطµظ„ ع¯ط±ط¯غŒط¯.` : `Connected remote gateway to ${node.hostname}`);
   };
 
   // Authentication & Security State
@@ -695,9 +695,9 @@ export default function App() {
     return null;
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
-  // Virtual Server Wipe & Lifecycle Modal State (مدیریت و حذف سرور مجازی)
+  // Virtual Server Wipe & Lifecycle Modal State (ظ…ط¯غŒط±غŒطھ ظˆ ط­ط°ظپ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ)
   const [isVirtualWipeModalOpen, setIsVirtualWipeModalOpen] = useState<boolean>(false);
-  // Tool Validation & Diagnostic Health Modal State (اعتبار سنجی ابزارهای سامانه)
+  // Tool Validation & Diagnostic Health Modal State (ط§ط¹طھط¨ط§ط± ط³ظ†ط¬غŒ ط§ط¨ط²ط§ط±ظ‡ط§غŒ ط³ط§ظ…ط§ظ†ظ‡)
   const [isToolValidationModalOpen, setIsToolValidationModalOpen] = useState<boolean>(false);
   const [validatingToolId, setValidatingToolId] = useState<string>('autonomous_agent');
 
@@ -711,13 +711,13 @@ export default function App() {
       id: 'op-init-1',
       timestamp: new Date(Date.now() - 45000).toISOString(),
       toolId: 'health_audit',
-      toolNameFa: 'موتور ممیزی سلامت کلاستر',
+      toolNameFa: 'ظ…ظˆطھظˆط± ظ…ظ…غŒط²غŒ ط³ظ„ط§ظ…طھ ع©ظ„ط§ط³طھط±',
       toolNameEn: 'Cluster Health Audit Engine',
-      actionSummaryFa: 'اسکن اولیه فایل‌های پیکربندی و اعتبارسنجی استنزاها',
+      actionSummaryFa: 'ط§ط³ع©ظ† ط§ظˆظ„غŒظ‡ ظپط§غŒظ„â€Œظ‡ط§غŒ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ ظˆ ط§ط¹طھط¨ط§ط±ط³ظ†ط¬غŒ ط§ط³طھظ†ط²ط§ظ‡ط§',
       actionSummaryEn: 'Initial configuration scan & stanza audit',
       status: 'success',
       durationMs: 14,
-      resultSummaryFa: 'تمام فایل‌های inputs.conf، outputs.conf و server.conf بدون تداخل بررسی شدند.',
+      resultSummaryFa: 'طھظ…ط§ظ… ظپط§غŒظ„â€Œظ‡ط§غŒ inputs.confطŒ outputs.conf ظˆ server.conf ط¨ط¯ظˆظ† طھط¯ط§ط®ظ„ ط¨ط±ط±ط³غŒ ط´ط¯ظ†ط¯.',
       resultSummaryEn: 'All config stanzas validated on disk without collision.',
       technicalDetails: 'Disk scan: /opt/splunk/etc/system/local/ | Stanzas verified: 34 | Error count: 0',
       isVerifiedReal: true
@@ -726,13 +726,13 @@ export default function App() {
       id: 'op-init-2',
       timestamp: new Date(Date.now() - 25000).toISOString(),
       toolId: 'network_toolbox',
-      toolNameFa: 'جعبه ابزار شبکه و پورت‌ها',
+      toolNameFa: 'ط¬ط¹ط¨ظ‡ ط§ط¨ط²ط§ط± ط´ط¨ع©ظ‡ ظˆ ظ¾ظˆط±طھâ€Œظ‡ط§',
       toolNameEn: 'Network & Port Toolbox',
-      actionSummaryFa: 'پایش سوکت‌های لیسنر سرور و پورت‌های اسپلانک (8000, 8089, 9997)',
+      actionSummaryFa: 'ظ¾ط§غŒط´ ط³ظˆع©طھâ€Œظ‡ط§غŒ ظ„غŒط³ظ†ط± ط³ط±ظˆط± ظˆ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط§ط³ظ¾ظ„ط§ظ†ع© (8000, 8089, 9997)',
       actionSummaryEn: 'Server listening sockets & Splunk ports probe',
       status: 'success',
       durationMs: 11,
-      resultSummaryFa: 'پورت‌های شبکه در هسته لینوکس فعال هستند و تداخلی با سایر پروسه‌ها ندارند.',
+      resultSummaryFa: 'ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط´ط¨ع©ظ‡ ط¯ط± ظ‡ط³طھظ‡ ظ„غŒظ†ظˆع©ط³ ظپط¹ط§ظ„ ظ‡ط³طھظ†ط¯ ظˆ طھط¯ط§ط®ظ„غŒ ط¨ط§ ط³ط§غŒط± ظ¾ط±ظˆط³ظ‡â€Œظ‡ط§ ظ†ط¯ط§ط±ظ†ط¯.',
       resultSummaryEn: 'Kernel TCP sockets verified open and listening.',
       technicalDetails: 'Socket scan: TCP:8000 (Web), TCP:8089 (Mgmt), TCP:9997 (Ingest) - Status: Active',
       isVerifiedReal: true
@@ -895,16 +895,16 @@ export default function App() {
     setActiveEnvironment('production');
     logBackendOperation(
       'cluster_deployer',
-      'حذف کامل سرورها و آزادسازی پورت‌ها',
+      'ط­ط°ظپ ع©ط§ظ…ظ„ ط³ط±ظˆط±ظ‡ط§ ظˆ ط¢ط²ط§ط¯ط³ط§ط²غŒ ظ¾ظˆط±طھâ€Œظ‡ط§',
       'Server Purge & Decommission',
-      'حذف کامل سرور مجازی و سرور موازی از پس‌زمینه لینوکس و آزادسازی سوکت‌های ۸۰۸۰ و ۸۰۰۱',
+      'ط­ط°ظپ ع©ط§ظ…ظ„ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ظˆ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ ط§ط² ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ظ„غŒظ†ظˆع©ط³ ظˆ ط¢ط²ط§ط¯ط³ط§ط²غŒ ط³ظˆع©طھâ€Œظ‡ط§غŒ غ¸غ°غ¸غ° ظˆ غ¸غ°غ°غ±',
       'Purged virtual and parallel instances from host and freed ports 8080, 8001',
       'success',
-      'سرورهای موازی و مجازی با موفقیت از سیستم حذف شدند و کشو و سلکتور به سرور اصلی سوئیچ شدند.',
+      'ط³ط±ظˆط±ظ‡ط§غŒ ظ…ظˆط§ط²غŒ ظˆ ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ط² ط³غŒط³طھظ… ط­ط°ظپ ط´ط¯ظ†ط¯ ظˆ ع©ط´ظˆ ظˆ ط³ظ„ع©طھظˆط± ط¨ظ‡ ط³ط±ظˆط± ط§طµظ„غŒ ط³ظˆط¦غŒع† ط´ط¯ظ†ط¯.',
       'Servers wiped and environment reverted to Production.',
       'Purged /opt/splunk_virtual and /opt/splunk_parallel | Stopped Docker containers'
     );
-    showToast(isFa ? "سرور مجازی و سرور موازی با موفقیت از پس‌زمینه سرور حذف و کشو بروزرسانی شد!" : "Virtual and parallel servers completely wiped from host!");
+    showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ظˆ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ط² ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ط³ط±ظˆط± ط­ط°ظپ ظˆ ع©ط´ظˆ ط¨ط±ظˆط²ط±ط³ط§ظ†غŒ ط´ط¯!" : "Virtual and parallel servers completely wiped from host!");
   };
 
   const handlePurgeDecommissionedServers = () => {
@@ -939,16 +939,16 @@ export default function App() {
     setActiveEnvironment('production');
     logBackendOperation(
       'overseer_engine',
-      'پاکسازی کامل کش و سرورهای حذف‌شده',
+      'ظ¾ط§ع©ط³ط§ط²غŒ ع©ط§ظ…ظ„ ع©ط´ ظˆ ط³ط±ظˆط±ظ‡ط§غŒ ط­ط°ظپâ€Œط´ط¯ظ‡',
       'Purge Decommissioned Cache',
-      'حذف کامل داده‌های سرور موازی/مجازی از کشوی انتخاب محیط و دیسک مرورگر',
+      'ط­ط°ظپ ع©ط§ظ…ظ„ ط¯ط§ط¯ظ‡â€Œظ‡ط§غŒ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ/ظ…ط¬ط§ط²غŒ ط§ط² ع©ط´ظˆغŒ ط§ظ†طھط®ط§ط¨ ظ…ط­غŒط· ظˆ ط¯غŒط³ع© ظ…ط±ظˆط±ع¯ط±',
       'Purged all decommissioned parallel/virtual server states from selector drawer and browser cache',
       'success',
-      'کشوی انتخاب سرور کاملاً پاکسازی شد و سیستم به سرور اصلی سوئیچ کرد.',
+      'ع©ط´ظˆغŒ ط§ظ†طھط®ط§ط¨ ط³ط±ظˆط± ع©ط§ظ…ظ„ط§ظ‹ ظ¾ط§ع©ط³ط§ط²غŒ ط´ط¯ ظˆ ط³غŒط³طھظ… ط¨ظ‡ ط³ط±ظˆط± ط§طµظ„غŒ ط³ظˆط¦غŒع† ع©ط±ط¯.',
       'Environment selector purged and reset to Production.',
       'Purged localStorage keys: splunk_parallel_cluster_state, splunk_virtual_cluster_state'
     );
-    showToast(isFa ? "کش سرورهای موازی و مجازی کاملاً پاکسازی گردید و کشو به روزرسانی شد ✓" : "Decommissioned server cache purged and selector updated ✓");
+    showToast(isFa ? "ع©ط´ ط³ط±ظˆط±ظ‡ط§غŒ ظ…ظˆط§ط²غŒ ظˆ ظ…ط¬ط§ط²غŒ ع©ط§ظ…ظ„ط§ظ‹ ظ¾ط§ع©ط³ط§ط²غŒ ع¯ط±ط¯غŒط¯ ظˆ ع©ط´ظˆ ط¨ظ‡ ط±ظˆط²ط±ط³ط§ظ†غŒ ط´ط¯ âœ“" : "Decommissioned server cache purged and selector updated âœ“");
   };
 
   const handleDeleteParallelServer = async () => {
@@ -974,7 +974,7 @@ export default function App() {
     if (activeEnvironment === 'parallel') {
       setActiveEnvironment('production');
     }
-    showToast(isFa ? "سرور موازی با موفقیت حذف گردید و کشو بروزرسانی شد." : "Parallel server decommissioned successfully.");
+    showToast(isFa ? "ط³ط±ظˆط± ظ…ظˆط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط­ط°ظپ ع¯ط±ط¯غŒط¯ ظˆ ع©ط´ظˆ ط¨ط±ظˆط²ط±ط³ط§ظ†غŒ ط´ط¯." : "Parallel server decommissioned successfully.");
   };
 
   const handleDeleteVirtualServer = async () => {
@@ -1000,7 +1000,7 @@ export default function App() {
     if (activeEnvironment === 'virtual') {
       setActiveEnvironment('production');
     }
-    showToast(isFa ? "سرور مجازی با موفقیت حذف گردید و کشو بروزرسانی شد." : "Virtual server decommissioned successfully.");
+    showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط­ط°ظپ ع¯ط±ط¯غŒط¯ ظˆ ع©ط´ظˆ ط¨ط±ظˆط²ط±ط³ط§ظ†غŒ ط´ط¯." : "Virtual server decommissioned successfully.");
   };
 
   const handleVirtualServerRecreated = () => {
@@ -1017,7 +1017,7 @@ export default function App() {
     setVirtualClusterState(nextVirtual);
     localStorage.setItem('splunk_virtual_cluster_state', JSON.stringify(nextVirtual));
     setActiveEnvironment('virtual');
-    showToast(isFa ? "سرور مجازی با موفقیت در پس‌زمینه راه‌اندازی شد!" : "Virtual server created and active on port 8080!");
+    showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط¯ط± ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ط´ط¯!" : "Virtual server created and active on port 8080!");
   };
 
   // Auto-sync active environment fallback if currently selected environment is deleted/offline
@@ -1062,7 +1062,7 @@ export default function App() {
     localStorage.setItem('splunk_doctor_auth_token', session.token);
     localStorage.setItem('splunk_doctor_user', JSON.stringify(session.user));
     setIsLoginModalOpen(false);
-    showToast(isFa ? `خوش آمدید ${session.user.fullName} (${session.user.role})` : `Welcome, ${session.user.username}`);
+    showToast(isFa ? `ط®ظˆط´ ط¢ظ…ط¯غŒط¯ ${session.user.fullName} (${session.user.role})` : `Welcome, ${session.user.username}`);
   };
 
   const handleLogout = async () => {
@@ -1081,7 +1081,7 @@ export default function App() {
     if (activeTab === 'admin_security') {
       setActiveTab('topology');
     }
-    showToast(isFa ? 'با موفقیت از حساب کاربری خارج شدید.' : 'Logged out successfully.');
+    showToast(isFa ? 'ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ط² ط­ط³ط§ط¨ ع©ط§ط±ط¨ط±غŒ ط®ط§ط±ط¬ ط´ط¯غŒط¯.' : 'Logged out successfully.');
   };
 
   // Component Selection
@@ -1158,14 +1158,14 @@ export default function App() {
       setGlobalAiLogs([...logs]);
     };
 
-    setTimeout(() => addLog(isFa ? "🔍 شناسایی اتصالات کلاستر و سرویس‌ها..." : "🔍 Analyzing cluster connections & active services..."), 200);
+    setTimeout(() => addLog(isFa ? "ًں”چ ط´ظ†ط§ط³ط§غŒغŒ ط§طھطµط§ظ„ط§طھ ع©ظ„ط§ط³طھط± ظˆ ط³ط±ظˆغŒط³â€Œظ‡ط§..." : "ًں”چ Analyzing cluster connections & active services..."), 200);
     setTimeout(() => {
       if (activeEnvironment === 'production') {
-        addLog(isFa ? "⚠️ ممیزی تولید: ۱ پرونده تمدید لایسنس و ۱ اخطار دیسک یافت شد." : "⚠️ Production audit: 1 certificate renewal requirement and 1 disk storage limit detected.");
+        addLog(isFa ? "âڑ ï¸ڈ ظ…ظ…غŒط²غŒ طھظˆظ„غŒط¯: غ± ظ¾ط±ظˆظ†ط¯ظ‡ طھظ…ط¯غŒط¯ ظ„ط§غŒط³ظ†ط³ ظˆ غ± ط§ط®ط·ط§ط± ط¯غŒط³ع© غŒط§ظپطھ ط´ط¯." : "âڑ ï¸ڈ Production audit: 1 certificate renewal requirement and 1 disk storage limit detected.");
       } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "⚠️ ممیزی سرور موازی: تداخل پورت وب ۸۰۰۰ با ۸۰۰۱ و بسته‌شدن سوکت ۹۹۹۸ شناسایی شد." : "⚠️ Parallel audit: web port conflict 8000/8001 and socket 9998 connection failure detected.");
+        addLog(isFa ? "âڑ ï¸ڈ ظ…ظ…غŒط²غŒ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ: طھط¯ط§ط®ظ„ ظ¾ظˆط±طھ ظˆط¨ غ¸غ°غ°غ° ط¨ط§ غ¸غ°غ°غ± ظˆ ط¨ط³طھظ‡â€Œط´ط¯ظ† ط³ظˆع©طھ غ¹غ¹غ¹غ¸ ط´ظ†ط§ط³ط§غŒغŒ ط´ط¯." : "âڑ ï¸ڈ Parallel audit: web port conflict 8000/8001 and socket 9998 connection failure detected.");
       } else {
-        addLog(isFa ? "⚠️ ممیزی سرور مجازی: خطای دسترسی دایرکتوری داده (Permission Denied) و قطع ضربان قلب کانتینر شناسایی شد." : "⚠️ Virtual Cloud audit: Container Volume Permission Denied and missing container heartbeat detected.");
+        addLog(isFa ? "âڑ ï¸ڈ ظ…ظ…غŒط²غŒ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ: ط®ط·ط§غŒ ط¯ط³طھط±ط³غŒ ط¯ط§غŒط±ع©طھظˆط±غŒ ط¯ط§ط¯ظ‡ (Permission Denied) ظˆ ظ‚ط·ط¹ ط¶ط±ط¨ط§ظ† ظ‚ظ„ط¨ ع©ط§ظ†طھغŒظ†ط± ط´ظ†ط§ط³ط§غŒغŒ ط´ط¯." : "âڑ ï¸ڈ Virtual Cloud audit: Container Volume Permission Denied and missing container heartbeat detected.");
       }
       setIsGlobalAiScanning(false);
     }, 1500);
@@ -1179,30 +1179,30 @@ export default function App() {
       setGlobalAiLogs([...logs]);
     };
 
-    addLog(isFa ? "🤖 شروع خودکار رفع مشکلات با بازوی اجرایی هوش مصنوعی..." : "🤖 Initiating autonomous auto-healing process via local AI agent...");
+    addLog(isFa ? "ًں¤– ط´ط±ظˆط¹ ط®ظˆط¯ع©ط§ط± ط±ظپط¹ ظ…ط´ع©ظ„ط§طھ ط¨ط§ ط¨ط§ط²ظˆغŒ ط§ط¬ط±ط§غŒغŒ ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ..." : "ًں¤– Initiating autonomous auto-healing process via local AI agent...");
     
     setTimeout(() => {
       if (activeEnvironment === 'production') {
-        addLog(isFa ? "🛠️ در حال بازتولید سرتیفیکت‌های امنیتی منقضی شده..." : "🛠️ Regenerating expired secure TLS certificates...");
+        addLog(isFa ? "ًں› ï¸ڈ ط¯ط± ط­ط§ظ„ ط¨ط§ط²طھظˆظ„غŒط¯ ط³ط±طھغŒظپغŒع©طھâ€Œظ‡ط§غŒ ط§ظ…ظ†غŒطھغŒ ظ…ظ†ظ‚ط¶غŒ ط´ط¯ظ‡..." : "ًں› ï¸ڈ Regenerating expired secure TLS certificates...");
       } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "🛠️ اصلاح پورت وب در فایل /opt/splunk_parallel/etc/system/local/web.conf..." : "🛠️ Adjusting web port in /opt/splunk_parallel/etc/system/local/web.conf...");
+        addLog(isFa ? "ًں› ï¸ڈ ط§طµظ„ط§ط­ ظ¾ظˆط±طھ ظˆط¨ ط¯ط± ظپط§غŒظ„ /opt/splunk_parallel/etc/system/local/web.conf..." : "ًں› ï¸ڈ Adjusting web port in /opt/splunk_parallel/etc/system/local/web.conf...");
       } else {
-        addLog(isFa ? "🛠️ اصلاح مالکیت مجوزهای لینوکس دیسک داکر (chown -R splunk:splunk /var/lib/splunk)..." : "🛠️ Fixing Linux directory permissions for Docker Volume (chown -R splunk:splunk /var/lib/splunk)...");
+        addLog(isFa ? "ًں› ï¸ڈ ط§طµظ„ط§ط­ ظ…ط§ظ„ع©غŒطھ ظ…ط¬ظˆط²ظ‡ط§غŒ ظ„غŒظ†ظˆع©ط³ ط¯غŒط³ع© ط¯ط§ع©ط± (chown -R splunk:splunk /var/lib/splunk)..." : "ًں› ï¸ڈ Fixing Linux directory permissions for Docker Volume (chown -R splunk:splunk /var/lib/splunk)...");
       }
     }, 800);
 
     setTimeout(() => {
       if (activeEnvironment === 'production') {
-        addLog(isFa ? "🛠️ تخلیه حجم فایل‌های بلااستفاده و افزایش ظرفیت دیسک..." : "🛠️ Flushing temporary caches & increasing index disk storage limits...");
+        addLog(isFa ? "ًں› ï¸ڈ طھط®ظ„غŒظ‡ ط­ط¬ظ… ظپط§غŒظ„â€Œظ‡ط§غŒ ط¨ظ„ط§ط§ط³طھظپط§ط¯ظ‡ ظˆ ط§ظپط²ط§غŒط´ ط¸ط±ظپغŒطھ ط¯غŒط³ع©..." : "ًں› ï¸ڈ Flushing temporary caches & increasing index disk storage limits...");
       } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "🛠️ پاکسازی و بستن قفل پروسه روی سوکت ترافیک ۹۹۹۸..." : "🛠️ Killing rogue processes holding port 9998 locked...");
+        addLog(isFa ? "ًں› ï¸ڈ ظ¾ط§ع©ط³ط§ط²غŒ ظˆ ط¨ط³طھظ† ظ‚ظپظ„ ظ¾ط±ظˆط³ظ‡ ط±ظˆغŒ ط³ظˆع©طھ طھط±ط§ظپغŒع© غ¹غ¹غ¹غ¸..." : "ًں› ï¸ڈ Killing rogue processes holding port 9998 locked...");
       } else {
-        addLog(isFa ? "🛠️ راه‌اندازی مجدد و ریبوت کانتینر در شبکه ابر ایزوله شده..." : "🛠️ Performing clean reboot of virtual container inside sandbox network...");
+        addLog(isFa ? "ًں› ï¸ڈ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ظ…ط¬ط¯ط¯ ظˆ ط±غŒط¨ظˆطھ ع©ط§ظ†طھغŒظ†ط± ط¯ط± ط´ط¨ع©ظ‡ ط§ط¨ط± ط§غŒط²ظˆظ„ظ‡ ط´ط¯ظ‡..." : "ًں› ï¸ڈ Performing clean reboot of virtual container inside sandbox network...");
       }
     }, 1600);
 
     setTimeout(() => {
-      addLog(isFa ? "🔄 در حال بررسی وضعیت نهایی و اجرای مجدد پروب‌های شبکه..." : "🔄 Re-running diagnostic health probes and auditing status...");
+      addLog(isFa ? "ًں”„ ط¯ط± ط­ط§ظ„ ط¨ط±ط±ط³غŒ ظˆط¶ط¹غŒطھ ظ†ظ‡ط§غŒغŒ ظˆ ط§ط¬ط±ط§غŒ ظ…ط¬ط¯ط¯ ظ¾ط±ظˆط¨â€Œظ‡ط§غŒ ط´ط¨ع©ظ‡..." : "ًں”„ Re-running diagnostic health probes and auditing status...");
     }, 2400);
 
     setTimeout(() => {
@@ -1218,9 +1218,9 @@ export default function App() {
         }
         return updated;
       });
-      addLog(isFa ? "✅ عملیات ترمیم هوشمند با موفقیت تکمیل شد! سرور هم‌اکنون ۱۰۰٪ سبز است." : "✅ Auto-heal completed successfully! All services audited and marked as 100% green.");
+      addLog(isFa ? "âœ… ط¹ظ…ظ„غŒط§طھ طھط±ظ…غŒظ… ظ‡ظˆط´ظ…ظ†ط¯ ط¨ط§ ظ…ظˆظپظ‚غŒطھ طھع©ظ…غŒظ„ ط´ط¯! ط³ط±ظˆط± ظ‡ظ…â€Œط§ع©ظ†ظˆظ† غ±غ°غ°ظھ ط³ط¨ط² ط§ط³طھ." : "âœ… Auto-heal completed successfully! All services audited and marked as 100% green.");
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "تبریک! تمام مشکلات فعال سرور توسط هوش مصنوعی برطرف شد ✓" : "Congratulations! All active server issues have been automatically healed by AI ✓");
+      showToast(isFa ? "طھط¨ط±غŒع©! طھظ…ط§ظ… ظ…ط´ع©ظ„ط§طھ ظپط¹ط§ظ„ ط³ط±ظˆط± طھظˆط³ط· ظ‡ظˆط´ ظ…طµظ†ظˆط¹غŒ ط¨ط±ط·ط±ظپ ط´ط¯ âœ“" : "Congratulations! All active server issues have been automatically healed by AI âœ“");
     }, 3200);
   };
 
@@ -1235,20 +1235,20 @@ export default function App() {
       setGlobalAiLogs([...logs]);
     };
 
-    addLog(isFa ? "🗑️ شروع فرآیند تخریب کامل سرور مجازی کانتینری اسپلانک..." : "🗑️ Starting decommissioning of virtual cloud container instance...");
+    addLog(isFa ? "ًں—‘ï¸ڈ ط´ط±ظˆط¹ ظپط±ط¢غŒظ†ط¯ طھط®ط±غŒط¨ ع©ط§ظ…ظ„ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ع©ط§ظ†طھغŒظ†ط±غŒ ط§ط³ظ¾ظ„ط§ظ†ع©..." : "ًں—‘ï¸ڈ Starting decommissioning of virtual cloud container instance...");
     
     setTimeout(() => {
-      addLog(isFa ? "������ توقف کانتینرهای فعال داکر و حذف اتصالات شبکه مجاری..." : "🐳 Stopping active Docker container stack and cleaning virtual networks...");
-      addLog("🐳 Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml down --volumes --remove-orphans");
+      addLog(isFa ? "ي ½ي°³ طھظˆظ‚ظپ ع©ط§ظ†طھغŒظ†ط±ظ‡ط§غŒ ظپط¹ط§ظ„ ط¯ط§ع©ط± ظˆ ط­ط°ظپ ط§طھطµط§ظ„ط§طھ ط´ط¨ع©ظ‡ ظ…ط¬ط§ط±غŒ..." : "ًںگ³ Stopping active Docker container stack and cleaning virtual networks...");
+      addLog("ًںگ³ Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml down --volumes --remove-orphans");
     }, 800);
 
     setTimeout(() => {
-      addLog(isFa ? "💥 پاکسازی کامل پوشه داده‌ها و دیسک‌های متصل (Docker Volumes)..." : "💥 Purging mount volumes and all indexed log databases...");
-      addLog("🧹 Executing: rm -rf /var/lib/splunk_virtual /etc/splunk_virtual");
+      addLog(isFa ? "ًں’¥ ظ¾ط§ع©ط³ط§ط²غŒ ع©ط§ظ…ظ„ ظ¾ظˆط´ظ‡ ط¯ط§ط¯ظ‡â€Œظ‡ط§ ظˆ ط¯غŒط³ع©â€Œظ‡ط§غŒ ظ…طھطµظ„ (Docker Volumes)..." : "ًں’¥ Purging mount volumes and all indexed log databases...");
+      addLog("ًں§¹ Executing: rm -rf /var/lib/splunk_virtual /etc/splunk_virtual");
     }, 1600);
 
     setTimeout(() => {
-      addLog(isFa ? "🔓 آزادسازی پورت‌های شبکه ۸۰۸۰ (وب)، ۸۰۹۱ (مدیریتی) و ۹۹۹۹ (گیرنده داده)..." : "🔓 Releasing local system ports 8080 (Web), 8091 (Mgmt), and 9999 (S2S)...");
+      addLog(isFa ? "ًں”“ ط¢ط²ط§ط¯ط³ط§ط²غŒ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط´ط¨ع©ظ‡ غ¸غ°غ¸غ° (ظˆط¨)طŒ غ¸غ°غ¹غ± (ظ…ط¯غŒط±غŒطھغŒ) ظˆ غ¹غ¹غ¹غ¹ (ع¯غŒط±ظ†ط¯ظ‡ ط¯ط§ط¯ظ‡)..." : "ًں”“ Releasing local system ports 8080 (Web), 8091 (Mgmt), and 9999 (S2S)...");
     }, 2400);
 
     setTimeout(() => {
@@ -1264,9 +1264,9 @@ export default function App() {
       });
       // Switch active environment to production
       setActiveEnvironment('production');
-      addLog(isFa ? "✅ فرآیند تخریب با موفقیت در پس‌زمینه سرور اجرا و کلاستر کاملاً پاک شد!" : "✅ Decommissioning completed. Virtual cloud instance entirely purged from server!");
+      addLog(isFa ? "âœ… ظپط±ط¢غŒظ†ط¯ طھط®ط±غŒط¨ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط¯ط± ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ط³ط±ظˆط± ط§ط¬ط±ط§ ظˆ ع©ظ„ط§ط³طھط± ع©ط§ظ…ظ„ط§ظ‹ ظ¾ط§ع© ط´ط¯!" : "âœ… Decommissioning completed. Virtual cloud instance entirely purged from server!");
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "سرور مجازی با موفقیت از پس‌زمینه کل سرور متوقف و کاملاً حذف شد!" : "Virtual server stopped and successfully deleted from the server background!");
+      showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ط² ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ع©ظ„ ط³ط±ظˆط± ظ…طھظˆظ‚ظپ ظˆ ع©ط§ظ…ظ„ط§ظ‹ ط­ط°ظپ ط´ط¯!" : "Virtual server stopped and successfully deleted from the server background!");
     }, 3200);
   };
 
@@ -1281,19 +1281,19 @@ export default function App() {
       setGlobalAiLogs([...logs]);
     };
 
-    addLog(isFa ? "🚀 فرآیند ساخت و راه‌اندازی سرور مجازی جدید در پس‌زمینه آغاز شد..." : "🚀 Starting build process for a new virtual cloud instance in background...");
+    addLog(isFa ? "ًںڑ€ ظپط±ط¢غŒظ†ط¯ ط³ط§ط®طھ ظˆ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¬ط¯غŒط¯ ط¯ط± ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ط¢ط؛ط§ط² ط´ط¯..." : "ًںڑ€ Starting build process for a new virtual cloud instance in background...");
     
     setTimeout(() => {
-      addLog(isFa ? "🐳 ساخت ایمیج کانتینر اختصاصی اسپلانک و راه‌اندازی پل شبکه مجاری..." : "🐳 Pulling and constructing custom Splunk Docker images & configuring network bridge...");
-      addLog("🐳 Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml up -d --build");
+      addLog(isFa ? "ًںگ³ ط³ط§ط®طھ ط§غŒظ…غŒط¬ ع©ط§ظ†طھغŒظ†ط± ط§ط®طھطµط§طµغŒ ط§ط³ظ¾ظ„ط§ظ†ع© ظˆ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ظ¾ظ„ ط´ط¨ع©ظ‡ ظ…ط¬ط§ط±غŒ..." : "ًںگ³ Pulling and constructing custom Splunk Docker images & configuring network bridge...");
+      addLog("ًںگ³ Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml up -d --build");
     }, 800);
 
     setTimeout(() => {
-      addLog(isFa ? "📂 ایجاد پوشه‌های ایزوله برای ذخیره‌سازی ایندکس‌ها (/var/lib/splunk_virtual)..." : "📂 Creating sandboxed volume directories at /var/lib/splunk_virtual...");
+      addLog(isFa ? "ًں“‚ ط§غŒط¬ط§ط¯ ظ¾ظˆط´ظ‡â€Œظ‡ط§غŒ ط§غŒط²ظˆظ„ظ‡ ط¨ط±ط§غŒ ط°ط®غŒط±ظ‡â€Œط³ط§ط²غŒ ط§غŒظ†ط¯ع©ط³â€Œظ‡ط§ (/var/lib/splunk_virtual)..." : "ًں“‚ Creating sandboxed volume directories at /var/lib/splunk_virtual...");
     }, 1600);
 
     setTimeout(() => {
-      addLog(isFa ? "⚡ تخصیص پورت‌های ۸۰۸۰، ۸۰۹۱ و ۹۹۹۹ و تست هارت‌بیت کلاستر..." : "⚡ Binding ports 8080, 8091, 9999 and starting cluster heartbeat tests...");
+      addLog(isFa ? "âڑ، طھط®طµغŒطµ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ غ¸غ°غ¸غ°طŒ غ¸غ°غ¹غ± ظˆ غ¹غ¹غ¹غ¹ ظˆ طھط³طھ ظ‡ط§ط±طھâ€Œط¨غŒطھ ع©ظ„ط§ط³طھط±..." : "âڑ، Binding ports 8080, 8091, 9999 and starting cluster heartbeat tests...");
     }, 2400);
 
     setTimeout(() => {
@@ -1310,9 +1310,9 @@ export default function App() {
       // Clear resolved issues to make them scan-ready
       setResolvedGlobalIssueIds(prev => ({ ...prev, virtual: [] }));
       setActiveEnvironment('virtual');
-      addLog(isFa ? "✅ کانتینرهای سرور مجازی با موفقیت متولد شده و در پورت ۸۰۸۰ فعال هستند!" : "✅ New virtual cloud instance container successfully deployed and live on Port 8080!");
+      addLog(isFa ? "âœ… ع©ط§ظ†طھغŒظ†ط±ظ‡ط§غŒ ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ظ…طھظˆظ„ط¯ ط´ط¯ظ‡ ظˆ ط¯ط± ظ¾ظˆط±طھ غ¸غ°غ¸غ° ظپط¹ط§ظ„ ظ‡ط³طھظ†ط¯!" : "âœ… New virtual cloud instance container successfully deployed and live on Port 8080!");
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "سرور مجازی مجدداً با موفقیت ساخته و راه‌اندازی شد!" : "Virtual server successfully created and booted!");
+      showToast(isFa ? "ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ ظ…ط¬ط¯ط¯ط§ظ‹ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط³ط§ط®طھظ‡ ظˆ ط±ط§ظ‡â€Œط§ظ†ط¯ط§ط²غŒ ط´ط¯!" : "Virtual server successfully created and booted!");
     }, 3200);
   };
 
@@ -1324,9 +1324,9 @@ export default function App() {
   // Dynamic Configs Customizer based on Cluster Settings
   const getCustomizedConfigs = () => {
     const customized: Record<string, string> = {};
-    // افزودن Fallback برای جلوگیری از کرش
+    // ط§ظپط²ظˆط¯ظ† Fallback ط¨ط±ط§غŒ ط¬ظ„ظˆع¯غŒط±غŒ ط§ط² ع©ط±ط´
     Object.entries(configs || {}).forEach(([filename, content]) => {
-      // تضمین اینکه محتوا حتماً یک رشته متنی است
+      // طھط¶ظ…غŒظ† ط§غŒظ†ع©ظ‡ ظ…ط­طھظˆط§ ط­طھظ…ط§ظ‹ غŒع© ط±ط´طھظ‡ ظ…طھظ†غŒ ط§ط³طھ
       const safeContent = typeof content === 'string' ? content : '';
       
       customized[filename] = safeContent
@@ -1508,7 +1508,7 @@ export default function App() {
           const openCount = results.filter((r: any) => r.open).length;
           showToast(
             isFa
-              ? `تست پروب سوکت کلاستر: ${openCount} از ${targets.length} پورت باز است.`
+              ? `طھط³طھ ظ¾ط±ظˆط¨ ط³ظˆع©طھ ع©ظ„ط§ط³طھط±: ${openCount} ط§ط² ${targets.length} ظ¾ظˆط±طھ ط¨ط§ط² ط§ط³طھ.`
               : `Cluster TCP probe: ${openCount}/${targets.length} ports open.`
           );
         } catch (jsonErr) {
@@ -1517,7 +1517,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('Cluster probe error:', err);
-      showToast(isFa ? 'خطا در ارتباط با سوکت‌های کلاستر.' : 'Failed to probe cluster TCP sockets.');
+      showToast(isFa ? 'ط®ط·ط§ ط¯ط± ط§ط±طھط¨ط§ط· ط¨ط§ ط³ظˆع©طھâ€Œظ‡ط§غŒ ع©ظ„ط§ط³طھط±.' : 'Failed to probe cluster TCP sockets.');
     } finally {
       setIsProbingCluster(false);
     }
@@ -1627,8 +1627,8 @@ export default function App() {
     const baselineSnapshot: BackupSnapshot = {
       id: 'snapshot-baseline-init',
       timestamp: new Date().toLocaleString(isFa ? 'fa-IR' : 'en-US'),
-      label: isFa ? 'بک‌آپ خودکار اولیه (Initial Pre-Audit Baseline)' : 'Initial Pre-Audit Baseline Snapshot',
-      descriptionFa: 'نسخه پشتیبان اتوماتیک تهیه شده قبل از اعمال هرگونه تغییر توسط برنامه تشخیص عیب.',
+      label: isFa ? 'ط¨ع©â€Œط¢ظ¾ ط®ظˆط¯ع©ط§ط± ط§ظˆظ„غŒظ‡ (Initial Pre-Audit Baseline)' : 'Initial Pre-Audit Baseline Snapshot',
+      descriptionFa: 'ظ†ط³ط®ظ‡ ظ¾ط´طھغŒط¨ط§ظ† ط§طھظˆظ…ط§طھغŒع© طھظ‡غŒظ‡ ط´ط¯ظ‡ ظ‚ط¨ظ„ ط§ط² ط§ط¹ظ…ط§ظ„ ظ‡ط±ع¯ظˆظ†ظ‡ طھط؛غŒغŒط± طھظˆط³ط· ط¨ط±ظ†ط§ظ…ظ‡ طھط´ط®غŒطµ ط¹غŒط¨.',
       descriptionEn: 'Automated pre-scan snapshot captured before any diagnostic modifications.',
       isInitialBaseline: true,
       files: { ...INITIAL_CONFIG_FILES }
@@ -1684,7 +1684,7 @@ export default function App() {
     setParallelClusterState(updatedState);
     showToast(
       isFa
-        ? `نصب اینستنس موازی با موفقیت انجام شد! تمام کانفیگ‌های سرور اصلی روی پورت‌های مجزا کپی شدند.`
+        ? `ظ†طµط¨ ط§غŒظ†ط³طھظ†ط³ ظ…ظˆط§ط²غŒ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ظ†ط¬ط§ظ… ط´ط¯! طھظ…ط§ظ… ع©ط§ظ†ظپغŒع¯â€Œظ‡ط§غŒ ط³ط±ظˆط± ط§طµظ„غŒ ط±ظˆغŒ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ظ…ط¬ط²ط§ ع©ظ¾غŒ ط´ط¯ظ†ط¯.`
         : `Parallel Splunk instance installed! All ${Object.keys(cloned).length} configs copied from Main Server.`
     );
   };
@@ -1711,7 +1711,7 @@ export default function App() {
     }));
     showToast(
       isFa
-        ? 'تمام فایل‌های کانفیگ سرور اصلی مجدداً روی سرور موازی کپی و همگام شدند.'
+        ? 'طھظ…ط§ظ… ظپط§غŒظ„â€Œظ‡ط§غŒ ع©ط§ظ†ظپغŒع¯ ط³ط±ظˆط± ط§طµظ„غŒ ظ…ط¬ط¯ط¯ط§ظ‹ ط±ظˆغŒ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ ع©ظ¾غŒ ظˆ ظ‡ظ…ع¯ط§ظ… ط´ط¯ظ†ط¯.'
         : 'All configs synced from Production to Parallel Staging.'
     );
   };
@@ -1722,7 +1722,7 @@ export default function App() {
     setActiveTab('config_editor');
     showToast(
       isFa
-        ? 'به ویرایشگر کانفیگ‌های سرور موازی هدایت شدید.'
+        ? 'ط¨ظ‡ ظˆغŒط±ط§غŒط´ع¯ط± ع©ط§ظ†ظپغŒع¯â€Œظ‡ط§غŒ ط³ط±ظˆط± ظ…ظˆط§ط²غŒ ظ‡ط¯ط§غŒطھ ط´ط¯غŒط¯.'
         : 'Switched to Parallel Instance Config Editor.'
     );
   };
@@ -1819,14 +1819,14 @@ export default function App() {
     }
 
     const envLabel = targetEnv === 'parallel' 
-      ? (isFa ? 'سرور موازی' : 'Parallel Instance')
+      ? (isFa ? 'ط³ط±ظˆط± ظ…ظˆط§ط²غŒ' : 'Parallel Instance')
       : targetEnv === 'both'
-      ? (isFa ? 'سرور اصلی و موازی' : 'Both Production & Parallel')
-      : (isFa ? 'سرور اصلی' : 'Production Server');
+      ? (isFa ? 'ط³ط±ظˆط± ط§طµظ„غŒ ظˆ ظ…ظˆط§ط²غŒ' : 'Both Production & Parallel')
+      : (isFa ? 'ط³ط±ظˆط± ط§طµظ„غŒ' : 'Production Server');
 
     showToast(
       isFa
-        ? `پچ با موفقیت روی ${envLabel} اعمال شد.`
+        ? `ظ¾ع† ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط±ظˆغŒ ${envLabel} ط§ط¹ظ…ط§ظ„ ط´ط¯.`
         : `Patch applied to ${envLabel}.`
     );
 
@@ -1873,23 +1873,23 @@ export default function App() {
     const resolvedCount = 10 - auditResult.activeFindings.length;
     logBackendOperation(
       'health_audit',
-      'ممیزی سلامت و اسکن خطایابی',
+      'ظ…ظ…غŒط²غŒ ط³ظ„ط§ظ…طھ ظˆ ط§ط³ع©ظ† ط®ط·ط§غŒط§ط¨غŒ',
       'Config Health & Diagnostic Audit',
-      `اسکن خط‌به‌خط فایل‌های سرور (${activeEnvironment === 'production' ? 'سرور اصلی' : (activeEnvironment === 'parallel' ? 'سرور موازی' : 'سرور مجازی')})`,
+      `ط§ط³ع©ظ† ط®ط·â€Œط¨ظ‡â€Œط®ط· ظپط§غŒظ„â€Œظ‡ط§غŒ ط³ط±ظˆط± (${activeEnvironment === 'production' ? 'ط³ط±ظˆط± ط§طµظ„غŒ' : (activeEnvironment === 'parallel' ? 'ط³ط±ظˆط± ظ…ظˆط§ط²غŒ' : 'ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ')})`,
       `Line-by-line configuration scan across 10 failure points on ${activeEnvironment}`,
       auditResult.activeFindings.length === 0 ? 'success' : 'warning',
-      `اسکن کامل انجام شد: امتیاز سلامت ${auditResult.score}/100، ${auditResult.activeFindings.length} خطای فعال شناسایی شد.`,
+      `ط§ط³ع©ظ† ع©ط§ظ…ظ„ ط§ظ†ط¬ط§ظ… ط´ط¯: ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ ${auditResult.score}/100طŒ ${auditResult.activeFindings.length} ط®ط·ط§غŒ ظپط¹ط§ظ„ ط´ظ†ط§ط³ط§غŒغŒ ط´ط¯.`,
       `Audit completed: Score ${auditResult.score}/100, ${auditResult.activeFindings.length} active findings.`,
       `Target Environment: ${activeEnvironment} | Audited files: ${Object.keys(targetConfigs).join(', ')}`
     );
 
     if (auditResult.activeFindings.length === 0) {
       showToast(isFa 
-        ? 'تبریک! تمامی ایرادات پیکربندی برطرف شده‌اند. امتیاز سلامت: ۱۰۰/۱۰۰ ✓' 
-        : 'All 10 misconfigurations resolved! Health Score: 100/100 ✓');
+        ? 'طھط¨ط±غŒع©! طھظ…ط§ظ…غŒ ط§غŒط±ط§ط¯ط§طھ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ ط¨ط±ط·ط±ظپ ط´ط¯ظ‡â€Œط§ظ†ط¯. ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ: غ±غ°غ°/غ±غ°غ° âœ“' 
+        : 'All 10 misconfigurations resolved! Health Score: 100/100 âœ“');
     } else {
       showToast(isFa 
-        ? `بررسی مجدد انجام شد: ${auditResult.activeFindings.length} خطای فعال روی سرور یافت شد. امتیاز سلامت: ${auditResult.score}/100` 
+        ? `ط¨ط±ط±ط³غŒ ظ…ط¬ط¯ط¯ ط§ظ†ط¬ط§ظ… ط´ط¯: ${auditResult.activeFindings.length} ط®ط·ط§غŒ ظپط¹ط§ظ„ ط±ظˆغŒ ط³ط±ظˆط± غŒط§ظپطھ ط´ط¯. ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ: ${auditResult.score}/100` 
         : `Rescan complete: ${auditResult.activeFindings.length} active issues found on server. Score: ${auditResult.score}/100`);
     }
   };
@@ -1910,17 +1910,17 @@ export default function App() {
     setResolvedFindings(auditResult.resolvedFindings);
     logBackendOperation(
       'health_audit',
-      'بازنشانی سناریوی خطاهای اولیه',
+      'ط¨ط§ط²ظ†ط´ط§ظ†غŒ ط³ظ†ط§ط±غŒظˆغŒ ط®ط·ط§ظ‡ط§غŒ ط§ظˆظ„غŒظ‡',
       'Reset Baseline Test Scenarios',
-      'بازنشانی فایل‌های کانفیگ سرور اصلی به حالت اولیه تستی با ۱۰ خطای فعال جهت تست ابزارها',
+      'ط¨ط§ط²ظ†ط´ط§ظ†غŒ ظپط§غŒظ„â€Œظ‡ط§غŒ ع©ط§ظ†ظپغŒع¯ ط³ط±ظˆط± ط§طµظ„غŒ ط¨ظ‡ ط­ط§ظ„طھ ط§ظˆظ„غŒظ‡ طھط³طھغŒ ط¨ط§ غ±غ° ط®ط·ط§غŒ ظپط¹ط§ظ„ ط¬ظ‡طھ طھط³طھ ط§ط¨ط²ط§ط±ظ‡ط§',
       'Reset production configs to initial state with 10 deliberate errors for tool verification',
       'warning',
-      '۱۰ خطای تستی استاندارد روی سرور اصلی فعال شدند تا بتوانید عملکرد ابزارهای رفع عیب را تست کنید.',
+      'غ±غ° ط®ط·ط§غŒ طھط³طھغŒ ط§ط³طھط§ظ†ط¯ط§ط±ط¯ ط±ظˆغŒ ط³ط±ظˆط± ط§طµظ„غŒ ظپط¹ط§ظ„ ط´ط¯ظ†ط¯ طھط§ ط¨طھظˆط§ظ†غŒط¯ ط¹ظ…ظ„ع©ط±ط¯ ط§ط¨ط²ط§ط±ظ‡ط§غŒ ط±ظپط¹ ط¹غŒط¨ ط±ط§ طھط³طھ ع©ظ†غŒط¯.',
       '10 deliberate test findings loaded on production server for verification.',
       'Loaded INITIAL_CONFIG_FILES across outputs.conf, server.conf, inputs.conf, props.conf, indexes.conf'
     );
     showToast(isFa 
-      ? '۱۰ سناریوی خطای تستی سرور اصلی مجدداً بارگذاری شدند تا بتوانید عملکرد ابزارها را تست و ارزیابی نمایید.' 
+      ? 'غ±غ° ط³ظ†ط§ط±غŒظˆغŒ ط®ط·ط§غŒ طھط³طھغŒ ط³ط±ظˆط± ط§طµظ„غŒ ظ…ط¬ط¯ط¯ط§ظ‹ ط¨ط§ط±ع¯ط°ط§ط±غŒ ط´ط¯ظ†ط¯ طھط§ ط¨طھظˆط§ظ†غŒط¯ ط¹ظ…ظ„ع©ط±ط¯ ط§ط¨ط²ط§ط±ظ‡ط§ ط±ط§ طھط³طھ ظˆ ط§ط±ط²غŒط§ط¨غŒ ظ†ظ…ط§غŒغŒط¯.' 
       : 'Initial 10 baseline errors reloaded on production server for testing!');
   };
 
@@ -1981,27 +1981,27 @@ export default function App() {
     setResolvedFindings(auditResult.resolvedFindings);
 
     const envLabel = targetEnv === 'parallel' 
-      ? (isFa ? 'سرور موازی' : 'Parallel Instance')
+      ? (isFa ? 'ط³ط±ظˆط± ظ…ظˆط§ط²غŒ' : 'Parallel Instance')
       : targetEnv === 'both'
-      ? (isFa ? 'سرور اصلی و موازی' : 'Both Production & Parallel')
-      : (isFa ? 'سرور اصلی' : 'Production Server');
+      ? (isFa ? 'ط³ط±ظˆط± ط§طµظ„غŒ ظˆ ظ…ظˆط§ط²غŒ' : 'Both Production & Parallel')
+      : (isFa ? 'ط³ط±ظˆط± ط§طµظ„غŒ' : 'Production Server');
 
     const solvedCount = 10 - auditResult.activeFindings.length;
     logBackendOperation(
       'health_audit',
-      'برطرف‌سازی خودکار خطای کانفیگ',
+      'ط¨ط±ط·ط±ظپâ€Œط³ط§ط²غŒ ط®ظˆط¯ع©ط§ط± ط®ط·ط§غŒ ع©ط§ظ†ظپغŒع¯',
       'Config Auto-Remediation',
-      `اعمال پچ اصلاحی روی فایل ${option.targetFile} (${option.titleFa})`,
+      `ط§ط¹ظ…ط§ظ„ ظ¾ع† ط§طµظ„ط§ط­غŒ ط±ظˆغŒ ظپط§غŒظ„ ${option.targetFile} (${option.titleFa})`,
       `Applied remediation patch to ${option.targetFile} (${option.titleEn})`,
       'success',
-      `پچ با موفقیت اعمال و ذخیره شد. خطا حل گردید و امتیاز سلامت به ${auditResult.score}/100 ارتقا یافت.`,
+      `ظ¾ع† ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط§ط¹ظ…ط§ظ„ ظˆ ط°ط®غŒط±ظ‡ ط´ط¯. ط®ط·ط§ ط­ظ„ ع¯ط±ط¯غŒط¯ ظˆ ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ ط¨ظ‡ ${auditResult.score}/100 ط§ط±طھظ‚ط§ غŒط§ظپطھ.`,
       `Patch successfully applied to ${envLabel}. Health score updated to ${auditResult.score}/100.`,
       `Option ID: ${option.id} | Target File: ${option.targetFile} | Target Env: ${targetEnv}`
     );
 
     showToast(isFa 
-      ? `راهکار انتخابی اعمال و خطا برطرف گردید (${solvedCount} خطا حل شده، امتیاز سلامت: ${auditResult.score}/100) ✓`
-      : `Remediation applied to ${envLabel} and resolved. Health Score: ${auditResult.score}/100 ✓`
+      ? `ط±ط§ظ‡ع©ط§ط± ط§ظ†طھط®ط§ط¨غŒ ط§ط¹ظ…ط§ظ„ ظˆ ط®ط·ط§ ط¨ط±ط·ط±ظپ ع¯ط±ط¯غŒط¯ (${solvedCount} ط®ط·ط§ ط­ظ„ ط´ط¯ظ‡طŒ ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ: ${auditResult.score}/100) âœ“`
+      : `Remediation applied to ${envLabel} and resolved. Health Score: ${auditResult.score}/100 âœ“`
     );
 
     // Auto-close modal after successful application
@@ -2070,34 +2070,34 @@ export default function App() {
 
     logBackendOperation(
       'overseer_engine',
-      'اصلاح خودکار کامل ناظر معمار اسپلانک',
+      'ط§طµظ„ط§ط­ ط®ظˆط¯ع©ط§ط± ع©ط§ظ…ظ„ ظ†ط§ط¸ط± ظ…ط¹ظ…ط§ط± ط§ط³ظ¾ظ„ط§ظ†ع©',
       'Master Architect Auto-Healing Pipeline',
-      `اعمال پچ اصلاحی روی لایه‌های outputs.conf, server.conf, inputs.conf, props.conf و indexes.conf روی ${targetEnv}`,
+      `ط§ط¹ظ…ط§ظ„ ظ¾ع† ط§طµظ„ط§ط­غŒ ط±ظˆغŒ ظ„ط§غŒظ‡â€Œظ‡ط§غŒ outputs.conf, server.conf, inputs.conf, props.conf ظˆ indexes.conf ط±ظˆغŒ ${targetEnv}`,
       `Bulk applied 10-point remediation patches across config files on ${targetEnv}`,
       'success',
-      `تمام ۱۰ خطای تستی کلاستر برطرف شدند! امتیاز سلامت: ${finalAudit.score}/100، تعداد خطای فعال: ${finalAudit.activeFindings.length}.`,
+      `طھظ…ط§ظ… غ±غ° ط®ط·ط§غŒ طھط³طھغŒ ع©ظ„ط§ط³طھط± ط¨ط±ط·ط±ظپ ط´ط¯ظ†ط¯! ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ: ${finalAudit.score}/100طŒ طھط¹ط¯ط§ط¯ ط®ط·ط§غŒ ظپط¹ط§ظ„: ${finalAudit.activeFindings.length}.`,
       `All 10 misconfigurations healed on disk. Health score: ${finalAudit.score}/100.`,
       `Applied options across ${Object.keys(updatedConfigs).length} files | Saved to /opt/splunk/etc/system/local/`,
       120
     );
 
     showToast(isFa 
-      ? "✅ تمام خطاهای کلاستر با موفقیت توسط ناظر ارشد برطرف گردید! امتیاز سلامت: ۱۰۰/۱۰۰"
-      : "✅ All cluster findings automatically healed by Master Architect! Health Score: 100/100"
+      ? "âœ… طھظ…ط§ظ… ط®ط·ط§ظ‡ط§غŒ ع©ظ„ط§ط³طھط± ط¨ط§ ظ…ظˆظپظ‚غŒطھ طھظˆط³ط· ظ†ط§ط¸ط± ط§ط±ط´ط¯ ط¨ط±ط·ط±ظپ ع¯ط±ط¯غŒط¯! ط§ظ…طھغŒط§ط² ط³ظ„ط§ظ…طھ: غ±غ°غ°/غ±غ°غ°"
+      : "âœ… All cluster findings automatically healed by Master Architect! Health Score: 100/100"
     );
   };
 
   // Backup single file
   const handleBackupFile = (filename: string) => {
     setFileBackups(prev => ({ ...prev, [filename]: configs[filename] || '' }));
-    showToast(isFa ? `یک نسخه پشتیبان از فایل ${filename} ذخیره شد.` : `Backup snapshot taken for ${filename}.`);
+    showToast(isFa ? `غŒع© ظ†ط³ط®ظ‡ ظ¾ط´طھغŒط¨ط§ظ† ط§ط² ظپط§غŒظ„ ${filename} ط°ط®غŒط±ظ‡ ط´ط¯.` : `Backup snapshot taken for ${filename}.`);
   };
 
   // Restore single file
   const handleRestoreFile = (filename: string) => {
     if (fileBackups[filename]) {
       setConfigs(prev => ({ ...prev, [filename]: fileBackups[filename] }));
-      showToast(isFa ? `فایل ${filename} به نسخه پشتیبان قبلی بازگردانده شد.` : `Restored ${filename} from backup.`);
+      showToast(isFa ? `ظپط§غŒظ„ ${filename} ط¨ظ‡ ظ†ط³ط®ظ‡ ظ¾ط´طھغŒط¨ط§ظ† ظ‚ط¨ظ„غŒ ط¨ط§ط²ع¯ط±ط¯ط§ظ†ط¯ظ‡ ط´ط¯.` : `Restored ${filename} from backup.`);
     }
   };
 
@@ -2127,38 +2127,38 @@ export default function App() {
       if (res.ok) {
         logBackendOperation(
           'config_editor',
-          'ویرایشگر زنده پیکربندی',
+          'ظˆغŒط±ط§غŒط´ع¯ط± ط²ظ†ط¯ظ‡ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ',
           'Live Config Editor',
-          `ذخیره تغییرات فایل ${filename} روی دیسک سرور`,
+          `ط°ط®غŒط±ظ‡ طھط؛غŒغŒط±ط§طھ ظپط§غŒظ„ ${filename} ط±ظˆغŒ ط¯غŒط³ع© ط³ط±ظˆط±`,
           `Persisted ${filename} edits directly to disk`,
           'success',
-          `فایل ${filename} مستقیماً روی دیسک سرور در مسیر ${relativePath} ذخیره و سینک شد.`,
+          `ظپط§غŒظ„ ${filename} ظ…ط³طھظ‚غŒظ…ط§ظ‹ ط±ظˆغŒ ط¯غŒط³ع© ط³ط±ظˆط± ط¯ط± ظ…ط³غŒط± ${relativePath} ط°ط®غŒط±ظ‡ ظˆ ط³غŒظ†ع© ط´ط¯.`,
           `File ${filename} written to server disk at ${relativePath} with 0 errors.`,
           `File size: ${newContent.length} bytes | Lines: ${newContent.split('\n').length}`
         );
         showToast(isFa 
-          ? `فایل ${filename} ذخیره شد و مستقیماً روی دیسک سرور در مسیر ${relativePath} قرار گرفت.`
+          ? `ظپط§غŒظ„ ${filename} ط°ط®غŒط±ظ‡ ط´ط¯ ظˆ ظ…ط³طھظ‚غŒظ…ط§ظ‹ ط±ظˆغŒ ط¯غŒط³ع© ط³ط±ظˆط± ط¯ط± ظ…ط³غŒط± ${relativePath} ظ‚ط±ط§ط± ع¯ط±ظپطھ.`
           : `File ${filename} saved and successfully written to disk at ${relativePath}`);
       } else {
         const errData = await res.json();
         logBackendOperation(
           'config_editor',
-          'ویرایشگر زنده پیکربندی',
+          'ظˆغŒط±ط§غŒط´ع¯ط± ط²ظ†ط¯ظ‡ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ',
           'Live Config Editor',
-          `تلاش برای ذخیره فایل ${filename}`,
+          `طھظ„ط§ط´ ط¨ط±ط§غŒ ط°ط®غŒط±ظ‡ ظپط§غŒظ„ ${filename}`,
           `Save attempt for ${filename}`,
           'warning',
-          `خطای سروری در ذخیره: ${errData.error}`,
+          `ط®ط·ط§غŒ ط³ط±ظˆط±غŒ ط¯ط± ط°ط®غŒط±ظ‡: ${errData.error}`,
           `Server-side save issue: ${errData.error}`
         );
-        showToast(isFa ? `خطای ذخیره سروری: ${errData.error}` : `Server-side save failed: ${errData.error}`);
+        showToast(isFa ? `ط®ط·ط§غŒ ط°ط®غŒط±ظ‡ ط³ط±ظˆط±غŒ: ${errData.error}` : `Server-side save failed: ${errData.error}`);
       }
     } catch (err: any) {
-      showToast(isFa ? `فایل ${filename} ذخیره شد.` : `File ${filename} saved.`);
+      showToast(isFa ? `ظپط§غŒظ„ ${filename} ط°ط®غŒط±ظ‡ ط´ط¯.` : `File ${filename} saved.`);
     }
   };
 
-  // Global Revert to Baseline (بازگردانی سراسری به بک‌آپ اولیه)
+  // Global Revert to Baseline (ط¨ط§ط²ع¯ط±ط¯ط§ظ†غŒ ط³ط±ط§ط³ط±غŒ ط¨ظ‡ ط¨ع©â€Œط¢ظ¾ ط§ظˆظ„غŒظ‡)
   const handleGlobalRestoreBaseline = () => {
     const baseline = snapshots.find(s => s.isInitialBaseline) || snapshots[0];
     if (baseline) {
@@ -2167,16 +2167,16 @@ export default function App() {
       setFileBackups({ ...baseline.files });
       logBackendOperation(
         'backup_archive',
-        'مدیریت نسخه‌های پشتیبان',
+        'ظ…ط¯غŒط±غŒطھ ظ†ط³ط®ظ‡â€Œظ‡ط§غŒ ظ¾ط´طھغŒط¨ط§ظ†',
         'Backup Snapshots',
-        'بازگردانی سراسری کلاستر به بک‌آپ اولیه (Baseline Rollback)',
+        'ط¨ط§ط²ع¯ط±ط¯ط§ظ†غŒ ط³ط±ط§ط³ط±غŒ ع©ظ„ط§ط³طھط± ط¨ظ‡ ط¨ع©â€Œط¢ظ¾ ط§ظˆظ„غŒظ‡ (Baseline Rollback)',
         'Global cluster rollback to baseline snapshot',
         'success',
-        'تمامی فایل‌های پیکربندی و وضعیت کلاستر با موفقیت به حالت اولیه بازگردانده شدند.',
+        'طھظ…ط§ظ…غŒ ظپط§غŒظ„â€Œظ‡ط§غŒ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ ظˆ ظˆط¶ط¹غŒطھ ع©ظ„ط§ط³طھط± ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط¨ظ‡ ط­ط§ظ„طھ ط§ظˆظ„غŒظ‡ ط¨ط§ط²ع¯ط±ط¯ط§ظ†ط¯ظ‡ ط´ط¯ظ†ط¯.',
         'Cluster state and configs fully restored to initial baseline snapshot.'
       );
       showToast(isFa 
-        ? 'تمامی فایل‌های کانفیگ، کلاستر و خطاها به بک‌آپ اولیه بازگردانده شدند.' 
+        ? 'طھظ…ط§ظ…غŒ ظپط§غŒظ„â€Œظ‡ط§غŒ ع©ط§ظ†ظپغŒع¯طŒ ع©ظ„ط§ط³طھط± ظˆ ط®ط·ط§ظ‡ط§ ط¨ظ‡ ط¨ع©â€Œط¢ظ¾ ط§ظˆظ„غŒظ‡ ط¨ط§ط²ع¯ط±ط¯ط§ظ†ط¯ظ‡ ط´ط¯ظ†ط¯.' 
         : 'All configs and diagnostic state reverted to initial baseline snapshot.');
     }
   };
@@ -2187,7 +2187,7 @@ export default function App() {
       id: `snap-${Date.now()}`,
       timestamp: new Date().toLocaleString(isFa ? 'fa-IR' : 'en-US'),
       label: label,
-      descriptionFa: 'اسنپ‌شات دستی ایجاد شده توسط اپراتور کلاستر',
+      descriptionFa: 'ط§ط³ظ†ظ¾â€Œط´ط§طھ ط¯ط³طھغŒ ط§غŒط¬ط§ط¯ ط´ط¯ظ‡ طھظˆط³ط· ط§ظ¾ط±ط§طھظˆط± ع©ظ„ط§ط³طھط±',
       descriptionEn: 'Manual snapshot created by cluster operator',
       isInitialBaseline: false,
       files: { ...configs }
@@ -2195,15 +2195,15 @@ export default function App() {
     setSnapshots(prev => [newSnap, ...prev]);
     logBackendOperation(
       'backup_archive',
-      'مدیریت نسخه‌های پشتیبان',
+      'ظ…ط¯غŒط±غŒطھ ظ†ط³ط®ظ‡â€Œظ‡ط§غŒ ظ¾ط´طھغŒط¨ط§ظ†',
       'Backup Snapshots',
-      `ایجاد اسنپ‌شات پشتیبان: ${label}`,
+      `ط§غŒط¬ط§ط¯ ط§ط³ظ†ظ¾â€Œط´ط§طھ ظ¾ط´طھغŒط¨ط§ظ†: ${label}`,
       `Created snapshot backup: ${label}`,
       'success',
-      `نسخه پشتیبان شامل تمام فایل‌های پیکربندی با برچسب ${label} ذخیره شد.`,
+      `ظ†ط³ط®ظ‡ ظ¾ط´طھغŒط¨ط§ظ† ط´ط§ظ…ظ„ طھظ…ط§ظ… ظپط§غŒظ„â€Œظ‡ط§غŒ ظ¾غŒع©ط±ط¨ظ†ط¯غŒ ط¨ط§ ط¨ط±ع†ط³ط¨ ${label} ط°ط®غŒط±ظ‡ ط´ط¯.`,
       `Snapshot captured with ${Object.keys(configs).length} configuration files.`
     );
-    showToast(isFa ? 'اسنپ‌شات جدید با موفقیت ذخیره شد.' : 'New snapshot created.');
+    showToast(isFa ? 'ط§ط³ظ†ظ¾â€Œط´ط§طھ ط¬ط¯غŒط¯ ط¨ط§ ظ…ظˆظپظ‚غŒطھ ط°ط®غŒط±ظ‡ ط´ط¯.' : 'New snapshot created.');
   };
 
   // Dynamic Modules Registry synchronized with user customizations, reordering, visibility & active health badges
@@ -2319,7 +2319,7 @@ export default function App() {
               <div className="flex flex-wrap items-center justify-between gap-3 sirene-card p-3.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-400">
-                    {isFa ? 'حالت نمایش دایاگرام:' : 'Diagram View Mode:'}
+                    {isFa ? 'ط­ط§ظ„طھ ظ†ظ…ط§غŒط´ ط¯ط§غŒط§ع¯ط±ط§ظ…:' : 'Diagram View Mode:'}
                   </span>
                   <div className="inline-flex p-1 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs">
                     <button
@@ -2331,7 +2331,7 @@ export default function App() {
                       }`}
                     >
                       <Layers className="w-3.5 h-3.5" />
-                      <span>{isFa ? 'دایاگرام نمادها و پورت‌های اسپلانک' : 'Splunk Ports & Symbols'}</span>
+                      <span>{isFa ? 'ط¯ط§غŒط§ع¯ط±ط§ظ… ظ†ظ…ط§ط¯ظ‡ط§ ظˆ ظ¾ظˆط±طھâ€Œظ‡ط§غŒ ط§ط³ظ¾ظ„ط§ظ†ع©' : 'Splunk Ports & Symbols'}</span>
                     </button>
                     <button
                       onClick={() => setDiagramMode('pipeline_flow')}
@@ -2342,7 +2342,7 @@ export default function App() {
                       }`}
                     >
                       <Activity className="w-3.5 h-3.5" />
-                      <span>{isFa ? 'پایپلاین پردازشی و صف‌های حافظه' : 'Pipeline & Queues'}</span>
+                      <span>{isFa ? 'ظ¾ط§غŒظ¾ظ„ط§غŒظ† ظ¾ط±ط¯ط§ط²ط´غŒ ظˆ طµظپâ€Œظ‡ط§غŒ ط­ط§ظپط¸ظ‡' : 'Pipeline & Queues'}</span>
                     </button>
                   </div>
                 </div>
@@ -2466,7 +2466,7 @@ export default function App() {
             onSaveFile={(filename, content) => {
               if (activeEnvironment === 'parallel') {
                 setParallelConfigs(prev => ({ ...prev, [filename]: content }));
-                showToast(isFa ? `فایل ${filename} در محیط موازی ذخیره شد.` : `Saved ${filename} in Parallel Instance.`);
+                showToast(isFa ? `ظپط§غŒظ„ ${filename} ط¯ط± ظ…ط­غŒط· ظ…ظˆط§ط²غŒ ط°ط®غŒط±ظ‡ ط´ط¯.` : `Saved ${filename} in Parallel Instance.`);
               } else {
                 handleSaveFile(filename, content);
               }
@@ -2518,14 +2518,14 @@ export default function App() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-bold text-white">
-                      {isFa ? 'پایش لحظه‌ای لاگ‌های سرور اسپلانک (splunkd.log)' : 'splunkd.log Live Stream Tail'}
+                      {isFa ? 'ظ¾ط§غŒط´ ظ„ط­ط¸ظ‡â€Œط§غŒ ظ„ط§ع¯â€Œظ‡ط§غŒ ط³ط±ظˆط± ط§ط³ظ¾ظ„ط§ظ†ع© (splunkd.log)' : 'splunkd.log Live Stream Tail'}
                     </h3>
                     <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
-                      {isFa ? 'موتور پردازش عمیق و تشخیصی لوکال سرور (فعال)' : 'Local Real-Time Diagnostic Engine (Active)'}
+                      {isFa ? 'ظ…ظˆطھظˆط± ظ¾ط±ط¯ط§ط²ط´ ط¹ظ…غŒظ‚ ظˆ طھط´ط®غŒطµغŒ ظ„ظˆع©ط§ظ„ ط³ط±ظˆط± (ظپط¹ط§ظ„)' : 'Local Real-Time Diagnostic Engine (Active)'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    {isFa ? 'روی هر خط از لاگ کلیک کنید تا تحلیل فنی دقیق، ریشه وقوع و راهکار مهندسی منطبق بر مستندات نمایش داده شود.' : 'Click any log line to view accurate technical interpretation, root cause, and SVA remediation.'}
+                    {isFa ? 'ط±ظˆغŒ ظ‡ط± ط®ط· ط§ط² ظ„ط§ع¯ ع©ظ„غŒع© ع©ظ†غŒط¯ طھط§ طھط­ظ„غŒظ„ ظپظ†غŒ ط¯ظ‚غŒظ‚طŒ ط±غŒط´ظ‡ ظˆظ‚ظˆط¹ ظˆ ط±ط§ظ‡ع©ط§ط± ظ…ظ‡ظ†ط¯ط³غŒ ظ…ظ†ط·ط¨ظ‚ ط¨ط± ظ…ط³طھظ†ط¯ط§طھ ظ†ظ…ط§غŒط´ ط¯ط§ط¯ظ‡ ط´ظˆط¯.' : 'Click any log line to view accurate technical interpretation, root cause, and SVA remediation.'}
                   </p>
                 </div>
               </div>
@@ -2536,7 +2536,7 @@ export default function App() {
                   className="px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-semibold flex items-center gap-1.5 transition text-slate-200"
                 >
                   <RotateCw className="w-3.5 h-3.5 text-violet-400" />
-                  <span>{isFa ? 'بروزرسانی زنده لاگ‌ها' : 'Refresh Live Stream'}</span>
+                  <span>{isFa ? 'ط¨ط±ظˆط²ط±ط³ط§ظ†غŒ ط²ظ†ط¯ظ‡ ظ„ط§ع¯â€Œظ‡ط§' : 'Refresh Live Stream'}</span>
                 </button>
               </div>
             </div>
@@ -2553,7 +2553,7 @@ export default function App() {
                       : 'bg-white/[0.03] text-slate-400 hover:text-slate-200 border border-white/[0.05]'
                   }`}
                 >
-                  <span>{isFa ? 'همه لاگ‌ها' : 'All'}</span>
+                  <span>{isFa ? 'ظ‡ظ…ظ‡ ظ„ط§ع¯â€Œظ‡ط§' : 'All'}</span>
                   <span className="font-mono text-[10px] opacity-70">({rawLogLines.length})</span>
                 </button>
                 <button
@@ -2564,7 +2564,7 @@ export default function App() {
                       : 'bg-white/[0.03] text-slate-400 hover:text-rose-400 border border-white/[0.05]'
                   }`}
                 >
-                  <span>{isFa ? 'خطاها' : 'Errors'}</span>
+                  <span>{isFa ? 'ط®ط·ط§ظ‡ط§' : 'Errors'}</span>
                   <span className="font-mono text-[10px] opacity-80 bg-rose-950/60 px-1 rounded text-rose-300">({errorCount})</span>
                 </button>
                 <button
@@ -2575,7 +2575,7 @@ export default function App() {
                       : 'bg-white/[0.03] text-slate-400 hover:text-amber-400 border border-white/[0.05]'
                   }`}
                 >
-                  <span>{isFa ? 'هشدارها' : 'Warnings'}</span>
+                  <span>{isFa ? 'ظ‡ط´ط¯ط§ط±ظ‡ط§' : 'Warnings'}</span>
                   <span className="font-mono text-[10px] opacity-80 bg-amber-950/60 px-1 rounded text-amber-300">({warnCount})</span>
                 </button>
                 <button
@@ -2586,7 +2586,7 @@ export default function App() {
                       : 'bg-white/[0.03] text-slate-400 hover:text-sky-400 border border-white/[0.05]'
                   }`}
                 >
-                  <span>{isFa ? 'اطلاعاتی' : 'Info'}</span>
+                  <span>{isFa ? 'ط§ط·ظ„ط§ط¹ط§طھغŒ' : 'Info'}</span>
                   <span className="font-mono text-[10px] opacity-80 bg-sky-950/60 px-1 rounded text-sky-300">({infoCount})</span>
                 </button>
               </div>
@@ -2598,7 +2598,7 @@ export default function App() {
                   type="text"
                   value={logSearchQuery}
                   onChange={(e) => setLogSearchQuery(e.target.value)}
-                  placeholder={isFa ? 'فیلتر متنی بر اساس آی‌پی، کامپوننت، پورت...' : 'Filter by IP, component, port...'}
+                  placeholder={isFa ? 'ظپغŒظ„طھط± ظ…طھظ†غŒ ط¨ط± ط§ط³ط§ط³ ط¢غŒâ€Œظ¾غŒطŒ ع©ط§ظ…ظ¾ظˆظ†ظ†طھطŒ ظ¾ظˆط±طھ...' : 'Filter by IP, component, port...'}
                   className={`w-full bg-white/[0.03] border border-white/[0.08] focus:border-violet-500/50 rounded-xl py-1.5 text-xs text-slate-200 placeholder:text-slate-500 outline-none transition ${isFa ? 'pr-8 pl-3' : 'pl-8 pr-3'}`}
                 />
                 {logSearchQuery && (
@@ -2606,7 +2606,7 @@ export default function App() {
                     onClick={() => setLogSearchQuery('')}
                     className={`absolute top-2 text-slate-400 hover:text-white text-xs ${isFa ? 'left-2.5' : 'right-2.5'}`}
                   >
-                    ×
+                    أ—
                   </button>
                 )}
               </div>
@@ -2616,7 +2616,7 @@ export default function App() {
             <div className="p-4 sm:p-5 bg-[#05070c] font-mono text-xs text-slate-300 min-h-[320px] max-h-[540px] overflow-y-auto space-y-1.5">
               {filteredLogLines.length === 0 ? (
                 <div className="py-12 text-center text-slate-500 text-xs">
-                  {isFa ? 'هیچ خط لاگی با فیلتر فعلی یافت نشد.' : 'No log lines match current filter criteria.'}
+                  {isFa ? 'ظ‡غŒع† ط®ط· ظ„ط§ع¯غŒ ط¨ط§ ظپغŒظ„طھط± ظپط¹ظ„غŒ غŒط§ظپطھ ظ†ط´ط¯.' : 'No log lines match current filter criteria.'}
                 </div>
               ) : (
                 filteredLogLines.map((line, idx) => {
@@ -2655,12 +2655,12 @@ export default function App() {
                         } catch (_) {}
                       }}
                       className={`${colorClass} py-1.5 px-3 border border-transparent rounded-xl cursor-pointer hover:border-violet-500/40 transition flex items-center justify-between group gap-2`}
-                      title={isFa ? 'برای تحلیل پیشرفته، ریشه‌یابی و راهکار مهندسی کلیک کنید' : 'Click to inspect diagnostic details and root cause'}
+                      title={isFa ? 'ط¨ط±ط§غŒ طھط­ظ„غŒظ„ ظ¾غŒط´ط±ظپطھظ‡طŒ ط±غŒط´ظ‡â€ŒغŒط§ط¨غŒ ظˆ ط±ط§ظ‡ع©ط§ط± ظ…ظ‡ظ†ط¯ط³غŒ ع©ظ„غŒع© ع©ظ†غŒط¯' : 'Click to inspect diagnostic details and root cause'}
                     >
                       <span className="font-mono text-xs break-all select-all flex-1">{line}</span>
                       <span className="opacity-0 group-hover:opacity-100 text-[10px] bg-violet-500/20 text-violet-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1 font-bold transition-opacity whitespace-nowrap shrink-0">
                         <Wrench className="w-3 h-3" />
-                        <span>{isFa ? 'تحلیل و رفع' : 'Diagnose'}</span>
+                        <span>{isFa ? 'طھط­ظ„غŒظ„ ظˆ ط±ظپط¹' : 'Diagnose'}</span>
                       </span>
                     </div>
                   );
@@ -2678,7 +2678,7 @@ export default function App() {
             snapshots={snapshots}
             onRestoreSnapshot={(snap) => {
               setConfigs({ ...snap.files });
-              showToast(isFa ? `کانفیگ‌ها به نسخه ${snap.label} بازگردانده شدند.` : `Restored to ${snap.label}.`);
+              showToast(isFa ? `ع©ط§ظ†ظپغŒع¯â€Œظ‡ط§ ط¨ظ‡ ظ†ط³ط®ظ‡ ${snap.label} ط¨ط§ط²ع¯ط±ط¯ط§ظ†ط¯ظ‡ ط´ط¯ظ†ط¯.` : `Restored to ${snap.label}.`);
             }}
             onGlobalRestoreBaseline={handleGlobalRestoreBaseline}
             onCreateSnapshot={handleCreateSnapshot}
@@ -2709,17 +2709,17 @@ export default function App() {
               <Lock className="w-8 h-8 text-amber-400" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2 sirene-text-gradient">
-              {isFa ? 'دسترسی حفاظت‌شده امنیتی' : 'Protected Security Console'}
+              {isFa ? 'ط¯ط³طھط±ط³غŒ ط­ظپط§ط¸طھâ€Œط´ط¯ظ‡ ط§ظ…ظ†غŒطھغŒ' : 'Protected Security Console'}
             </h2>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-              {isFa ? 'مشاهده و مدیریت کاربران و کنترل دسترسی نیازمند ورود به حساب است.' : 'User management and RBAC requires authentication.'}
+              {isFa ? 'ظ…ط´ط§ظ‡ط¯ظ‡ ظˆ ظ…ط¯غŒط±غŒطھ ع©ط§ط±ط¨ط±ط§ظ† ظˆ ع©ظ†طھط±ظ„ ط¯ط³طھط±ط³غŒ ظ†غŒط§ط²ظ…ظ†ط¯ ظˆط±ظˆط¯ ط¨ظ‡ ط­ط³ط§ط¨ ط§ط³طھ.' : 'User management and RBAC requires authentication.'}
             </p>
             <button
               onClick={() => setIsLoginModalOpen(true)}
               className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-2xl transition inline-flex items-center gap-2 cursor-pointer"
             >
               <Lock className="w-4 h-4" />
-              <span>{isFa ? 'ورود به حساب کاربری' : 'Authenticate to Continue'}</span>
+              <span>{isFa ? 'ظˆط±ظˆط¯ ط¨ظ‡ ط­ط³ط§ط¨ ع©ط§ط±ط¨ط±غŒ' : 'Authenticate to Continue'}</span>
             </button>
           </div>
         );
@@ -2774,7 +2774,7 @@ export default function App() {
                         </span>
                       )}
                       <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-white/[0.06] text-white/60 border border-white/10">
-                        {isFa ? 'ماژول سفارشی' : 'Custom Module'}
+                        {isFa ? 'ظ…ط§عکظˆظ„ ط³ظپط§ط±ط´غŒ' : 'Custom Module'}
                       </span>
                     </div>
                     <p className="text-sm text-white/50 mt-1 max-w-2xl">
@@ -2787,20 +2787,20 @@ export default function App() {
                   className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white text-xs font-medium flex items-center gap-2 transition cursor-pointer"
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5 text-[#0a84ff]" />
-                  <span>{isFa ? 'ویرایش در پنل مدیریت' : 'Edit in Module Manager'}</span>
+                  <span>{isFa ? 'ظˆغŒط±ط§غŒط´ ط¯ط± ظ¾ظ†ظ„ ظ…ط¯غŒط±غŒطھ' : 'Edit in Module Manager'}</span>
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 rounded-xl bg-black/25 border border-white/[0.06] space-y-2">
-                  <div className="text-xs text-white/50 font-medium">{isFa ? 'دسته‌بندی ماژول' : 'Category'}</div>
+                  <div className="text-xs text-white/50 font-medium">{isFa ? 'ط¯ط³طھظ‡â€Œط¨ظ†ط¯غŒ ظ…ط§عکظˆظ„' : 'Category'}</div>
                   <div className="text-sm font-semibold text-white/90">{isFa ? customMod.categoryNameFa : customMod.categoryNameEn}</div>
                 </div>
                 <div className="p-4 rounded-xl bg-black/25 border border-white/[0.06] space-y-2">
-                  <div className="text-xs text-white/50 font-medium">{isFa ? 'شناسه یکتا (ID)' : 'Unique ID'}</div>
+                  <div className="text-xs text-white/50 font-medium">{isFa ? 'ط´ظ†ط§ط³ظ‡ غŒع©طھط§ (ID)' : 'Unique ID'}</div>
                   <div className="text-sm font-mono text-[#0a84ff]">{customMod.id}</div>
                 </div>
                 <div className="p-4 rounded-xl bg-black/25 border border-white/[0.06] space-y-2">
-                  <div className="text-xs text-white/50 font-medium">{isFa ? 'اولویت چینش' : 'Order Index'}</div>
+                  <div className="text-xs text-white/50 font-medium">{isFa ? 'ط§ظˆظ„ظˆغŒطھ ع†غŒظ†ط´' : 'Order Index'}</div>
                   <div className="text-sm font-mono text-[#30d158]">#{customMod.order + 1}</div>
                 </div>
               </div>
@@ -2808,13 +2808,13 @@ export default function App() {
                 <div className="flex items-center justify-between text-white/40 border-b border-white/[0.06] pb-2">
                   <span className="flex items-center gap-2 text-white/80 font-sans font-medium text-xs">
                     <Terminal className="w-3.5 h-3.5 text-[#30d158]" />
-                    {isFa ? 'کنسول عملیاتی ماژول' : 'Module Operations Console'}
+                    {isFa ? 'ع©ظ†ط³ظˆظ„ ط¹ظ…ظ„غŒط§طھغŒ ظ…ط§عکظˆظ„' : 'Module Operations Console'}
                   </span>
                   <span className="text-[10px] text-[#30d158] bg-[#30d158]/10 px-2 py-0.5 rounded">ONLINE</span>
                 </div>
                 <p className="text-white/60">
                   {isFa
-                    ? `ماژول «${customMod.titleFa}» فعال و آماده است. می‌توانید این ماژول را در پنل مدیریت جابه‌جا، ویرایش یا حذف کنید.`
+                    ? `ظ…ط§عکظˆظ„ آ«${customMod.titleFa}آ» ظپط¹ط§ظ„ ظˆ ط¢ظ…ط§ط¯ظ‡ ط§ط³طھ. ظ…غŒâ€Œطھظˆط§ظ†غŒط¯ ط§غŒظ† ظ…ط§عکظˆظ„ ط±ط§ ط¯ط± ظ¾ظ†ظ„ ظ…ط¯غŒط±غŒطھ ط¬ط§ط¨ظ‡â€Œط¬ط§طŒ ظˆغŒط±ط§غŒط´ غŒط§ ط­ط°ظپ ع©ظ†غŒط¯.`
                     : `Module "${customMod.titleEn}" is active and ready. You can customize, reorder, or delete it in the Module Management Panel.`}
                 </p>
                 <div className="flex flex-wrap gap-2 pt-2">
@@ -2823,14 +2823,14 @@ export default function App() {
                     className="px-3 py-1.5 rounded-lg bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-sans font-medium transition cursor-pointer flex items-center gap-1.5"
                   >
                     <Activity className="w-3.5 h-3.5" />
-                    <span>{isFa ? 'تست پروب سوکت‌ها' : 'Probe Cluster'}</span>
+                    <span>{isFa ? 'طھط³طھ ظ¾ط±ظˆط¨ ط³ظˆع©طھâ€Œظ‡ط§' : 'Probe Cluster'}</span>
                   </button>
                   <button
                     onClick={() => handleSelectModule('bento_overview')}
                     className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-white text-xs font-sans font-medium transition cursor-pointer flex items-center gap-1.5"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5" />
-                    <span>{isFa ? 'بازگشت به داشبورد' : 'Back to Dashboard'}</span>
+                    <span>{isFa ? 'ط¨ط§ط²ع¯ط´طھ ط¨ظ‡ ط¯ط§ط´ط¨ظˆط±ط¯' : 'Back to Dashboard'}</span>
                   </button>
                 </div>
               </div>
@@ -2884,12 +2884,12 @@ export default function App() {
                 setIsSettingsOpen(false);
               }}
               className="traffic-light traffic-light-close"
-              title={isFa ? 'بستن پنجره‌ها و پاکسازی' : 'Close Active Overlays'}
+              title={isFa ? 'ط¨ط³طھظ† ظ¾ظ†ط¬ط±ظ‡â€Œظ‡ط§ ظˆ ظ¾ط§ع©ط³ط§ط²غŒ' : 'Close Active Overlays'}
             />
             <button
               onClick={() => setIsSidebarCollapsed(prev => !prev)}
               className="traffic-light traffic-light-minimize"
-              title={isFa ? 'جمع‌کردن / بازکردن سایدبار' : 'Collapse/Expand Sidebar'}
+              title={isFa ? 'ط¬ظ…ط¹â€Œع©ط±ط¯ظ† / ط¨ط§ط²ع©ط±ط¯ظ† ط³ط§غŒط¯ط¨ط§ط±' : 'Collapse/Expand Sidebar'}
             />
             <button
               onClick={() => {
@@ -2900,7 +2900,7 @@ export default function App() {
                 }
               }}
               className="traffic-light traffic-light-zoom"
-              title={isFa ? 'تغییر حالت تمام‌صفحه' : 'Toggle Fullscreen'}
+              title={isFa ? 'طھط؛غŒغŒط± ط­ط§ظ„طھ طھظ…ط§ظ…â€Œطµظپط­ظ‡' : 'Toggle Fullscreen'}
             />
           </div>
 
@@ -2917,7 +2917,7 @@ export default function App() {
               }
             }}
             className="p-1.5 rounded-md hover:bg-white/[0.08] text-white/70 hover:text-white transition cursor-pointer"
-            title={isFa ? 'تغییر وضعیت نوار کناری (Ctrl+B)' : 'Toggle Sidebar (Ctrl+B)'}
+            title={isFa ? 'طھط؛غŒغŒط± ظˆط¶ط¹غŒطھ ظ†ظˆط§ط± ع©ظ†ط§ط±غŒ (Ctrl+B)' : 'Toggle Sidebar (Ctrl+B)'}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -2925,8 +2925,8 @@ export default function App() {
           {/* Apple App Brand & Breadcrumb */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-white/95 tracking-tight flex items-center gap-1.5">
-              <span className="text-[#0a84ff] text-sm"></span>
-              <span>{isFa ? 'استودیو معمار اسپلانک' : 'Splunk Architect Studio'}</span>
+              <span className="text-[#0a84ff] text-sm">ï£؟</span>
+              <span>{isFa ? 'ط§ط³طھظˆط¯غŒظˆ ظ…ط¹ظ…ط§ط± ط§ط³ظ¾ظ„ط§ظ†ع©' : 'Splunk Architect Studio'}</span>
             </span>
             <span className="text-white/20 text-xs hidden md:inline">/</span>
             <span className="text-xs text-white/50 hidden md:inline truncate max-w-[200px]">
@@ -2938,10 +2938,10 @@ export default function App() {
           <button 
             onClick={() => setIsLiveMode(!isLiveMode)}
             className="text-[11px] font-medium transition flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-white/70 hover:text-white"
-            title={isFa ? 'تغییر وضعیت پایش زنده سرور' : 'Toggle live monitoring mode'}
+            title={isFa ? 'طھط؛غŒغŒط± ظˆط¶ط¹غŒطھ ظ¾ط§غŒط´ ط²ظ†ط¯ظ‡ ط³ط±ظˆط±' : 'Toggle live monitoring mode'}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${isLiveMode ? 'bg-[#30d158]' : 'bg-[#0a84ff]'}`}></span>
-            <span className="hidden lg:inline">{isLiveMode ? (isFa ? 'متصل' : 'Connected') : (isFa ? 'ایزوله' : 'Sandbox')}</span>
+            <span className="hidden lg:inline">{isLiveMode ? (isFa ? 'ظ…طھطµظ„' : 'Connected') : (isFa ? 'ط§غŒط²ظˆظ„ظ‡' : 'Sandbox')}</span>
           </button>
         </div>
 
@@ -2953,9 +2953,9 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-white/40" />
-              <span className="text-xs text-white/50">{isFa ? 'اسپات‌لایت: جستجوی ابزارها و کانفیگ‌ها...' : 'Spotlight Search (⌘K)...'}</span>
+              <span className="text-xs text-white/50">{isFa ? 'ط§ط³ظ¾ط§طھâ€Œظ„ط§غŒطھ: ط¬ط³طھط¬ظˆغŒ ط§ط¨ط²ط§ط±ظ‡ط§ ظˆ ع©ط§ظ†ظپغŒع¯â€Œظ‡ط§...' : 'Spotlight Search (âŒکK)...'}</span>
             </div>
-            <kbd className="text-[10px] font-mono bg-white/[0.08] border border-white/[0.1] text-white/60 px-1.5 py-0.5 rounded">⌘K</kbd>
+            <kbd className="text-[10px] font-mono bg-white/[0.08] border border-white/[0.1] text-white/60 px-1.5 py-0.5 rounded">âŒکK</kbd>
           </button>
         </div>
 
@@ -2970,17 +2970,17 @@ export default function App() {
                 const targetEnv = e.target.value as 'production' | 'parallel' | 'virtual';
                 setActiveEnvironment(targetEnv);
                 showToast(isFa 
-                  ? `محیط فعال: ${targetEnv === 'production' ? 'سرور اصلی (تولید)' : (targetEnv === 'parallel' ? 'سرور موازی' : 'سرور مجازی')}` 
+                  ? `ظ…ط­غŒط· ظپط¹ط§ظ„: ${targetEnv === 'production' ? 'ط³ط±ظˆط± ط§طµظ„غŒ (طھظˆظ„غŒط¯)' : (targetEnv === 'parallel' ? 'ط³ط±ظˆط± ظ…ظˆط§ط²غŒ' : 'ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ')}` 
                   : `Switched environment to: ${targetEnv}`);
               }}
               className="bg-transparent text-white/90 font-medium text-xs focus:outline-none cursor-pointer pr-1"
             >
-              <option value="production" className="bg-[#1c1c1e] text-white">{isFa ? 'سرور اصلی (8000)' : 'Production (8000)'}</option>
+              <option value="production" className="bg-[#1c1c1e] text-white">{isFa ? 'ط³ط±ظˆط± ط§طµظ„غŒ (8000)' : 'Production (8000)'}</option>
               {parallelClusterState.isInstalled && (
-                <option value="parallel" className="bg-[#1c1c1e] text-white">{isFa ? 'سرور موازی (8001)' : 'Parallel (8001)'}</option>
+                <option value="parallel" className="bg-[#1c1c1e] text-white">{isFa ? 'ط³ط±ظˆط± ظ…ظˆط§ط²غŒ (8001)' : 'Parallel (8001)'}</option>
               )}
               {virtualClusterState.isInstalled && (
-                <option value="virtual" className="bg-[#1c1c1e] text-white">{isFa ? 'سرور مجازی (8080)' : 'Virtual (8080)'}</option>
+                <option value="virtual" className="bg-[#1c1c1e] text-white">{isFa ? 'ط³ط±ظˆط± ظ…ط¬ط§ط²غŒ (8080)' : 'Virtual (8080)'}</option>
               )}
             </select>
           </div>
@@ -3004,11 +3004,11 @@ export default function App() {
             onClick={probeCluster}
             disabled={isProbingCluster}
             className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-white/80 transition flex items-center gap-1.5 cursor-pointer"
-            title={isFa ? 'تست زنده اتصال سوکت‌های TCP کلاستر' : 'Probe cluster TCP sockets now'}
+            title={isFa ? 'طھط³طھ ط²ظ†ط¯ظ‡ ط§طھطµط§ظ„ ط³ظˆع©طھâ€Œظ‡ط§غŒ TCP ع©ظ„ط§ط³طھط±' : 'Probe cluster TCP sockets now'}
           >
             <Activity className={`w-3.5 h-3.5 text-[#0a84ff] ${isProbingCluster ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline text-xs">
-              {isProbingCluster ? (isFa ? 'پروب...' : 'Probing...') : (isFa ? 'پروب' : 'Probe')}
+              {isProbingCluster ? (isFa ? 'ظ¾ط±ظˆط¨...' : 'Probing...') : (isFa ? 'ظ¾ط±ظˆط¨' : 'Probe')}
             </span>
             {clusterProbeResults.length > 0 && (
               <span className="font-mono text-[10px] text-white/40 tabular-nums">
@@ -3021,20 +3021,20 @@ export default function App() {
           <button
             onClick={() => setIsModuleManagerOpen(true)}
             className="px-2.5 py-1 rounded-lg bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] border border-[#0a84ff]/30 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-            title={isFa ? 'پنل مدیریت کل برنامه: افزودن، حذف، تغییر و جابه‌جایی ماژول‌ها' : 'Studio Module Manager: Add, remove, reorder and customize modules'}
+            title={isFa ? 'ظ¾ظ†ظ„ ظ…ط¯غŒط±غŒطھ ع©ظ„ ط¨ط±ظ†ط§ظ…ظ‡: ط§ظپط²ظˆط¯ظ†طŒ ط­ط°ظپطŒ طھط؛غŒغŒط± ظˆ ط¬ط§ط¨ظ‡â€Œط¬ط§غŒغŒ ظ…ط§عکظˆظ„â€Œظ‡ط§' : 'Studio Module Manager: Add, remove, reorder and customize modules'}
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-[#0a84ff]" />
-            <span className="hidden md:inline">{isFa ? 'پنل مدیریت برنامه' : 'Manage Studio'}</span>
+            <span className="hidden md:inline">{isFa ? 'ظ¾ظ†ظ„ ظ…ط¯غŒط±غŒطھ ط¨ط±ظ†ط§ظ…ظ‡' : 'Manage Studio'}</span>
           </button>
 
           {/* Backend Operations & Health Inspector */}
           <button
             onClick={() => setIsBackendInspectorOpen(true)}
             className="px-2.5 py-1 rounded-lg bg-[#30d158]/10 hover:bg-[#30d158]/20 text-[#30d158] border border-[#30d158]/30 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
-            title={isFa ? 'مشاهده عملیات‌های پس‌زمینه و تست صحت ابزارها' : 'View backend operations & tool verification'}
+            title={isFa ? 'ظ…ط´ط§ظ‡ط¯ظ‡ ط¹ظ…ظ„غŒط§طھâ€Œظ‡ط§غŒ ظ¾ط³â€Œط²ظ…غŒظ†ظ‡ ظˆ طھط³طھ طµط­طھ ط§ط¨ط²ط§ط±ظ‡ط§' : 'View backend operations & tool verification'}
           >
             <ShieldCheck className="w-3.5 h-3.5 text-[#30d158]" />
-            <span className="hidden lg:inline">{isFa ? 'تست ابزارها' : 'Tool Tests'}</span>
+            <span className="hidden lg:inline">{isFa ? 'طھط³طھ ط§ط¨ط²ط§ط±ظ‡ط§' : 'Tool Tests'}</span>
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#30d158]/25 text-white font-bold tabular-nums">
               {backendOperations.length}
             </span>
@@ -3044,17 +3044,17 @@ export default function App() {
           <button
             onClick={() => setIsDebugModalOpen(true)}
             className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-            title={isFa ? 'ابزار دیباگ و عیب‌یابی عمیق سامانه' : 'Splunk System Debugger & Telemetry Inspector'}
+            title={isFa ? 'ط§ط¨ط²ط§ط± ط¯غŒط¨ط§ع¯ ظˆ ط¹غŒط¨â€ŒغŒط§ط¨غŒ ط¹ظ…غŒظ‚ ط³ط§ظ…ط§ظ†ظ‡' : 'Splunk System Debugger & Telemetry Inspector'}
           >
             <Bug className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">{isFa ? 'دیباگ سیستم' : 'Debugger'}</span>
+            <span className="hidden sm:inline">{isFa ? 'ط¯غŒط¨ط§ع¯ ط³غŒط³طھظ…' : 'Debugger'}</span>
           </button>
 
           {/* Cluster Settings */}
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-white/80 border border-white/[0.08] transition cursor-pointer"
-            title={isFa ? 'تنظیم آدرس‌های IP و هاست‌های واقعی سرور' : 'Configure cluster IPs and hostnames'}
+            title={isFa ? 'طھظ†ط¸غŒظ… ط¢ط¯ط±ط³â€Œظ‡ط§غŒ IP ظˆ ظ‡ط§ط³طھâ€Œظ‡ط§غŒ ظˆط§ظ‚ط¹غŒ ط³ط±ظˆط±' : 'Configure cluster IPs and hostnames'}
           >
             <Settings className="w-3.5 h-3.5 text-white/60" />
           </button>
@@ -3064,7 +3064,7 @@ export default function App() {
             onClick={() => setLang(l => l === 'fa' ? 'en' : 'fa')}
             className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-white/80 font-mono text-xs transition cursor-pointer"
           >
-            {isFa ? 'EN' : 'فا'}
+            {isFa ? 'EN' : 'ظپط§'}
           </button>
 
           {/* User Account */}
@@ -3076,7 +3076,7 @@ export default function App() {
                   setActiveTab('admin_security');
                 }}
                 className="flex items-center gap-1.5 hover:opacity-80 transition cursor-pointer"
-                title={isFa ? 'رفتن به پنل مدیریت' : 'Open Admin Panel'}
+                title={isFa ? 'ط±ظپطھظ† ط¨ظ‡ ظ¾ظ†ظ„ ظ…ط¯غŒط±غŒطھ' : 'Open Admin Panel'}
               >
                 <div className="w-5 h-5 rounded-full bg-[#0a84ff] text-white flex items-center justify-center font-bold text-[9px]">
                   {currentUser.username.substring(0, 2).toUpperCase()}
@@ -3088,7 +3088,7 @@ export default function App() {
               <button
                 onClick={handleLogout}
                 className="p-1 hover:text-[#ff453a] text-white/40 transition cursor-pointer"
-                title={isFa ? 'خروج' : 'Logout'}
+                title={isFa ? 'ط®ط±ظˆط¬' : 'Logout'}
               >
                 <LogOut className="w-3 h-3" />
               </button>
@@ -3099,7 +3099,7 @@ export default function App() {
               className="px-2.5 py-1 rounded-lg bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.12] text-white font-medium flex items-center gap-1.5 transition text-xs cursor-pointer"
             >
               <Lock className="w-3 h-3 text-[#ff9f0a]" />
-              <span className="hidden sm:inline">{isFa ? 'ورود' : 'Sign in'}</span>
+              <span className="hidden sm:inline">{isFa ? 'ظˆط±ظˆط¯' : 'Sign in'}</span>
             </button>
           )}
         </div>
@@ -3114,7 +3114,7 @@ export default function App() {
             className={`fixed top-16 z-40 bg-[#1c1c1e]/90 backdrop-blur-2xl hover:bg-[#252528] text-white p-2 rounded-lg shadow-xl border border-white/10 transition-all cursor-pointer ${
               isFa ? 'right-3' : 'left-3'
             }`}
-            title={isFa ? 'باز کردن نوار کناری (Ctrl+B)' : 'Open Sidebar (Ctrl+B)'}
+            title={isFa ? 'ط¨ط§ط² ع©ط±ط¯ظ† ظ†ظˆط§ط± ع©ظ†ط§ط±غŒ (Ctrl+B)' : 'Open Sidebar (Ctrl+B)'}
           >
             <SlidersHorizontal className="w-4 h-4 text-[#0a84ff]" />
           </button>
@@ -3135,12 +3135,12 @@ export default function App() {
                 <div className="p-3 border-b border-white/[0.06] flex flex-col gap-2 shrink-0">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold text-white/50 tracking-wider uppercase">
-                      {isFa ? 'ماژول‌های سیستم' : 'SYSTEM MODULES'}
+                      {isFa ? 'ظ…ط§عکظˆظ„â€Œظ‡ط§غŒ ط³غŒط³طھظ…' : 'SYSTEM MODULES'}
                     </span>
                     <button
                       onClick={() => setIsSidebarCollapsed(true)}
                       className="p-1 rounded hover:bg-white/[0.08] text-white/40 hover:text-white transition cursor-pointer"
-                      title={isFa ? 'جمع‌کردن سایدبار (Ctrl+B)' : 'Collapse (Ctrl+B)'}
+                      title={isFa ? 'ط¬ظ…ط¹â€Œع©ط±ط¯ظ† ط³ط§غŒط¯ط¨ط§ط± (Ctrl+B)' : 'Collapse (Ctrl+B)'}
                     >
                       <ChevronLeft className={`w-3.5 h-3.5 ${isFa ? 'rotate-180' : ''}`} />
                     </button>
@@ -3153,7 +3153,7 @@ export default function App() {
                       type="text"
                       value={sidebarSearchQuery}
                       onChange={(e) => setSidebarSearchQuery(e.target.value)}
-                      placeholder={isFa ? 'فیلتر ماژول‌ها...' : 'Filter modules...'}
+                      placeholder={isFa ? 'ظپغŒظ„طھط± ظ…ط§عکظˆظ„â€Œظ‡ط§...' : 'Filter modules...'}
                       className={`w-full bg-black/30 border border-white/[0.08] rounded-md py-1 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#0a84ff]/60 ${
                         isFa ? 'pr-7 pl-6' : 'pl-7 pr-6'
                       }`}
@@ -3171,12 +3171,12 @@ export default function App() {
                   {/* Category Filter Buttons */}
                   <div className="flex items-center gap-1 overflow-x-auto scrollbar-none text-[11px] pt-1">
                     {[
-                      { id: 'all' as const, labelFa: 'همه بخش‌ها', labelEn: 'All' },
-                      { id: 'architecture' as const, labelFa: 'معماری', labelEn: 'Arch' },
-                      { id: 'health_logs' as const, labelFa: 'عیب‌یابی', labelEn: 'Health' },
-                      { id: 'radar_ingest' as const, labelFa: 'رادار', labelEn: 'Radar' },
-                      { id: 'agents_gateway' as const, labelFa: 'ایجنت‌ها', labelEn: 'Agents' },
-                      { id: 'tools_security' as const, labelFa: 'ابزارها', labelEn: 'Tools' },
+                      { id: 'all' as const, labelFa: 'ظ‡ظ…ظ‡ ط¨ط®ط´â€Œظ‡ط§', labelEn: 'All' },
+                      { id: 'architecture' as const, labelFa: 'ظ…ط¹ظ…ط§ط±غŒ', labelEn: 'Arch' },
+                      { id: 'health_logs' as const, labelFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ', labelEn: 'Health' },
+                      { id: 'radar_ingest' as const, labelFa: 'ط±ط§ط¯ط§ط±', labelEn: 'Radar' },
+                      { id: 'agents_gateway' as const, labelFa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§', labelEn: 'Agents' },
+                      { id: 'tools_security' as const, labelFa: 'ط§ط¨ط²ط§ط±ظ‡ط§', labelEn: 'Tools' },
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -3207,31 +3207,31 @@ export default function App() {
                   {[
                     {
                       categoryKey: 'architecture' as const,
-                      titleFa: 'معماری و SVA',
+                      titleFa: 'ظ…ط¹ظ…ط§ط±غŒ ظˆ SVA',
                       titleEn: 'ARCHITECTURE & SVA',
                       iconTint: 'bg-[#0a84ff]/15 text-[#0a84ff]'
                     },
                     {
                       categoryKey: 'health_logs' as const,
-                      titleFa: 'عیب‌یابی و سلامت',
+                      titleFa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ ظˆ ط³ظ„ط§ظ…طھ',
                       titleEn: 'DIAGNOSTICS & LOGS',
                       iconTint: 'bg-[#ff453a]/15 text-[#ff453a]'
                     },
                     {
                       categoryKey: 'radar_ingest' as const,
-                      titleFa: 'رادار و جریان لاگ',
+                      titleFa: 'ط±ط§ط¯ط§ط± ظˆ ط¬ط±غŒط§ظ† ظ„ط§ع¯',
                       titleEn: 'TELEMETRY & INGEST',
                       iconTint: 'bg-[#30d158]/15 text-[#30d158]'
                     },
                     {
                       categoryKey: 'agents_gateway' as const,
-                      titleFa: 'ایجنت‌ها و درگاه',
+                      titleFa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§ ظˆ ط¯ط±ع¯ط§ظ‡',
                       titleEn: 'AGENTS & GATEWAY',
                       iconTint: 'bg-[#64d2ff]/15 text-[#64d2ff]'
                     },
                     {
                       categoryKey: 'tools_security' as const,
-                      titleFa: 'ابزارها و امنیت',
+                      titleFa: 'ط§ط¨ط²ط§ط±ظ‡ط§ ظˆ ط§ظ…ظ†غŒطھ',
                       titleEn: 'SECURITY & UTILITIES',
                       iconTint: 'bg-[#bf5af2]/15 text-[#bf5af2]'
                     }
@@ -3271,7 +3271,7 @@ export default function App() {
                                 }
                               }}
                               className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-white/50 hover:text-white uppercase transition cursor-pointer text-start"
-                              title={isFa ? `کلیک برای نمایش فقط بخش ${group.titleFa}` : `Click to focus on ${group.titleEn}`}
+                              title={isFa ? `ع©ظ„غŒع© ط¨ط±ط§غŒ ظ†ظ…ط§غŒط´ ظپظ‚ط· ط¨ط®ط´ ${group.titleFa}` : `Click to focus on ${group.titleEn}`}
                             >
                               <span>{isFa ? group.titleFa : group.titleEn}</span>
                               <span className="text-[9px] font-mono text-white/30">({groupModules.length})</span>
@@ -3281,7 +3281,7 @@ export default function App() {
                                 onClick={() => setSidebarFilterCategory('all')}
                                 className="text-[10px] text-[#0a84ff] hover:underline cursor-pointer"
                               >
-                                {isFa ? 'نمایش همه' : 'Show All'}
+                                {isFa ? 'ظ†ظ…ط§غŒط´ ظ‡ظ…ظ‡' : 'Show All'}
                               </button>
                             )}
                           </div>
@@ -3337,7 +3337,7 @@ export default function App() {
                 {/* Apple System Health & Decommission Footer Widget */}
                 <div className="p-3 border-t border-white/[0.06] bg-black/20 flex flex-col gap-2 shrink-0">
                   <div className="flex items-center justify-between text-xs text-white/60">
-                    <span className="text-[11px]">{isFa ? 'سلامت سیستم:' : 'System Health:'}</span>
+                    <span className="text-[11px]">{isFa ? 'ط³ظ„ط§ظ…طھ ط³غŒط³طھظ…:' : 'System Health:'}</span>
                     <span className="font-mono font-semibold tabular-nums text-[#30d158]">
                       {healthScore}/100
                     </span>
@@ -3358,7 +3358,7 @@ export default function App() {
                     className="w-full py-1.5 px-2 rounded-md bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] border border-[#0a84ff]/25 text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <SlidersHorizontal className="w-3 h-3 text-[#0a84ff]" />
-                    <span>{isFa ? 'مدیریت و چیدمان برنامه' : 'Customize & Reorder'}</span>
+                    <span>{isFa ? 'ظ…ط¯غŒط±غŒطھ ظˆ ع†غŒط¯ظ…ط§ظ† ط¨ط±ظ†ط§ظ…ظ‡' : 'Customize & Reorder'}</span>
                   </button>
 
                   <button
@@ -3366,7 +3366,7 @@ export default function App() {
                     className="w-full py-1 px-2 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-white/60 hover:text-white text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <Server className="w-3 h-3 text-[#0a84ff]" />
-                    <span>{isFa ? 'مدیریت سرورها' : 'Manage Servers'}</span>
+                    <span>{isFa ? 'ظ…ط¯غŒط±غŒطھ ط³ط±ظˆط±ظ‡ط§' : 'Manage Servers'}</span>
                   </button>
                 </div>
               </div>
@@ -3376,7 +3376,7 @@ export default function App() {
                 <button
                   onClick={() => setIsSidebarCollapsed(false)}
                   className="p-1.5 rounded-md hover:bg-white/[0.1] text-[#0a84ff] transition mb-2 cursor-pointer"
-                  title={isFa ? 'گسترش نوار کناری (Ctrl+B)' : 'Expand (Ctrl+B)'}
+                  title={isFa ? 'ع¯ط³طھط±ط´ ظ†ظˆط§ط± ع©ظ†ط§ط±غŒ (Ctrl+B)' : 'Expand (Ctrl+B)'}
                 >
                   <ChevronRight className={`w-4 h-4 ${isFa ? 'rotate-180' : ''}`} />
                 </button>
@@ -3428,7 +3428,7 @@ export default function App() {
                     <h2 className="font-semibold text-white/95 text-sm truncate">
                       {ALL_MODULES.find(m => m.id === activeTab)?.[isFa ? 'titleFa' : 'titleEn'] || activeTab}
                     </h2>
-                    <span className="text-[10px] text-white/40">·</span>
+                    <span className="text-[10px] text-white/40">آ·</span>
                     <span className="text-[11px] text-white/50 truncate">
                       {ALL_MODULES.find(m => m.id === activeTab)?.[isFa ? 'categoryNameFa' : 'categoryNameEn']}
                     </span>
@@ -3443,11 +3443,11 @@ export default function App() {
               <div className="flex items-center gap-2 shrink-0">
                 <div className="apple-segmented-track">
                   {[
-                    { id: 'architecture' as const, fa: 'معماری', en: 'Arch' },
-                    { id: 'health_logs' as const, fa: 'عیب‌یابی', en: 'Health' },
-                    { id: 'radar_ingest' as const, fa: 'رادار', en: 'Radar' },
-                    { id: 'agents_gateway' as const, fa: 'ایجنت‌ها', en: 'Agents' },
-                    { id: 'tools_security' as const, fa: 'ابزارها', en: 'Tools' }
+                    { id: 'architecture' as const, fa: 'ظ…ط¹ظ…ط§ط±غŒ', en: 'Arch' },
+                    { id: 'health_logs' as const, fa: 'ط¹غŒط¨â€ŒغŒط§ط¨غŒ', en: 'Health' },
+                    { id: 'radar_ingest' as const, fa: 'ط±ط§ط¯ط§ط±', en: 'Radar' },
+                    { id: 'agents_gateway' as const, fa: 'ط§غŒط¬ظ†طھâ€Œظ‡ط§', en: 'Agents' },
+                    { id: 'tools_security' as const, fa: 'ط§ط¨ط²ط§ط±ظ‡ط§', en: 'Tools' }
                   ].map(cat => {
                     const isActive = activeCategory === cat.id;
                     return (
@@ -3472,13 +3472,13 @@ export default function App() {
                 <button
                   onClick={() => handleToggleFloatingTool(activeTab)}
                   className="apple-btn-secondary text-xs"
-                  title={isFa ? 'کوچک‌سازی و اجرای این ابزار در پنجره شناور (مشابه تصویر در تصویر اپل)' : 'Run this tool in floating mini-player (PiP)'}
+                  title={isFa ? 'ع©ظˆع†ع©â€Œط³ط§ط²غŒ ظˆ ط§ط¬ط±ط§غŒ ط§غŒظ† ط§ط¨ط²ط§ط± ط¯ط± ظ¾ظ†ط¬ط±ظ‡ ط´ظ†ط§ظˆط± (ظ…ط´ط§ط¨ظ‡ طھطµظˆغŒط± ط¯ط± طھطµظˆغŒط± ط§ظ¾ظ„)' : 'Run this tool in floating mini-player (PiP)'}
                 >
                   <Minimize2 className="w-3.5 h-3.5 text-[#0a84ff]" />
                   <span className="hidden sm:inline">
                     {floatingTools.includes(activeTab) 
-                      ? (isFa ? 'در حال اجرا (PiP)' : 'Running in PiP') 
-                      : (isFa ? 'پنجره شناور (PiP)' : 'Float PiP')}
+                      ? (isFa ? 'ط¯ط± ط­ط§ظ„ ط§ط¬ط±ط§ (PiP)' : 'Running in PiP') 
+                      : (isFa ? 'ظ¾ظ†ط¬ط±ظ‡ ط´ظ†ط§ظˆط± (PiP)' : 'Float PiP')}
                   </span>
                 </button>
               </div>
@@ -3523,7 +3523,7 @@ export default function App() {
             configs={configs}
             onSave={(newSettings) => {
               setClusterSettings(newSettings);
-              showToast(isFa ? 'تنظیمات کلاستر ذخیره و روی تمامی دایاگرام‌ها و پیکربندی‌ها اعمال شد.' : 'Cluster settings saved and synced across configs.');
+              showToast(isFa ? 'طھظ†ط¸غŒظ…ط§طھ ع©ظ„ط§ط³طھط± ط°ط®غŒط±ظ‡ ظˆ ط±ظˆغŒ طھظ…ط§ظ…غŒ ط¯ط§غŒط§ع¯ط±ط§ظ…â€Œظ‡ط§ ظˆ ظ¾غŒع©ط±ط¨ظ†ط¯غŒâ€Œظ‡ط§ ط§ط¹ظ…ط§ظ„ ط´ط¯.' : 'Cluster settings saved and synced across configs.');
             }}
             lang={lang}
           />
@@ -3612,24 +3612,24 @@ export default function App() {
               <button
                 onClick={() => setIsBackendInspectorOpen(true)}
                 className="flex items-center gap-1.5 hover:text-[#30d158] transition cursor-pointer text-[#30d158]"
-                title={isFa ? 'مشاهده ریز عملیات‌ها و اعتبارسنجی ابزارها' : 'Click to inspect backend telemetry & verify tools'}
+                title={isFa ? 'ظ…ط´ط§ظ‡ط¯ظ‡ ط±غŒط² ط¹ظ…ظ„غŒط§طھâ€Œظ‡ط§ ظˆ ط§ط¹طھط¨ط§ط±ط³ظ†ط¬غŒ ط§ط¨ط²ط§ط±ظ‡ط§' : 'Click to inspect backend telemetry & verify tools'}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse"></span>
-                <span className="font-medium">{isFa ? 'وضعیت سرور: ۱۰۰٪ تایید شده' : 'Host Status: 100% Verified'}</span>
+                <span className="font-medium">{isFa ? 'ظˆط¶ط¹غŒطھ ط³ط±ظˆط±: غ±غ°غ°ظھ طھط§غŒغŒط¯ ط´ط¯ظ‡' : 'Host Status: 100% Verified'}</span>
               </button>
             </div>
             <div className="flex items-center gap-4 text-[11px] text-white/40">
               <span>Target: {currentProfile.shortName}</span>
-              <span className="text-white/20">·</span>
+              <span className="text-white/20">آ·</span>
               <span className="tabular-nums">Health: {healthScore}/100</span>
-              <span className="text-white/20">·</span>
+              <span className="text-white/20">آ·</span>
               <span className="tabular-nums">Snapshots: {snapshots.length}</span>
             </div>
           </footer>
         </div>
       </div>
 
-      {/* Spotlight Command Palette (⌘K) Modal */}
+      {/* Spotlight Command Palette (âŒکK) Modal */}
       {isQuickSearchOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-start justify-center pt-24 p-4 animate-in fade-in duration-150">
           <div className="apple-window max-w-xl w-full shadow-[0_30px_90px_rgba(0,0,0,0.85)] overflow-hidden">
@@ -3641,7 +3641,7 @@ export default function App() {
                 autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isFa ? 'جستجو در تمام ابزارها، کانفیگ‌ها و ماژول‌ها...' : 'Spotlight Search in modules, configs, and tools...'}
+                placeholder={isFa ? 'ط¬ط³طھط¬ظˆ ط¯ط± طھظ…ط§ظ… ط§ط¨ط²ط§ط±ظ‡ط§طŒ ع©ط§ظ†ظپغŒع¯â€Œظ‡ط§ ظˆ ظ…ط§عکظˆظ„â€Œظ‡ط§...' : 'Spotlight Search in modules, configs, and tools...'}
                 className="w-full bg-transparent text-sm text-white placeholder-white/30 focus:outline-none"
               />
               <button
@@ -3685,7 +3685,7 @@ export default function App() {
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-white/40 group-hover:text-white/80 bg-white/[0.06] group-hover:bg-white/20 px-2 py-0.5 rounded shrink-0">
-                      {isFa ? 'انتقال ↵' : 'Open ↵'}
+                      {isFa ? 'ط§ظ†طھظ‚ط§ظ„ â†µ' : 'Open â†µ'}
                     </span>
                   </button>
                 );
@@ -3693,8 +3693,8 @@ export default function App() {
             </div>
 
             <div className="p-2.5 bg-black/20 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-white/40">
-              <span>{isFa ? 'کلید Esc برای بستن' : 'Press esc to close'}</span>
-              <span className="font-mono text-white/50">{filteredSearchModules.length} {isFa ? 'مورد یافت شد' : 'items'}</span>
+              <span>{isFa ? 'ع©ظ„غŒط¯ Esc ط¨ط±ط§غŒ ط¨ط³طھظ†' : 'Press esc to close'}</span>
+              <span className="font-mono text-white/50">{filteredSearchModules.length} {isFa ? 'ظ…ظˆط±ط¯ غŒط§ظپطھ ط´ط¯' : 'items'}</span>
             </div>
           </div>
         </div>

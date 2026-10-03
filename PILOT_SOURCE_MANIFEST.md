@@ -1,7 +1,7 @@
 # Pilot extracted source
 
 - Source branch: `audit/extract-and-verify-2026-10-03`
-- Source commit: `8bed1dbeb6580be79504fbbd6145e2be88c86a74`
+- Source commit: `d39cfb585baafd73c854a33786b1ae786ffa7d2b`
 - Original ZIP: `splunk-cluster-doctor-&-architecture-studio.zip`
 
 ## File inventory
@@ -41,7 +41,7 @@ scripts/uninstall.sh	1023 bytes
 server.ts	228618 bytes
 server/realControlPlane.ts	30079 bytes
 server/securityEngine.ts	21121 bytes
-src/App.tsx	178375 bytes
+src/App.tsx	197029 bytes
 src/build-spl.ts	1801 bytes
 src/components/AdminSecurityPanel.tsx	180025 bytes
 src/components/AlertNotificationCenter.tsx	29497 bytes
