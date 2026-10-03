@@ -1,4 +1,4 @@
-name: Pilot Real Build and Smoke v2026-10-03
+name: Pilot Real Build and Smoke v2026-10-03-full-snapshot
 
 on:
   push:
