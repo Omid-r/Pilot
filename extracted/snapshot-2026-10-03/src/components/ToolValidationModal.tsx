@@ -81,47 +81,32 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toolId: tId })
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSingleResult(data);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || ('HTTP ' + res.status));
       }
-    } catch (_) {
-      // Fallback client-side simulated validation if offline
+      setSingleResult(data);
+    } catch (err: any) {
       setSingleResult({
         toolId: tId,
-        status: 'healthy',
-        score: 100,
-        latencyMs: 12,
-        checks: [
-          {
-            nameFa: 'پاسخ‌دهی وب‌سرویس و درگاه محلی',
-            nameEn: 'Web Service Endpoint Readiness',
-            status: 'pass',
-            detailFa: 'پردازش‌های مربوط به ابزار به درستی بارگذاری شده و به درخواست‌ها پاسخ می‌دهند.',
-            detailEn: 'Tool backend handlers operational and responding.'
-          },
-          {
-            nameFa: 'سینتکس و ساختار فایل‌های کانفیگ',
-            nameEn: 'Config Stanza Integrity & Syntax',
-            status: 'pass',
-            detailFa: 'فایل‌های استنزا فاقد هرگونه خطای ساختاری و مغایرت پارامتر هستند.',
-            detailEn: 'No stanza syntax collisions detected.'
-          },
-          {
-            nameFa: 'سطح دسترسی سیستم‌عامل و هسته لینوکس',
-            nameEn: 'OS & Linux Runtime Permissions',
-            status: 'pass',
-            detailFa: 'مجوزهای خواندن و نوشتن دایرکتوری‌های ایزوله تایید شد.',
-            detailEn: 'Read/write rights verified across runtime directories.'
-          }
-        ],
-        summaryFa: 'ابزار کاملاً سالم است و به صورت فعال در حال کار می‌باشد.',
-        summaryEn: 'Tool is operating at 100% health in runtime.'
+        status: 'error',
+        score: 0,
+        latencyMs: 0,
+        checks: [{
+          nameFa: 'خطای ارتباط با موتور اعتبارسنجی',
+          nameEn: 'Validation backend error',
+          status: 'warn',
+          detailFa: err?.message || 'موتور اعتبارسنجی در دسترس نیست.',
+          detailEn: err?.message || 'Validation backend is unavailable.'
+        }],
+        summaryFa: 'اعتبارسنجی واقعی انجام نشد؛ وضعیت سالم به‌صورت ساختگی گزارش نمی‌شود.',
+        summaryEn: 'Real validation did not complete; no synthetic healthy result is reported.'
       });
     } finally {
       setIsValidating(false);
     }
   };
+
 
   const runValidateAll = async () => {
     setIsValidating(true);
@@ -130,39 +115,18 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAllResults(data.results || {});
-        setTotalTested(data.totalTools || allModules.length);
-      }
-    } catch (_) {
-      // fallback
-      const simulated: Record<string, ToolValidationResult> = {};
-      allModules.forEach(m => {
-        simulated[m.id] = {
-          toolId: m.id,
-          status: 'healthy',
-          score: 100,
-          latencyMs: Math.floor(Math.random() * 10) + 5,
-          checks: [
-            {
-              nameFa: 'پاسخ‌دهی وب‌سرویس و API',
-              nameEn: 'API Health',
-              status: 'pass',
-              detailFa: 'نودها و ابزار متصل است.',
-              detailEn: 'Tool endpoints connected.'
-            }
-          ],
-          summaryFa: 'ابزار سالم است و کار می‌کند.',
-          summaryEn: 'Tool verified and active.'
-        };
-      });
-      setAllResults(simulated);
-      setTotalTested(allModules.length);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || ('HTTP ' + res.status));
+      setAllResults(data.results || {});
+      setTotalTested(data.totalTools || Object.keys(data.results || {}).length);
+    } catch (err: any) {
+      setAllResults({});
+      setTotalTested(0);
     } finally {
       setIsValidating(false);
     }
   };
+
 
   if (!isOpen) return null;
 
@@ -186,7 +150,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                   {isFa ? 'اعتبار سنجی و تست زنده عملکرد ابزارها' : 'Tool Health & Validation Engine'}
                 </h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                  {isFa ? '۱۰۰٪ سالم' : '100% Healthy'}
+                  {isFa ? 'اعتبارسنجی سرور واقعی' : 'Server-side validation'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -370,12 +334,12 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                             {isFa ? mod.categoryNameFa : mod.categoryNameEn}
                           </span>
                         </div>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        {res?.status === 'healthy' ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] text-[10px]">
                         <span className="font-mono text-emerald-400 font-bold">
-                          {isFa ? '✓ ۱۰۰٪ معتبر' : '✓ 100% OK'}
+                          {isFa ? `✓ ${res?.status === 'healthy' ? 'سالم' : 'نیازمند بررسی'}` : res?.status === 'healthy' ? '✓ Healthy' : '⚠ Needs review'}
                         </span>
                         <button
                           onClick={() => {
