@@ -41,6 +41,26 @@ jobs:
             cp -a /tmp/pilot-unpack/. pilot-source/
           fi
 
+          # Normalize source text to UTF-8 before commit. The uploaded ZIP contains
+          # CP1256-encoded Persian source (notably src/App.tsx), which TypeScript may
+          # tolerate while Vite/Rolldown rejects as invalid UTF-8.
+          if [ -f pilot-source/src/App.tsx ]; then
+            if ! iconv -f UTF-8 -t UTF-8 pilot-source/src/App.tsx >/dev/null 2>&1; then
+              iconv -f CP1256 -t UTF-8 pilot-source/src/App.tsx > /tmp/App.tsx.utf8
+              mv /tmp/App.tsx.utf8 pilot-source/src/App.tsx
+            fi
+          fi
+          while IFS= read -r -d '' f; do
+            if ! iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then
+              enc="$(file -bi "$f" | sed -n 's/.*charset=//p' | tr '[:upper:]' '[:lower:]')"
+              case "$enc" in
+                windows-1256|cp1256) iconv -f CP1256 -t UTF-8 "$f" > /tmp/pilot.utf8 && mv /tmp/pilot.utf8 "$f" ;;
+                windows-1252|cp1252) iconv -f CP1252 -t UTF-8 "$f" > /tmp/pilot.utf8 && mv /tmp/pilot.utf8 "$f" ;;
+                iso-8859-1) iconv -f ISO-8859-1 -t UTF-8 "$f" > /tmp/pilot.utf8 && mv /tmp/pilot.utf8 "$f" ;;
+                *) echo "Unsupported text encoding: $f ($enc)"; exit 1 ;;
+              esac
+            fi
+          done < <(find pilot-source -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.css' -o -name '*.json' -o -name '*.html' \) -print0)
           # Remove embedded credentials/secrets from extracted source before committing it.
           # These values are treated as compromised and must be rotated outside the repository.
           python3 - <<'PY'
