@@ -123,24 +123,20 @@ export function generateSignedLicenseKey(
 
 export function verifySignedLicenseKey(licenseKey: string, currentHwId: string): LicenseInfo {
   const hwId = currentHwId.toUpperCase();
-  const fallbackDate = new Date();
-  fallbackDate.setDate(fallbackDate.getDate() + 30); // 30-day default evaluation
-
   if (!licenseKey || !licenseKey.startsWith('LIC-')) {
-    const daysRemaining = 30;
     return {
       hardwareId: hwId,
-      companyName: 'Evaluation Customer',
-      licenseKey: 'NONE (Evaluation Mode)',
-      status: 'TRIAL',
-      tier: 'TRIAL',
-      maxNodes: 10,
+      companyName: 'Local Community Deployment',
+      licenseKey: '',
+      status: 'UNLICENSED',
+      tier: 'COMMUNITY',
+      maxNodes: 2,
       issuedAt: new Date().toISOString(),
-      expiresAt: fallbackDate.toISOString(),
-      daysRemaining,
-      features: ['Full Topology', 'Port Probes', 'Config Editor', 'Diagnostic Tools'],
+      expiresAt: '',
+      daysRemaining: 0,
+      features: [],
       isTampered: false,
-      watermarkNote: 'TRIAL EVALUATION MODE (Active on Node: ' + hwId + ')'
+      watermarkNote: 'UNLICENSED COMMUNITY MODE'
     };
   }
 
@@ -265,11 +261,19 @@ function seedInitialStore(): SecurityStore {
   const in14Days = new Date(now);
   in14Days.setDate(now.getDate() + 14);
 
-  // Default Users with cryptographically salted PBKDF2 hashes
-  const adminPass = hashPassword('Splunk@Doctor2026!');
-  const engineerPass = hashPassword('Splunk@Engineer2026!');
-  const operatorPass = hashPassword('Splunk@Operator2026!');
-  const auditorPass = hashPassword('Splunk@Auditor2026!');
+  // Initial users receive unique random passwords; the bootstrap file is runtime state only.
+  const credentialPairs = [
+    ['admin', process.env.SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD?.trim() || crypto.randomBytes(24).toString('base64url')],
+    ['sec_engineer', crypto.randomBytes(24).toString('base64url')],
+    ['net_operator', crypto.randomBytes(24).toString('base64url')],
+    ['compliance_auditor', crypto.randomBytes(24).toString('base64url')]
+  ] as const;
+
+  const passwordByUser = new Map(credentialPairs);
+  const adminPass = hashPassword(passwordByUser.get('admin')!);
+  const engineerPass = hashPassword(passwordByUser.get('sec_engineer')!);
+  const operatorPass = hashPassword(passwordByUser.get('net_operator')!);
+  const auditorPass = hashPassword(passwordByUser.get('compliance_auditor')!);
 
   const users: InternalUserAccount[] = [
     {
@@ -334,12 +338,25 @@ function seedInitialStore(): SecurityStore {
     }
   ];
 
-  const hwId = getHardwareFingerprint();
-  // Auto-generate a valid initial commercial trial license for this specific hardware ID
-  const trialExp = new Date(now);
-  trialExp.setDate(now.getDate() + 90);
-  const initialKey = generateSignedLicenseKey(hwId, 'Splunk Enterprise Customer', 'ENTERPRISE_COMMERCIAL', trialExp.toISOString(), 100);
+  const bootstrapPath = process.env.SPLUNK_DOCTOR_BOOTSTRAP_FILE
+    || (typeof process.getuid === 'function' && process.getuid() === 0
+      ? '/var/lib/splunk-doctor/bootstrap-credentials.txt'
+      : path.join(DATA_DIR, 'bootstrap-credentials.txt'));
 
+  try {
+    fs.mkdirSync(path.dirname(bootstrapPath), { recursive: true });
+    const bootstrapText = [
+      '# Splunk Doctor initial credentials - remove or rotate after first login',
+      'admin=' + passwordByUser.get('admin'),
+      'sec_engineer=' + passwordByUser.get('sec_engineer'),
+      'net_operator=' + passwordByUser.get('net_operator'),
+      'compliance_auditor=' + passwordByUser.get('compliance_auditor')
+    ].join('\n') + '\n';
+    fs.writeFileSync(bootstrapPath, bootstrapText, { encoding: 'utf8', mode: 0o600 });
+  } catch (_) {}
+  
+  const hwId = getHardwareFingerprint();
+  // Start unlicensed/community. A signed commercial license must be explicitly installed.
   const initialLogs: AuditLogEntry[] = [
     {
       id: 'log-seed-01',
@@ -366,11 +383,11 @@ function seedInitialStore(): SecurityStore {
   return {
     users,
     license: {
-      companyName: 'Splunk Enterprise Customer',
-      licenseKey: initialKey,
-      tier: 'ENTERPRISE_COMMERCIAL',
-      expiresAt: trialExp.toISOString(),
-      maxNodes: 100,
+      companyName: 'Local Community Deployment',
+      licenseKey: '',
+      tier: 'COMMUNITY',
+      expiresAt: '',
+      maxNodes: 2,
       activatedAt: now.toISOString()
     },
     auditLogs: initialLogs
