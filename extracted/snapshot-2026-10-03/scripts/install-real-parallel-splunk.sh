@@ -10,7 +10,9 @@ TARGET_SPLUNK="${2:-/opt/splunk_parallel}"
 WEB_PORT="${3:-8001}"
 REST_PORT="${4:-8090}"
 TCP_PORT="${5:-9998}"
-KVSTORE_PORT="${6:-8192}"
+KVSTORE_PORT="${6:-8193}"
+ADMIN_PASSWORD="${7:-${SPLUNK_OFFLINE_ADMIN_PASSWORD:-}}"
+PASS4_SYM_KEY="${8:-${SPLUNK_PARALLEL_PASS4SYMKEY:-}}"
 
 export SPLUNK_HOME="${TARGET_SPLUNK}"
 export SPLUNK_RUN_AS_ROOT=1
@@ -60,10 +62,19 @@ mkdir -p "${TARGET_SPLUNK}/etc/system/local"
 mkdir -p "${TARGET_SPLUNK}/etc/licenses/enterprise"
 mkdir -p "${TARGET_SPLUNK}/var/log/splunk"
 
-cat << 'EOF' > "${TARGET_SPLUNK}/etc/system/local/user-seed.conf"
+if [ -z "${ADMIN_PASSWORD}" ]; then
+    echo "[-] A real admin password is required as argument 7 or SPLUNK_OFFLINE_ADMIN_PASSWORD."
+    exit 1
+fi
+if [ -z "${PASS4_SYM_KEY}" ]; then
+    echo "[-] A real pass4SymmKey is required as argument 8 or SPLUNK_PARALLEL_PASS4SYMKEY."
+    exit 1
+fi
+
+cat > "${TARGET_SPLUNK}/etc/system/local/user-seed.conf" <<EOF
 [user_info]
 USERNAME = admin
-PASSWORD = changeme
+PASSWORD = ${ADMIN_PASSWORD}
 EOF
 
 # 4. Write isolated port configurations
@@ -83,7 +94,7 @@ cat << EOF > "${TARGET_SPLUNK}/etc/system/local/server.conf"
 [general]
 serverName = splunk-parallel-staging-01
 mgmtHostPort = 127.0.0.1:${REST_PORT}
-pass4SymmKey = changeme-parallel-passkey
+pass4SymmKey = ${PASS4_SYM_KEY}
 active_group = Free
 
 [sslConfig]
@@ -111,10 +122,10 @@ EOF
 echo "[5/6] Opening firewall and IP routing barriers..."
 if command -v firewall-cmd >/dev/null 2>&1; then
     firewall-cmd --permanent --zone=public --add-port=${WEB_PORT}/tcp 2>/dev/null || true
-    firewall-cmd --permanent --zone=trusted --add-port=${WEB_PORT}/tcp 2>/dev/null || true
-    firewall-cmd --permanent --zone=public --add-port=${REST_PORT}/tcp 2>/dev/null || true
-    firewall-cmd --permanent --zone=public --add-port=${TCP_PORT}/tcp 2>/dev/null || true
-    firewall-cmd --reload 2>/dev/null || true
+    firewall-cmd --permanent --zone=public --add-port=${WEB_PORT}/tcp
+    firewall-cmd --permanent --zone=public --add-port=${REST_PORT}/tcp
+    firewall-cmd --permanent --zone=public --add-port=${TCP_PORT}/tcp
+    firewall-cmd --reload
 fi
 
 if command -v iptables >/dev/null 2>&1; then
@@ -130,12 +141,19 @@ fi
 echo "[6/6] Starting Official Splunk Enterprise daemon with --run-as-root..."
 if [ -f "${TARGET_SPLUNK}/bin/splunk" ]; then
     chmod -R +x "${TARGET_SPLUNK}/bin/" 2>/dev/null || true
-    "${TARGET_SPLUNK}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true
+    "${TARGET_SPLUNK}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root
+    STATUS="$("${TARGET_SPLUNK}/bin/splunk" status 2>&1 || true)"
+    if ! printf "%s" "$STATUS" | grep -Eiq "splunkd is running|splunkweb is running"; then
+        echo "[-] Splunk start command completed but runtime verification failed."
+        printf "%s\n" "$STATUS"
+        exit 1
+    fi
     echo "======================================================================"
-    echo "  SUCCESS: Official Splunk Enterprise Web is running on Port ${WEB_PORT}!"
+    echo "  SUCCESS: Real Splunk Enterprise Web verified on Port ${WEB_PORT}!"
     echo "  URL: http://<SERVER-IP>:${WEB_PORT}/en-US/account/login"
-    echo "  Username: admin | Password: changeme"
+    echo "  Username: admin"
     echo "======================================================================"
 else
-    echo "[WARN] Real Splunk binary not found at ${TARGET_SPLUNK}/bin/splunk."
+    echo "[-] Real Splunk binary not found at ${TARGET_SPLUNK}/bin/splunk."
+    exit 1
 fi
