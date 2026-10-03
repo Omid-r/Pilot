@@ -185,7 +185,7 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
       hostname: `splunk-${prefix}-0${roleCount}.soc.local`,
       ip: requestedIp,
       lomIp: requestedLom || undefined,
-      lomType: requestedLom ? 'idrac' : undefined,
+      lomType: requestedLom ? 'idrac' : 'ssh_root',
       sshPort: 22,
       sshUser: 'root',
       role,
