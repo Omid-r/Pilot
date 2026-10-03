@@ -491,7 +491,7 @@ execSync(`cp -r "${stagingDir}/"* "${path.join(wrappedDir, 'splunk-doctor')}/"`)
 
 execSync(`tar -czf "${targetTar1}" -C "${wrappedDir}" splunk-doctor`);
 execSync(`cp "${targetTar1}" "${targetTar2}"`);
-execSync(`sha256sum "${targetTar1}" > "${targetTar1}.sha256"`);
+execSync(`sha256sum "${path.basename(targetTar1)}" > "${targetTar1}.sha256"`, { cwd: publicDir });
 
 console.log(`[RHEL Packager] Generated: ${targetTar1} (${fs.statSync(targetTar1).size} bytes)`);
 console.log(`[RHEL Packager] Generated: ${targetTar2} (${fs.statSync(targetTar2).size} bytes)`);
