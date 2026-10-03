@@ -68,6 +68,20 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Publish extracted snapshot for analysis
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="snapshot-2026-10-03"
+          git checkout -B "$BRANCH"
+          git add extracted snapshot-audit.txt
+          git add -f "$APP_ROOT/package.json" 2>/dev/null || true
+          git commit -m "chore: publish extracted 2026-10-03 snapshot for audit" || true
+          git push --force origin "$BRANCH"
+
       - name: Install dependencies
         shell: bash
         run: |
@@ -148,6 +162,7 @@ jobs:
           fi
 
       - name: Upload audit report
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: pilot-snapshot-audit
