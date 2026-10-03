@@ -1701,17 +1701,17 @@ async function startServer() {
   app.get('/api/splunk/logs', (req, res) => {
     const splunkHome = resolveSplunkDirectory(req);
     const candidates = [
-      path.join(splunkHome, 'var/log/splunk/splunkd.log'),
+      path.join(splunkHome,'var/log/splunk/splunkd.log'),
       '/var/log/splunk/splunkd.log'
     ];
-    const found = candidates.find(f => fs.existsSync(f));
-    if (!found) return res.status(404).json({ exists:false, path:candidates[0], targetDir:splunkHome, logs:'', error:'splunkd.log not found on target host.' });
+    const found = candidates.find(p => fs.existsSync(p));
+    if (!found) return res.status(404).json({exists:false,path:candidates[0],targetDir:splunkHome,logs:'',error:'splunkd.log not found on target host.'});
     try {
-      const content = fs.readFileSync(found,'utf8');
-      const lines = content.split('\\n').filter(Boolean);
-      return res.json({ exists:true, path:found, targetDir:splunkHome, logs:lines.slice(-300).join('\\n') });
-    } catch (e:any) {
-      return res.status(500).json({ exists:true, path:found, targetDir:splunkHome, error:e.message });
+      const content=fs.readFileSync(found,'utf8');
+      const lines=content.split('\\n').filter(Boolean);
+      return res.json({exists:true,path:found,targetDir:splunkHome,logs:lines.slice(-300).join('\\n')});
+    } catch(e:any) {
+      return res.status(500).json({exists:true,path:found,targetDir:splunkHome,error:e.message});
     }
   });
 
@@ -2631,19 +2631,22 @@ PASSWORD = ${password}
   });
 
   // API: Deploy Splunk on Kubernetes / Docker (Offline Container Pipeline)
-  app.post('/api/k8s/deploy-splunk', async (req, res) => {
-    if (typeof process.getuid === 'function' && process.getuid() !== 0) {
-      return res.status(403).json({success:false,error:'Kubernetes/container deployment requires root.'});
+  app.post('/api/k8s/deploy-splunk', async (req,res) => {
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) return res.status(403).json({success:false,error:'Root privileges are required.'});
+    const password=String(req.body?.password||'');
+    if(password.length<12) return res.status(400).json({success:false,error:'A real admin password of at least 12 characters is required.'});
+    const scriptPath=getScriptPath('deploy-splunk-k8s-offline.sh');
+    if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'Offline Splunk deployment script not found.'});
+    const envPassword = process.env.SPLUNK_OFFLINE_ADMIN_PASSWORD;
+    process.env.SPLUNK_OFFLINE_ADMIN_PASSWORD=password;
+    try{
+      const ports=req.body?.ports||{};
+      const result=await runCommand(`bash "${scriptPath}" ${Number(ports.web||8001)} ${Number(ports.rest||8090)} ${Number(ports.splunkTcp||9998)}`,{cwd:getAppProjectRoot(),timeout:240000});
+      const success=result.code===0;
+      return res.status(success?200:500).json({success,exitCode:result.code,logs:(result.stdout||result.stderr).split('\\n')});
+    } finally {
+      if(envPassword===undefined) delete process.env.SPLUNK_OFFLINE_ADMIN_PASSWORD; else process.env.SPLUNK_OFFLINE_ADMIN_PASSWORD=envPassword;
     }
-    const ports = { web:Number(req.body?.ports?.web||8001), rest:Number(req.body?.ports?.rest||8090), splunkTcp:Number(req.body?.ports?.splunkTcp||9998) };
-    const password = String(req.body?.password||'');
-    if(password.length<12) return res.status(400).json({success:false,error:'A real Splunk admin password of at least 12 characters is required.'});
-    const scriptPath = path.join(process.cwd(),'scripts/deploy-splunk-k8s-offline.sh');
-    if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'Offline deployment script not found.'});
-    const env = {...process.env, SPLUNK_OFFLINE_ADMIN_PASSWORD: password};
-    const result = await runCommand(`bash "${scriptPath}" ${ports.web} ${ports.rest} ${ports.splunkTcp}`,{cwd:process.cwd(),timeout:240000});
-    const success = result.code===0;
-    res.status(success?200:500).json({success,exitCode:result.code,logs:(result.stdout||result.stderr).split('\\n'),ports});
   });
 
   // API: Get Kubernetes / Docker Container Status
@@ -4756,6 +4759,7 @@ disabled = 0
   app.post('/api/tools/validate-all', async (req, res) => {
     try {
       const allToolIds = [
+        'architect_overseer',
         'autonomous_agent',
         'ai_diagnostics',
         'bento_overview',
@@ -4790,8 +4794,8 @@ disabled = 0
       res.json({
         success: true,
         totalTools: allToolIds.length,
-        healthyCount: allToolIds.length,
-        warningCount: 0,
+        healthyCount: Object.values(results).filter((r:any)=>r.status==='healthy').length,
+        warningCount: Object.values(results).filter((r:any)=>r.status!=='healthy').length,
         results,
         messageFa: `اعتبارسنجی تمامی ${allToolIds.length} ابزار با موفقیت انجام شد و همگی سالم هستند.`,
         messageEn: `Validation of all ${allToolIds.length} tools completed successfully. All modules healthy.`
