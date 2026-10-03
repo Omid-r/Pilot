@@ -60,7 +60,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
   clusterProbeResults
 }) => {
   const isFa = lang === 'fa';
-  const [pulseCount, setPulseCount] = useState(16480);
+  const [livePreflight, setLivePreflight] = useState<any>(null);
   const [radarAngle, setRadarAngle] = useState(0);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeWorkflowTab, setActiveWorkflowTab] = useState<number>(0);
@@ -73,13 +73,29 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Jitter EPS slightly to simulate live ingestion
   useEffect(() => {
-    const epsInterval = setInterval(() => {
-      setPulseCount(16400 + Math.floor(Math.random() * 180));
-    }, 2000);
-    return () => clearInterval(epsInterval);
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const token = localStorage.getItem('splunk_doctor_auth_token') || '';
+        const response = await fetch('/api/real/splunk/preflight', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled) setLivePreflight(data);
+      } catch (error) {
+        console.warn('[REAL PREFLIGHT] refresh failed', error);
+      }
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+
+  const liveOpenPorts = Array.isArray(livePreflight?.ports)
+    ? livePreflight.ports.filter((p: any) => p.open).length
+    : clusterProbeResults.filter((p) => p.open).length;
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -112,7 +128,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
                 {isFa ? 'سامانه پایدار و متصل به کلاستر' : 'Cluster Live & Operational'}
               </span>
               <span className="text-white/20">·</span>
-              <span className="text-white/40 font-mono text-[11px]">Splunk Enterprise 9.2.1 SVA C11</span>
+              <span className="text-white/40 font-mono text-[11px]">{livePreflight?.version ? livePreflight.version : (isFa ? 'نسخه Splunk اندازه‌گیری نشده' : 'Splunk version not measured')}</span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
@@ -164,24 +180,24 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <span className="text-[10px] text-white/40 uppercase tracking-wider block font-semibold">{isFa ? 'امتیاز سلامت SVA' : 'SVA Health Score'}</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-bold text-[#30d158] font-mono tabular-nums">88 / 100</span>
-              <span className="text-[10px] text-white/40 font-mono">C11 Level-3</span>
+              <span className="text-xl font-bold text-[#30d158] font-mono tabular-nums">{livePreflight?.detected ? 'DETECTED' : 'NOT DETECTED'}</span>
+              <span className="text-[10px] text-white/40 font-mono">{livePreflight?.splunkHome || (isFa ? 'مسیر Splunk اندازه‌گیری نشده' : 'Splunk home not measured')}</span>
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-[10px] text-white/40 uppercase tracking-wider block font-semibold">{isFa ? 'نرخ ورود لاگ لحظه‌ای' : 'Live Ingestion (EPS)'}</span>
+            <span className="text-[10px] text-white/40 uppercase tracking-wider block font-semibold">{isFa ? 'سوکت‌های زنده Splunk' : 'Live Splunk Sockets'}</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-bold text-[#0a84ff] font-mono tabular-nums">{pulseCount.toLocaleString()}</span>
-              <span className="text-[10px] text-white/40 font-mono">1.64 TB / Day</span>
+              <span className="text-xl font-bold text-[#0a84ff] font-mono tabular-nums">{liveOpenPorts}</span>
+              <span className="text-[10px] text-white/40 font-mono">{isFa ? 'EPS در این endpoint اندازه‌گیری نمی‌شود' : 'EPS is not measured by this endpoint'}</span>
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-[10px] text-white/40 uppercase tracking-wider block font-semibold">{isFa ? 'نودهای فعال سرور' : 'Active Cluster Nodes'}</span>
+            <span className="text-[10px] text-white/40 uppercase tracking-wider block font-semibold">{isFa ? 'نودهای مشاهده‌شده در این نما' : 'Nodes observed in this view'}</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-bold text-white font-mono tabular-nums">10 Hosts</span>
-              <span className="text-[10px] text-[#30d158] font-mono">100% Online</span>
+              <span className="text-xl font-bold text-white font-mono tabular-nums">{livePreflight?.detected ? '1 Host' : '0 Hosts'}</span>
+              <span className="text-[10px] text-[#30d158] font-mono">{livePreflight?.detected ? (isFa ? 'Splunk شناسایی شد' : 'Splunk detected') : (isFa ? 'Splunk شناسایی نشد' : 'Splunk not detected')}</span>
             </div>
           </div>
 
