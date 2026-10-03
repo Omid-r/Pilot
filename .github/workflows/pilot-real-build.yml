@@ -1,0 +1,58 @@
+name: Pilot Real Build and Smoke
+
+on:
+  push:
+    branches:
+      - fix/pilot-real-20261003
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Pilot
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript
+        run: npm run lint
+
+      - name: Build application and offline package
+        run: npm run build
+
+      - name: Verify package
+        run: |
+          set -euo pipefail
+          test -f public/splunk_cluster_doctor_pilot_1.1.0-pilot-20261003.tar.gz
+          tar -tzf public/splunk_cluster_doctor_pilot_1.1.0-pilot-20261003.tar.gz | grep -E 'splunk-doctor/(setup.sh|node-runtime/bin/node|dist/server.cjs|dist/index.html)$'
+
+      - name: Real control-plane smoke
+        run: npm run smoke
+
+      - name: Static security scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE "https://hooks[.]slack[.]com/services/T|changeme|Splunk@Doctor|Evaluation Customer|sandbox.*success|success.?=.?true.*mock" .             --exclude-dir=.git --exclude-dir=node_modules --exclude='*.map'; then
+            echo "Unsafe hard-coded credential/synthetic-success marker found."
+            exit 1
+          fi
+
+      - name: Upload offline package
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-offline-rhel-1.1.0-20261003
+          path: |
+            public/splunk_cluster_doctor_pilot_1.1.0-pilot-20261003.tar.gz
+          if-no-files-found: error
