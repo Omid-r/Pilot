@@ -1242,7 +1242,7 @@ export default function App() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.success === false) throw new Error(data.error || 'Virtual target decommission failed');
-      setVirtualClusterState(prev => ({ ...prev, isInstalled: false, status: 'deleted' }));
+      setVirtualClusterState(prev => ({ ...prev, isInstalled: false, status: 'uninstalled' }));
       setActiveEnvironment('production');
       setGlobalAiLogs(Array.isArray(data.logs) ? data.logs : ['[REAL] Virtual target decommission command completed.']);
       showToast(isFa ? 'هدف مجازی واقعی حذف شد.' : 'Real virtual target decommissioned.');
