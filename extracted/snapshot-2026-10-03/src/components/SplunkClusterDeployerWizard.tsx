@@ -177,12 +177,15 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
       defaultNVMe = 50;
     }
 
+    const requestedIp = newNodeIp.trim() || window.prompt(isFa ? 'IP واقعی نود را وارد کنید:' : 'Enter the real node IP:')?.trim() || '';
+    const requestedLom = newNodeLomIp.trim() || window.prompt(isFa ? 'IP واقعی LOM/BMC (اختیاری):' : 'Real LOM/BMC IP (optional):')?.trim() || '';
+
     const newNode: ServerAssetNode = {
       id: `node-${prefix}-0${roleCount}-${Date.now().toString().slice(-4)}`,
       hostname: `splunk-${prefix}-0${roleCount}.soc.local`,
-      ip: newNodeIp.trim(),
-      lomIp: newNodeLomIp.trim() || undefined,
-      lomType: newNodeLomIp.trim() ? 'idrac' : undefined,
+      ip: requestedIp,
+      lomIp: requestedLom || undefined,
+      lomType: requestedLom ? 'idrac' : undefined,
       sshPort: 22,
       sshUser: 'root',
       role,
