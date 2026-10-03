@@ -8,6 +8,7 @@ set -e
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 TARGET_DIR="/opt/splunk-doctor"
+DATA_DIR="/var/lib/splunk-doctor"
 
 echo "======================================================================"
 echo "  🚀 [SPLUNK CLUSTER DOCTOR] ALL-IN-ONE AUTOMATED DEPLOYER"
@@ -44,32 +45,30 @@ rm -rf "${TARGET_DIR}/dist" "${TARGET_DIR}/scripts" "${TARGET_DIR}/systemd" 2>/d
 echo "==> [۳/۶] کپی و استقرار فایل‌های بسته جدید..."
 cp -rf "${SOURCE_DIR}"/* "${TARGET_DIR}/"
 
-# 5. Fix ALL permissions automatically (No manual chmod required!)
-echo "==> [۴/۶] اعمال و تثبیت دسترسی‌های اجرایی کامل روی تمامی فایل‌ها و اسکریپت‌ها..."
-chmod -R 755 "${TARGET_DIR}"
-chmod +x "${TARGET_DIR}"/*.sh 2>/dev/null || true
-chmod +x "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
-chmod +x "${TARGET_DIR}"/dist/server.cjs 2>/dev/null || true
+# 5. Install safe permissions; do not make every config/data file executable.
+echo "==> [۴/۶] اعمال مجوزهای امن و اجرایی..."
+find "${TARGET_DIR}" -type d -exec chmod 755 {} +
+find "${TARGET_DIR}" -type f -exec chmod 644 {} +
+chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
 
-# Check / find Node.js binary path
-NODE_BIN="$(command -v node 2>/dev/null || which node 2>/dev/null || echo "")"
-if [ -z "$NODE_BIN" ]; then
-  if [ -f "/usr/bin/node" ]; then NODE_BIN="/usr/bin/node";
-  elif [ -f "/usr/local/bin/node" ]; then NODE_BIN="/usr/local/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs18/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs18/root/usr/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs16/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs16/root/usr/bin/node";
-  elif [ -f "/opt/splunk/bin/node" ]; then NODE_BIN="/opt/splunk/bin/node";
-  fi
+# Private runtime state and secrets live outside the application tree.
+mkdir -p "${DATA_DIR}"
+chmod 700 "${DATA_DIR}"
+
+# Use the Node runtime packaged with the offline bundle.
+NODE_BIN="${TARGET_DIR}/node-runtime/bin/node"
+if [ ! -x "$NODE_BIN" ]; then
+  NODE_BIN="$(command -v node 2>/dev/null || true)"
 fi
-
-if [ -z "$NODE_BIN" ]; then
-  echo "[-] اخطار: نود جی‌اس (Node.js) یافت نشد."
-  echo "[!] لطفاً با یکی از دستورات زیر Node.js را نصب کنید و مجدداً setup.sh را اجرا نمایید:"
-  echo "    sudo dnf install -y nodejs   (RHEL 8 / RHEL 9 / Rocky Linux)"
-  echo "    sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
+if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+  echo "[-] No usable Node.js runtime found in the offline bundle or system."
   exit 1
 fi
-echo "  -> مسیر شناسایی‌شده Node.js: $NODE_BIN"
+echo "  -> Node.js: $("$NODE_BIN" --version) ($NODE_BIN)"
+
+if command -v restorecon >/dev/null 2>&1; then
+  restorecon -RF "${TARGET_DIR}" "${DATA_DIR}" || true
+fi
 
 # 6. Configure Systemd Service dynamically
 echo "==> [۵/۶] پیکربندی و فعال‌سازی سرویس دائمی Systemd (splunk-doctor.service)..."
@@ -85,12 +84,14 @@ Type=simple
 User=root
 WorkingDirectory=${TARGET_DIR}
 ExecStart=${NODE_BIN} ${TARGET_DIR}/dist/server.cjs
+UMask=0077
 Restart=always
 RestartSec=3
 KillMode=process
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=SPLUNK_HOME=/opt/splunk
+Environment=SPLUNK_DOCTOR_DATA_DIR=${DATA_DIR}
 
 LimitNOFILE=65536
 LimitNPROC=65536
