@@ -581,9 +581,10 @@ export interface DigitalCertificateLicense {
     organization: string; // e.g. Bank Melli Iran SOC / Parsian SOC
     organizationalUnit: string;
     country: string;
-    subscriptionTier: 'ENTERPRISE_COMMERCIAL_GOLD' | 'ENTERPRISE_PLATINUM_SOC' | 'STANDARD_COMMERCIAL' | 'TRIAL_EVALUATION';
+    subscriptionTier: 'ENTERPRISE_COMMERCIAL_GOLD' | 'ENTERPRISE_PLATINUM_SOC' | 'STANDARD_COMMERCIAL' | 'TRIAL_EVALUATION' | 'UNLICENSED';
     nodeLimit: number;
     licensedModules: string[];
+    status?: 'ACTIVE' | 'EXPIRED' | 'UNLICENSED' | 'INVALID';
   };
   issuer: {
     commonName: string;
