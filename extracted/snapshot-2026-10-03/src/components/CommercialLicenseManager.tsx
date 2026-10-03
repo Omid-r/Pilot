@@ -68,13 +68,13 @@ export const CommercialLicenseManager: React.FC<CommercialLicenseManagerProps> =
 
   const handleIssueNewCertificate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetOrg.trim()) return;
-    const newCert = issueCustomCompanyLicense(targetOrg.trim(), selectedTier, selectedDays, nodeQuota);
-    onUpdateLicense(newCert);
+    setToastMsg(
+      isFa
+        ? 'صدور گواهینامه محلی غیرفعال است؛ گواهی باید توسط CA/مرجع لایسنس مورد اعتماد صادر و سپس وارد شود.'
+        : 'Local certificate issuance is disabled; use a trusted CA/licensing authority and import the signed certificate.'
+    );
     setShowIssueModal(false);
-    setTargetOrg('');
-    setToastMsg(isFa ? `گواهینامه دیجیتال رسمی برای سازمان ${targetOrg} با موفقیت صادر شد.` : `Digital certificate issued for ${targetOrg}.`);
-    setTimeout(() => setToastMsg(null), 4000);
+    setTimeout(() => setToastMsg(null), 5000);
   };
 
   const pemContent = generatePemCertificateText(license);
@@ -99,7 +99,7 @@ export const CommercialLicenseManager: React.FC<CommercialLicenseManagerProps> =
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-black tracking-wide flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
                 <Award className="w-3.5 h-3.5 text-amber-400" />
-                <span>{isFa ? 'سامانه تجاری با گواهینامه معتبر PKI' : 'Commercial Enterprise PKI Certificate'}</span>
+                <span>{license.subject.status === 'UNLICENSED' ? (isFa ? 'بدون گواهینامه تجاری' : 'No Commercial Certificate') : (isFa ? 'گواهینامه PKI تأییدشده' : 'Verified PKI Certificate')}</span>
               </span>
               <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
@@ -115,8 +115,12 @@ export const CommercialLicenseManager: React.FC<CommercialLicenseManagerProps> =
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
               {isFa
-                ? 'این نرم‌افزار تحت لایسنس تجاری و مبتنی بر سرتیفیکت دیجیتال رمزگذاری شده اختصاصی سازمان فعال است. کلیه ارتباطات ایجنت‌ها، مانیتورینگ هارت‌بیت و کنترل از راه دور بر بستر رمزگذاری شده mTLS 1.3 تضمین می‌گردد.'
-                : 'Active under commercial enterprise subscription. Cryptographically signed X.509 digital license with zero-trust confidentiality and mTLS transit protection.'}
+                ? (license.subject.status === 'UNLICENSED'
+                  ? 'هیچ لایسنس تجاری یا گواهی PKI در این نصب تأیید نشده است. گواهی معتبر باید خارج از برنامه صادر و به سامانه وارد شود.'
+                  : 'گواهی تجاری تأییدشده توسط مرجع مورد اعتماد در این نصب ثبت شده است؛ وضعیت کانال‌های عملیاتی جداگانه و به‌صورت زنده بررسی می‌شود.')
+                : (license.subject.status === 'UNLICENSED'
+                  ? 'No commercial license or PKI certificate is verified on this installation. A valid certificate must be issued externally and imported.'
+                  : 'A trusted commercial certificate is installed; operational transport health is checked independently at runtime.')}
             </p>
           </div>
 
@@ -124,14 +128,16 @@ export const CommercialLicenseManager: React.FC<CommercialLicenseManagerProps> =
           <div className="flex flex-wrap items-center gap-3 shrink-0 relative z-10">
             <button
               onClick={handleDownloadCertificate}
-              className="px-5 py-2.5 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs shadow-[0_0_20px_rgba(245,158,11,0.2)] flex items-center gap-2 transition cursor-pointer"
+              className={`px-5 py-2.5 rounded-2xl border font-bold text-xs flex items-center gap-2 transition ${license.subject.status === 'UNLICENSED' ? 'bg-slate-500/10 border-slate-500/20 text-slate-500 cursor-not-allowed' : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300 cursor-pointer'}`}
+              disabled={license.subject.status === 'UNLICENSED'}
             >
               <Download className="w-4 h-4" />
               <span>{isFa ? 'دانلود فایل سرتیفیکت (.crt)' : 'Download .crt Certificate'}</span>
             </button>
             <button
               onClick={() => setShowIssueModal(true)}
-              className="px-5 py-2.5 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] text-slate-200 font-bold text-xs flex items-center gap-2 transition cursor-pointer"
+              disabled={true}
+              className="px-5 py-2.5 rounded-2xl bg-slate-500/10 border border-slate-500/20 text-slate-500 font-bold text-xs flex items-center gap-2 transition cursor-not-allowed"
             >
               <Key className="w-4 h-4 text-violet-400" />
               <span>{isFa ? 'صدور گواهینامه برای شرکت جدید' : 'Issue New Organization Cert'}</span>
