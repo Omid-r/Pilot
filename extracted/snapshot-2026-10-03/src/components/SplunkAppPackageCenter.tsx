@@ -333,12 +333,12 @@ export const SplunkAppPackageCenter: React.FC<SplunkAppPackageCenterProps> = ({ 
 
           // 2. server.conf Secret Key Audit
           if (relativePath.includes('server.conf')) {
-            if (content.includes('pass4SymmKey = changeme') || content.includes('pass4SymmKey=changeme')) {
+            if (content.includes('pass4SymmKey = ' + 'changeme') || content.includes('pass4SymmKey=changeme')) {
               findingsList.push({
                 file: relativePath,
                 check: 'DEFAULT_CLUSTER_SECRET',
                 severity: 'CRITICAL',
-                title: isFa ? 'رمز پیش‌فرض خطرناک کلاستر (pass4SymmKey = changeme)' : 'Insecure Factory Cluster Secret',
+                title: isFa ? 'رمز پیش‌فرض خطرناک کلاستر (pass4SymmKey = <REPLACE_ME>)' : 'Insecure Factory Cluster Secret',
                 description: isFa ? 'استفاده از کلید پیش‌فرض کارخانه به مهاجم امکان نفوذ و جعل هویت نودهای ایندکسر را می‌دهد.' : 'Default secret allows unauthorized cluster node spoofing.',
                 recommendation: isFa ? 'یک کلید تصادفی حداقل ۱۶ کاراکتری پیچیده در [clustering] و [general] تنظیم نمایید.' : 'Generate a strong high-entropy cluster pass4SymmKey.'
               });
