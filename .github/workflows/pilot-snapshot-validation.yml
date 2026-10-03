@@ -69,8 +69,8 @@ jobs:
           test -f splunk-doctor-offline-rhel.tar.gz
           test -f splunk-doctor-offline-rhel.tar.gz.sha256
           sha256sum -c splunk-doctor-offline-rhel.tar.gz.sha256
-          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)node-runtime/bin/node
-          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)dist/server.cjs
-          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)setup.sh
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -F 'node-runtime/bin/node'
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -F 'dist/server.cjs'
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -F 'setup.sh'
           tar -xOzf splunk-doctor-offline-rhel.tar.gz splunk-doctor/systemd/splunk-doctor.service | grep -F 'ExecStart=/opt/splunk-doctor/node-runtime/bin/node /opt/splunk-doctor/dist/server.cjs'
           test "$(tar -xOf splunk-doctor-offline-rhel.tar.gz splunk-doctor/node-runtime/bin/node | wc -c)" -gt 1000000
