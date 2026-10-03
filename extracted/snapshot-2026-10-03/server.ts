@@ -2829,7 +2829,7 @@ mgmtHostPort = 127.0.0.1:${restPort}
     try {
       if (!fs.existsSync(packagePath)) {
         const buildScript = getScriptPath('build-rhel-package.js');
-        const result = await runCommand(`${process.execPath} ${buildScript}`, { cwd: getAppProjectRoot(), timeoutMs: 120000 });
+        const result = await runCommand(`${process.execPath} ${buildScript}`, { cwd: getAppProjectRoot(), timeout: 120000 });
         if (result.code !== 0 || !fs.existsSync(packagePath)) {
           return res.status(500).json({
             success: false,
@@ -2867,7 +2867,7 @@ mgmtHostPort = 127.0.0.1:${restPort}
     try {
       const buildScript = getScriptPath('build-rhel-package.js');
       const root = getAppProjectRoot();
-      const result = await runCommand(`${process.execPath} ${buildScript}`, { cwd: root, timeoutMs: 120000 });
+      const result = await runCommand(`${process.execPath} ${buildScript}`, { cwd: root, timeout: 120000 });
       if (result.code !== 0) {
         return res.status(500).json({ success: false, error: result.stderr || 'Package rebuild failed.', stdout: result.stdout });
       }
