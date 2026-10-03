@@ -1,3 +1,4 @@
+// Offline readiness validation is part of the mandatory authenticated smoke contract.
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
