@@ -8,7 +8,10 @@
 WEB_PORT="${1:-8001}"
 REST_PORT="${2:-8090}"
 TCP_PORT="${3:-9998}"
-ADMIN_PASSWORD="${4:-changeme}"
+ADMIN_PASSWORD="${SPLUNK_ADMIN_PASSWORD:-}"
+IMAGE_REF="${SPLUNK_IMAGE_REF:-}"
+[[ ${#ADMIN_PASSWORD} -ge 12 ]] || { echo "[ERROR] SPLUNK_ADMIN_PASSWORD is required and must be at least 12 characters."; exit 1; }
+[[ -n "$IMAGE_REF" ]] || { echo "[ERROR] SPLUNK_IMAGE_REF is required for offline deployment."; exit 1; }
 
 WORKDIR="/opt/splunk_container_runtime"
 CONFIG_DIR="/opt/splunk_parallel_configs"
@@ -46,7 +49,7 @@ EOF
 cat << EOF > "${CONFIG_DIR}/server.conf"
 [general]
 serverName = splunk-k8s-parallel-node
-pass4SymmKey = changeme-k8s-passkey
+pass4SymmKey = PLACEHOLDER_SET_BY_CONTROLLER
 active_group = Free
 
 [kvstore]
@@ -116,7 +119,7 @@ spec:
     spec:
       containers:
       - name: splunk
-        image: splunk/splunk:latest
+        image: ${IMAGE_REF}
         imagePullPolicy: IfNotPresent
         env:
         - name: SPLUNK_START_ARGS
@@ -240,12 +243,14 @@ ensure_offline_image() {
 
 if command -v kubectl >/dev/null 2>&1; then
     echo "  -> Found kubectl. Applying Kubernetes Manifests..."
-    kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml" 2>&1 || true
+    kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml"
+    kubectl -n splunk-parallel rollout status deployment/splunk-parallel-instance --timeout=300s
     DEPLOY_TYPE="kubernetes"
     CONTAINER_SUCCESS="yes"
 elif command -v k3s >/dev/null 2>&1; then
     echo "  -> Found k3s. Applying Kubernetes Manifests via k3s..."
-    k3s kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml" 2>&1 || true
+    k3s kubectl apply -f "${WORKDIR}/splunk-k8s-standalone.yaml"
+    k3s kubectl -n splunk-parallel rollout status deployment/splunk-parallel-instance --timeout=300s
     DEPLOY_TYPE="k3s"
     CONTAINER_SUCCESS="yes"
 elif command -v podman >/dev/null 2>&1; then
@@ -268,7 +273,7 @@ elif command -v podman >/dev/null 2>&1; then
           -e "SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt" \
           -e "SPLUNK_PASSWORD=${ADMIN_PASSWORD}" \
           -e "SPLUNK_RUN_AS_ROOT=1" \
-          "${IMAGE_NAME}" 2>&1 || true)
+          "${IMAGE_NAME}")
           
         if echo "$PODMAN_OUT" | grep -qi "error"; then
             echo "  -> [NOTICE] Podman image container execution encountered: $PODMAN_OUT"
@@ -296,7 +301,7 @@ elif command -v docker >/dev/null 2>&1; then
           -e "SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt" \
           -e "SPLUNK_PASSWORD=${ADMIN_PASSWORD}" \
           -e "SPLUNK_RUN_AS_ROOT=1" \
-          splunk/splunk:latest 2>&1 || true)
+          "$IMAGE_REF")
           
         if echo "$DOCKER_OUT" | grep -qi "error"; then
             echo "  -> [NOTICE] Docker container run encountered: $DOCKER_OUT"
