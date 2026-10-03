@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           mkdir -p offline-prereqs/rhel8/x86_64/rpms
           docker run --rm \
-            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman" \
+            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool" \
             -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out" \
             rockylinux:8 \
             bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           mkdir -p offline-prereqs/rhel9/x86_64/rpms
           docker run --rm \
-            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman" \
+            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool" \
             -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out" \
             rockylinux:9 \
             bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
