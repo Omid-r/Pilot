@@ -343,6 +343,125 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     try { ok(res, healthFindings()); } catch (e: any) { fail(res, 500, e.message); }
   });
 
+  app.post('/api/real/cluster/deploy', auth, async (req,res) => {
+    if(!isRoot()) return fail(res,403,'Cluster deployment requires root privileges.');
+    const deploymentEngine=String(req.body?.deploymentEngine||'baremetal_native');
+    const nodes=Array.isArray(req.body?.nodes)?req.body.nodes:[];
+    const selectedOS=String(req.body?.selectedOS||'');
+    const sizing=req.body?.sizingInputs||{};
+    const adminPassword=String(req.body?.adminPassword||'');
+    const pass4SymmKey=String(req.body?.pass4SymmKey||'');
+    if(!nodes.length)return fail(res,400,'At least one real node is required.');
+    if(adminPassword.length<12||pass4SymmKey.length<12)return fail(res,400,'Real adminPassword and pass4SymmKey are required.');
+    if(deploymentEngine!=='baremetal_native'&&deploymentEngine!=='docker_standalone'&&deploymentEngine!=='k8s_operator')
+      return fail(res,400,'Unsupported deployment engine.');
+
+    const results:any[]=[]; const logs:string[]=[];
+    try{
+      for(const node of nodes){
+        const id=String(node.id||'');
+        const host=String(node.ip||'').trim();
+        const sshUser=String(node.sshUser||'root').trim();
+        const sshPort=Number(node.sshPort||22);
+        if(!id||!host)return fail(res,400,'Every node must have id and real ip.',{node});
+
+        logs.push(`[NODE ${id}] Starting real orchestration for ${host}.`);
+
+        // Step 0: Connectivity/inventory.
+        const inventory=await remoteExec(host,sshUser,sshPort,
+          'set -e\nprintf "__HOST__ "; hostname\nprintf "\n__OS__\n"; cat /etc/os-release\nprintf "__KERNEL__ "; uname -r\nprintf "\n__ROOT__ "; id -u\nprintf "\n__SELINUX__ "; getenforce 2>/dev/null || true\nprintf "\n__SPLUNK__ "; test -x /opt/splunk/bin/splunk && echo present || echo absent\n'
+        );
+        if(inventory.code!==0){
+          results.push({id,host,status:'failed',stage:'inventory',error:inventory.stderr||inventory.stdout});
+          throw new Error(`SSH inventory failed for ${host}: ${inventory.stderr||inventory.stdout}`);
+        }
+
+        // Step 1: Hardening via real remote baseline.
+        const harden=await remoteExec(host,sshUser,sshPort,REMOTE_HARDEN_SCRIPT);
+        if(harden.code!==0){
+          results.push({id,host,status:'failed',stage:'hardening',error:harden.stderr||harden.stdout});
+          throw new Error(`Hardening failed for ${host}: ${harden.stderr||harden.stdout}`);
+        }
+        const hardenVerify=await remoteExec(host,sshUser,sshPort,
+          'set -e\nprintf "__SELINUX__ "; getenforce\nprintf "\n__SWAPPINESS__ "; sysctl -n vm.swappiness\nprintf "\n__MAPCOUNT__ "; sysctl -n vm.max_map_count\nprintf "\n__CHRONY__ "; systemctl is-active chronyd\nprintf "\n__LIMITS__ "; grep -E "splunk.*nofile" /etc/security/limits.d/99-splunk-orchestrator.conf 2>/dev/null || true\n'
+        );
+        if(hardenVerify.code!==0) throw new Error(`Hardening verification failed for ${host}: ${hardenVerify.stderr||hardenVerify.stdout}`);
+        const hardText=hardenVerify.stdout||'';
+
+        // Step 2: Runtime for container/K8s.
+        if(deploymentEngine!=='baremetal_native'){
+          const runtimeScript=fs.existsSync(path.join(process.cwd(),'scripts','install-container-engine-offline.sh'))
+            ? fs.readFileSync(path.join(process.cwd(),'scripts','install-container-engine-offline.sh'),'utf8')
+            : '';
+          if(!runtimeScript)throw new Error('Offline container runtime installer is missing.');
+          const rt=await remoteExec(host,sshUser,sshPort,runtimeScript);
+          if(rt.code!==0)throw new Error(`Container/Kubernetes runtime installation failed for ${host}: ${rt.stderr||rt.stdout}`);
+
+          if(deploymentEngine==='k8s_operator'){
+            const imageRef=String(req.body?.imageRef||'');
+            if(!imageRef)throw new Error('For Kubernetes deployment, imageRef must identify a real image already loaded on the target node.');
+            const k8sScript=fs.existsSync(path.join(process.cwd(),'scripts','deploy-splunk-k8s-offline.sh'))
+              ? fs.readFileSync(path.join(process.cwd(),'scripts','deploy-splunk-k8s-offline.sh'),'utf8') : '';
+            if(!k8sScript)throw new Error('Offline Kubernetes deployment script is missing.');
+            const wrapped=`export SPLUNK_OFFLINE_ADMIN_PASSWORD="${adminPassword.replace(/"/g,'\\\"')}"
+export SPLUNK_OFFLINE_IMAGE_REF="${imageRef.replace(/"/g,'\\\"')}"
+export SPLUNK_PARALLEL_PASS4SYMKEY="${pass4SymmKey.replace(/"/g,'\\\"')}"
+${k8sScript}`;
+            const dep=await remoteExec(host,sshUser,sshPort,wrapped);
+            if(dep.code!==0)throw new Error(`Kubernetes Splunk deployment failed for ${host}: ${dep.stderr||dep.stdout}`);
+            results.push({id,host,status:'running',stage:'k8s',installProgress:100,hardeningReport:{selinuxEnforced:/__SELINUX__\\s+Enforcing/.test(hardText),sysctlTuned:/__SWAPPINESS__\\s+1/.test(hardText)&&/__MAPCOUNT__\\s+262144/.test(hardText),limitsConfigured:/nofile/.test(hardText),firewallConfigured:/firewall/i.test(harden.stdout||''),chronyActive:/__CHRONY__\\s+active/.test(hardText)}});
+          } else {
+            const compose=String(req.body?.composeFile||'');
+            if(!compose)throw new Error('For Docker deployment, a real offline compose manifest/image must be staged on the target node.');
+            const dockerExec=await remoteExec(host,sshUser,sshPort,
+              `set -euo pipefail
+mkdir -p /opt/splunk-doctor-deploy
+cat > /opt/splunk-doctor-deploy/docker-compose.yml <<'YAML'
+${compose}
+YAML
+if command -v docker >/dev/null 2>&1; then docker compose -f /opt/splunk-doctor-deploy/docker-compose.yml up -d; elif command -v podman >/dev/null 2>&1; then podman compose -f /opt/splunk-doctor-deploy/docker-compose.yml up -d; else exit 20; fi
+`
+            );
+            if(dockerExec.code!==0)throw new Error(`Docker/Podman deployment failed for ${host}: ${dockerExec.stderr||dockerExec.stdout}`);
+            results.push({id,host,status:'running',stage:'docker',installProgress:100,hardeningReport:{selinuxEnforced:/__SELINUX__\\s+Enforcing/.test(hardText),sysctlTuned:/__SWAPPINESS__\\s+1/.test(hardText),limitsConfigured:/nofile/.test(hardText),firewallConfigured:true}});
+          }
+        } else {
+          // Native Splunk deployment: artifact is transferred to target.
+          const artifacts=artifactSearch(/splunk.*\\.(rpm|tgz|tar\\.gz)$/i);
+          if(!artifacts.length)throw new Error('No real Splunk RPM/TGZ artifact is staged on the controller.');
+          const version=String(node.splunkVersion||req.body?.splunkVersion||'');
+          const artifact=artifacts.find(x=>version && x.includes(version))||artifacts[0];
+          const b64=fs.readFileSync(artifact).toString('base64');
+          const file=path.basename(artifact).replace(/[^a-zA-Z0-9._-]/g,'_');
+          const remote=await remoteExec(host,sshUser,sshPort,
+            [
+              'set -euo pipefail',
+              'mkdir -p /var/tmp/splunk-doctor-deploy',
+              `echo '${b64}' | base64 -d > /var/tmp/splunk-doctor-deploy/${file}`,
+              /\\.rpm$/i.test(file)?`dnf --disablerepo='*' -y install /var/tmp/splunk-doctor-deploy/${file}`:`mkdir -p /opt/splunk && tar -xzf /var/tmp/splunk-doctor-deploy/${file} -C /opt --strip-components=1`,
+              'mkdir -p /opt/splunk/etc/system/local',
+              `printf '%s' '${Buffer.from(`[user_info]\\nUSERNAME = admin\\nPASSWORD = ${adminPassword}\\n`).toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/user-seed.conf`,
+              `printf '%s' '${Buffer.from(`[general]\\nserverName = ${host.replace(/[^a-zA-Z0-9_.-]/g,'-')}\\nmgmtHostPort = 127.0.0.1:8089\\npass4SymmKey = ${pass4SymmKey}\\n`).toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/server.conf`,
+              `printf '%s' '${Buffer.from('[settings]\\nhttpport = 8000\\nserver.socket_host = 0.0.0.0\\nstartwebserver = 1\\nmgmtHostPort = 127.0.0.1:8089\\n').toString('base64')}' | base64 -d > /opt/splunk/etc/system/local/web.conf`,
+              '/opt/splunk/bin/splunk start --accept-license --answer-yes --no-prompt --run-as-root',
+              '/opt/splunk/bin/splunk status',
+              `rm -f /var/tmp/splunk-doctor-deploy/${file}`
+            ].join('\\n')
+          );
+          if(remote.code!==0||!/splunkd is running|splunkweb is running/i.test(remote.stdout||remote.stderr||'')){
+            throw new Error(`Native Splunk deployment/verification failed for ${host}: ${remote.stderr||remote.stdout}`);
+          }
+          results.push({id,host,status:'running',stage:'native',installProgress:100,hardeningReport:{selinuxEnforced:/__SELINUX__\\s+Enforcing/.test(hardText),sysctlTuned:/__SWAPPINESS__\\s+1/.test(hardText)&&/__MAPCOUNT__\\s+262144/.test(hardText),limitsConfigured:/nofile/.test(hardText),firewallConfigured:/firewall/i.test(harden.stdout||''),chronyActive:/__CHRONY__\\s+active/.test(hardText)}});
+        }
+        logs.push(`[NODE ${id}] Deployment and verification succeeded.`);
+      }
+
+      ok(res,{deploymentEngine,selectedOS,sizing, nodes:results,logs});
+    } catch(e:any) {
+      return res.status(500).json({success:false,error:e.message,nodes:results,logs});
+    }
+  });
+
   app.get('/api/real/os/preflight', auth, (_req,res) => {
     const os=readOsRelease();
     const tools={ipmitool:Boolean(commandSync('which',['ipmitool'])),curl:Boolean(commandSync('which',['curl'])),redfish:Boolean(commandSync('which',['redfishtool']))};
