@@ -1,0 +1,155 @@
+name: Snapshot Extract, Audit and Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.zip'
+      - '.github/workflows/snapshot-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Extract committed snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$ZIP"
+          rm -rf extracted
+          mkdir -p extracted/snapshot-2026-10-03
+          unzip -q "$ZIP" -d extracted/snapshot-2026-10-03
+          echo "APPENDED_SNAPSHOT_EXTRACTED=1" >> "$GITHUB_ENV"
+          echo "Snapshot extracted."
+          find extracted/snapshot-2026-10-03 -maxdepth 3 -type f -printf '%P\n' | sort | head -300
+
+      - name: Static audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="extracted/snapshot-2026-10-03"
+          {
+            echo "# Snapshot inventory"
+            echo
+            echo "Source commit: $GITHUB_SHA"
+            echo
+            echo "## Files"
+            find "$ROOT" -type f | sort
+            echo
+            echo "## Package manifests"
+            find "$ROOT" -maxdepth 6 -type f \( -name package.json -o -name pyproject.toml -o -name requirements.txt -o -name go.mod -o -name Cargo.toml \) -print
+            echo
+            echo "## Potential simulation/default-secret markers"
+            grep -RInE "sandbox|simulation|simulat|mock|fake|changeme|password.?=.?['\"]|success.?=.?true|Math\.random|TODO" "$ROOT" --exclude='*.min.js' --exclude='*.map' || true
+          } > snapshot-audit.txt
+
+      - name: Detect app root
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$(find extracted/snapshot-2026-10-03 -type f -name package.json -print -quit | xargs -r dirname)"
+          test -n "$ROOT"
+          echo "APP_ROOT=$ROOT" >> "$GITHUB_ENV"
+          cat "$ROOT/package.json"
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$APP_ROOT"
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          elif [ -f npm-shrinkwrap.json ]; then
+            npm ci --no-audit --no-fund
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f bun.lockb ] || [ -f bun.lock ]; then
+            npm install --no-audit --no-fund --no-package-lock
+          else
+            npm install --no-audit --no-fund --no-package-lock
+          fi
+
+      - name: Type check / lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$APP_ROOT"
+          npm run lint --if-present
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$APP_ROOT"
+          npm run build --if-present
+
+      - name: Smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$APP_ROOT"
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.smoke ? 0 : 1)"; then
+            npm run smoke
+          elif node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.test ? 0 : 1)"; then
+            npm test --if-present
+          fi
+
+          mapfile -t SMOKES < <(find . -type f \( -iname '*smoke*.js' -o -iname '*smoke*.mjs' -o -iname '*smoke*.cjs' \) -not -path './node_modules/*' | sort)
+          for f in "\${SMOKES[@]}"; do
+            echo "Running smoke candidate: $f"
+            node "$f"
+          done
+
+      - name: Package verification report
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$APP_ROOT"
+          {
+            echo "## Build output"
+            find dist build out . -maxdepth 2 -type f \( -name 'index.html' -o -name 'server.cjs' -o -name '*.tgz' \) 2>/dev/null | sort | head -100 || true
+            echo
+            echo "## Runtime files"
+            find . -maxdepth 3 -type f \( -name 'setup.sh' -o -name '*.service' -o -name 'Dockerfile' -o -name 'docker-compose*.yml' \) | sort
+          } >> "$GITHUB_WORKSPACE/snapshot-audit.txt"
+
+      - name: Publish extracted snapshot branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="snapshot-2026-10-03"
+          git fetch origin "$BRANCH" || true
+          git checkout -B "$BRANCH"
+          git add extracted snapshot-audit.txt
+          if git diff --cached --quiet; then
+            echo "No extracted snapshot changes."
+          else
+            git commit -m "chore: extract 2026-10-03 snapshot for audit"
+            git push origin "$BRANCH"
+          fi
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-audit
+          path: snapshot-audit.txt
+          if-no-files-found: error
