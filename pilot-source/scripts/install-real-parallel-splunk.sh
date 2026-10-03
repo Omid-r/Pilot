@@ -11,6 +11,10 @@ WEB_PORT="${3:-8001}"
 REST_PORT="${4:-8090}"
 TCP_PORT="${5:-9998}"
 KVSTORE_PORT="${6:-8192}"
+ADMIN_PASSWORD="${SPLUNK_ADMIN_PASSWORD:-}"
+PASS4_SYMM_KEY="${SPLUNK_PASS4SYMMKEY:-}"
+[[ ${#ADMIN_PASSWORD} -ge 12 ]] || { echo "[ERROR] SPLUNK_ADMIN_PASSWORD must be set (min 12 chars)."; exit 1; }
+[[ ${#PASS4_SYMM_KEY} -ge 12 ]] || { echo "[ERROR] SPLUNK_PASS4SYMMKEY must be set (min 12 chars)."; exit 1; }
 
 export SPLUNK_HOME="${TARGET_SPLUNK}"
 export SPLUNK_RUN_AS_ROOT=1
@@ -63,7 +67,7 @@ mkdir -p "${TARGET_SPLUNK}/var/log/splunk"
 cat << 'EOF' > "${TARGET_SPLUNK}/etc/system/local/user-seed.conf"
 [user_info]
 USERNAME = admin
-PASSWORD = changeme
+PASSWORD = ${ADMIN_PASSWORD}
 EOF
 
 # 4. Write isolated port configurations
@@ -83,7 +87,7 @@ cat << EOF > "${TARGET_SPLUNK}/etc/system/local/server.conf"
 [general]
 serverName = splunk-parallel-staging-01
 mgmtHostPort = 127.0.0.1:${REST_PORT}
-pass4SymmKey = changeme-parallel-passkey
+pass4SymmKey = ${PASS4_SYMM_KEY}
 active_group = Free
 
 [sslConfig]
@@ -129,12 +133,14 @@ fi
 # 6. Start Official Splunk Enterprise
 echo "[6/6] Starting Official Splunk Enterprise daemon with --run-as-root..."
 if [ -f "${TARGET_SPLUNK}/bin/splunk" ]; then
-    chmod -R +x "${TARGET_SPLUNK}/bin/" 2>/dev/null || true
-    "${TARGET_SPLUNK}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true
+    chmod 755 "${TARGET_SPLUNK}/bin/splunk"
+    "${TARGET_SPLUNK}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root
+    STATUS_OUTPUT="$("${TARGET_SPLUNK}/bin/splunk" status 2>&1 || true)"
+    echo "$STATUS_OUTPUT"
+    echo "$STATUS_OUTPUT" | grep -Eqi "splunkd is running|splunkweb is running" || { echo "[ERROR] Splunk did not reach a running state."; exit 1; }
     echo "======================================================================"
-    echo "  SUCCESS: Official Splunk Enterprise Web is running on Port ${WEB_PORT}!"
+    echo "  SUCCESS: Real Splunk Enterprise Web was verified on Port ${WEB_PORT}!"
     echo "  URL: http://<SERVER-IP>:${WEB_PORT}/en-US/account/login"
-    echo "  Username: admin | Password: changeme"
     echo "======================================================================"
 else
     echo "[WARN] Real Splunk binary not found at ${TARGET_SPLUNK}/bin/splunk."
