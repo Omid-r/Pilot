@@ -3,7 +3,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
-import { exec, execSync } from 'child_process';
+import { exec, execSync, execFile } from 'child_process';
 import net from 'net';
 import os from 'os';
 import {
@@ -175,7 +175,7 @@ async function startServer() {
   // Enhanced Helper to run shell commands safely with automatic logging and real-time broadcasting & PuTTY SSH streaming
   function runCommand(
     cmd: string,
-    options?: {
+    argsOrOptions?: string[] | {
       toolId?: string;
       toolNameFa?: string;
       toolNameEn?: string;
@@ -183,17 +183,32 @@ async function startServer() {
       user?: string;
       category?: 'system' | 'network' | 'splunk' | 'docker' | 'k8s' | 'security' | 'custom_prompt';
       timeout?: number;
+      timeoutMs?: number;
+    },
+    maybeOptions?: {
+      toolId?: string;
+      toolNameFa?: string;
+      toolNameEn?: string;
+      cwd?: string;
+      user?: string;
+      category?: 'system' | 'network' | 'splunk' | 'docker' | 'k8s' | 'security' | 'custom_prompt';
+      timeout?: number;
+      timeoutMs?: number;
     }
   ): Promise<{ stdout: string; stderr: string; code: number; entryId: string }> {
+    const args = Array.isArray(argsOrOptions) ? argsOrOptions : undefined;
+    const options = (Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions) || {};
     const entryId = 'cmd-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
     const startTime = Date.now();
-    const workingDir = options?.cwd || '/opt/splunk';
-    const logUser = options?.user || 'root';
+    const workingDir = options.cwd || '/opt/splunk';
+    const logUser = options.user || 'root';
     const timeNow = new Date();
     const timeFormatted = timeNow.toLocaleTimeString() + '.' + String(timeNow.getMilliseconds()).padStart(3, '0');
     const dateFormatted = timeNow.toISOString().slice(0, 10);
+    const renderedArgs = args ? args.map((arg) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(arg) ? arg : JSON.stringify(arg)).join(' ') : '';
+    const displayCommand = args && renderedArgs ? cmd + ' ' + renderedArgs : cmd;
 
-    const safeLogCommand = cmd
+    const safeLogCommand = displayCommand
       .replace(/(--password\\s+)(["']?)[^"'\\s]+/gi, '$1[REDACTED]')
       .replace(/(PASSWORD\\s*=\\s*)(["']?)[^"'\\s]+/gi, '$1[REDACTED]')
       .replace(/(pass4SymmKey\\s*=\\s*)([^\\s]+)/gi, '$1[REDACTED]')
@@ -203,97 +218,103 @@ async function startServer() {
     const logEntry: ServerCommandLogEntry = {
       id: entryId,
       timestamp: timeNow.toISOString(),
-      toolId: options?.toolId || 'server_system',
-      toolNameFa: options?.toolNameFa || 'سرویس سیستم سرور',
-      toolNameEn: options?.toolNameEn || 'System Background Process',
+      toolId: options.toolId || 'server_system',
+      toolNameFa: options.toolNameFa || 'سرویس سیستم سرور',
+      toolNameEn: options.toolNameEn || 'System Background Process',
       command: safeLogCommand,
       workingDir,
       user: logUser,
       status: 'running',
       stdout: '',
       stderr: '',
-      category: options?.category || 'system'
+      category: options.category || 'system'
     };
 
     serverCommandLogs.unshift(logEntry);
-    if (serverCommandLogs.length > 1000) {
-      serverCommandLogs.pop();
-    }
+    if (serverCommandLogs.length > 1000) serverCommandLogs.pop();
     broadcastCommandEvent('command_start', logEntry);
 
-    // 🖥️ PuTTY / SSH Real-time Terminal Banner Output
-    console.log(`\n${ANSI.brightMagenta}╔══════════════════════════════════════════════════════════════════════════════╗${ANSI.reset}`);
+    console.log(`\\n${ANSI.brightMagenta}╔══════════════════════════════════════════════════════════════════════════════╗${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.bgBlue}${ANSI.brightWhite}${ANSI.bold} ⚡ EXECUTING SERVER COMMAND ${ANSI.reset} ${ANSI.dim}[PuTTY Live SSH Output]${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}🕒 TIME       :${ANSI.reset} ${ANSI.white}${dateFormatted} ${timeFormatted}${ANSI.reset}`);
-    console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}🎯 ACTION/TOOL:${ANSI.reset} ${ANSI.brightYellow}${options?.toolNameFa || 'سرویس سیستم'} (${options?.toolNameEn || 'System Process'})${ANSI.reset}`);
+    console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}🎯 ACTION/TOOL:${ANSI.reset} ${ANSI.brightYellow}${options.toolNameFa || 'سرویس سیستم'} (${options.toolNameEn || 'System Process'})${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}👤 USER & DIR :${ANSI.reset} ${ANSI.yellow}${logUser}${ANSI.dim}@${ANSI.reset}${ANSI.yellow}${workingDir}${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.brightCyan}💻 COMMAND    :${ANSI.reset} ${ANSI.brightGreen}${ANSI.bold}${safeLogCommand}${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}╚══════════════════════════════════════════════════════════════════════════════╝${ANSI.reset}`);
-
-    writeToPuTTYLogFile(`[START] [${dateFormatted} ${timeFormatted}] [USER:${logUser}] [TOOL:${options?.toolNameEn || 'System'}] [DIR:${workingDir}] CMD: ${safeLogCommand}`);
+    writeToPuTTYLogFile(`[START] [${dateFormatted} ${timeFormatted}] [USER:${logUser}] [TOOL:${options.toolNameEn || 'System'}] [DIR:${workingDir}] CMD: ${safeLogCommand}`);
 
     return new Promise((resolve) => {
-      exec(
-        cmd,
-        {
-          cwd: fs.existsSync(workingDir) ? workingDir : process.cwd(),
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: options?.timeout || 60000
-        },
-        (error, stdout, stderr) => {
-          const durationMs = Date.now() - startTime;
-          const exitCode = error ? (error.code !== undefined ? error.code : 1) : 0;
-          const outStr = (stdout || '').toString();
-          const errStr = (stderr || (error ? error.message : '')).toString();
+      const onComplete = (error: any, stdout: any, stderr: any) => {
+        const durationMs = Date.now() - startTime;
+        const exitCode = error ? (error.code !== undefined ? Number(error.code) || 1 : 1) : 0;
+        const outStr = (stdout || '').toString();
+        const errStr = (stderr || (error ? error.message : '')).toString();
 
-          logEntry.status = exitCode === 0 ? 'success' : 'failed';
-          logEntry.exitCode = exitCode;
-          logEntry.durationMs = durationMs;
-          logEntry.stdout = outStr;
-          logEntry.stderr = errStr;
+        logEntry.status = exitCode === 0 ? 'success' : 'failed';
+        logEntry.exitCode = exitCode;
+        logEntry.durationMs = durationMs;
+        logEntry.stdout = outStr;
+        logEntry.stderr = errStr;
+        broadcastCommandEvent('command_finish', logEntry);
 
-          broadcastCommandEvent('command_finish', logEntry);
-
-          // 🖥️ PuTTY / SSH Real-time Execution Result Output
-          const isSuccess = exitCode === 0;
-          const statusBg = isSuccess ? ANSI.bgGreen : ANSI.bgRed;
-          const border = isSuccess ? ANSI.brightGreen : ANSI.brightRed;
-          const statusText = isSuccess ? `SUCCESS (Exit Code 0)` : `FAILED (Exit Code ${exitCode})`;
-
-          console.log(`${border}┌──────────────────────────────────────────────────────────────────────────────┐${ANSI.reset}`);
-          console.log(`${border}│${ANSI.reset} ${statusBg}${ANSI.black}${ANSI.bold} 🏁 COMMAND COMPLETED: ${statusText} ${ANSI.reset} ${ANSI.dim}⏱️ Duration: ${durationMs}ms | Tool: ${options?.toolId || 'system'}${ANSI.reset}`);
-
-          if (outStr.trim()) {
-            console.log(`${border}├─ ${ANSI.brightCyan}${ANSI.bold}📄 STDOUT (خروجی اجرای دستور):${ANSI.reset}`);
-            const lines = outStr.trim().split('\n');
-            lines.forEach((line) => {
-              console.log(`${border}│${ANSI.reset}  ${ANSI.white}${line}${ANSI.reset}`);
-            });
-          } else {
-            console.log(`${border}│  ${ANSI.dim}(no stdout output)${ANSI.reset}`);
-          }
-
-          if (errStr.trim()) {
-            console.log(`${border}├─ ${ANSI.brightRed}${ANSI.bold}⚠️ STDERR / ERROR (خطا در اجرای دستور):${ANSI.reset}`);
-            const errLines = errStr.trim().split('\n');
-            errLines.forEach((line) => {
-              console.log(`${border}│${ANSI.reset}  ${ANSI.brightRed}❌ ${line}${ANSI.reset}`);
-            });
-          }
-
-          console.log(`${border}└──────────────────────────────────────────────────────────────────────────────┘${ANSI.reset}\n`);
-
-          writeToPuTTYLogFile(`[FINISH] [${dateFormatted} ${timeFormatted}] [CODE:${exitCode}] [TIME:${durationMs}ms]\nSTDOUT: ${outStr.trim()}\nSTDERR: ${errStr.trim()}`);
-
-          resolve({
-            stdout: outStr,
-            stderr: errStr,
-            code: exitCode,
-            entryId
-          });
+        const isSuccess = exitCode === 0;
+        const border = isSuccess ? ANSI.brightGreen : ANSI.brightRed;
+        const statusBg = isSuccess ? ANSI.bgGreen : ANSI.bgRed;
+        const statusText = isSuccess ? 'SUCCESS (Exit Code 0)' : `FAILED (Exit Code ${exitCode})`;
+        console.log(`${border}┌──────────────────────────────────────────────────────────────────────────────┐${ANSI.reset}`);
+        console.log(`${border}│${ANSI.reset} ${statusBg}${ANSI.black}${ANSI.bold} 🏁 COMMAND COMPLETED: ${statusText} ${ANSI.reset} ${ANSI.dim}⏱️ Duration: ${durationMs}ms | Tool: ${options.toolId || 'system'}${ANSI.reset}`);
+        if (outStr.trim()) {
+          console.log(`${border}├─ ${ANSI.brightCyan}${ANSI.bold}📄 STDOUT (خروجی اجرای دستور):${ANSI.reset}`);
+          outStr.trim().split('\\n').forEach((line: string) => console.log(`${border}│${ANSI.reset}  ${ANSI.white}${line}${ANSI.reset}`));
+        } else {
+          console.log(`${border}│  ${ANSI.dim}(no stdout output)${ANSI.reset}`);
         }
-      );
+        if (errStr.trim()) {
+          console.log(`${border}├─ ${ANSI.brightRed}${ANSI.bold}⚠️ STDERR / ERROR (خطا در اجرای دستور):${ANSI.reset}`);
+          errStr.trim().split('\\n').forEach((line: string) => console.log(`${border}│${ANSI.reset}  ${ANSI.brightRed}❌ ${line}${ANSI.reset}`));
+        }
+        console.log(`${border}└──────────────────────────────────────────────────────────────────────────────┘\\n${ANSI.reset}`);
+        writeToPuTTYLogFile(`[FINISH] [${dateFormatted} ${timeFormatted}] [CODE:${exitCode}] [TIME:${durationMs}ms]\\nSTDOUT: ${outStr.trim()}\\nSTDERR: ${errStr.trim()}`);
+        resolve({ stdout: outStr, stderr: errStr, code: exitCode, entryId });
+      };
+
+      const execOptions = {
+        cwd: fs.existsSync(workingDir) ? workingDir : process.cwd(),
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: options.timeoutMs ?? options.timeout ?? 60000
+      };
+
+      if (args) execFile(cmd, args, execOptions, onComplete);
+      else exec(cmd, execOptions, onComplete);
     });
+  }
+
+  // Backward-compatible real helper aliases/utilities used by legacy routes.
+  function tcpProbe(host: string, port: number, timeoutMs = 1500) {
+    return testTcpPort(host, port, timeoutMs);
+  }
+
+  function parseJsonSafe<T>(value: string | Buffer | undefined | null, fallback: T): T {
+    try {
+      const raw = value == null ? '' : value.toString();
+      if (!raw.trim()) return fallback;
+      return JSON.parse(raw) as T;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function readOsRelease(): Record<string, string> {
+    const result: Record<string, string> = {};
+    try {
+      const raw = fs.readFileSync('/etc/os-release', 'utf8');
+      for (const line of raw.split(/\\r?\\n/)) {
+        const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+        if (!m) continue;
+        result[m[1]] = m[2].replace(/^"(.*)"$/, '$1');
+      }
+    } catch (_) {}
+    return result;
   }
 
   // Helper to discover host machine IP addresses and network interfaces
@@ -3532,7 +3553,7 @@ async function startServer() {
         success:true,
         role:audit.splunkHome.detected?(audit.splunkHome.path.includes('forwarder')?'forwarder':'server'):'server',
         primaryIp:netInfo.primaryIp, hostname:netInfo.hostname, ifacesCount:netInfo.ipv4List.length,
-        interfaces:netInfo.ipv4List.map(i=>({iface:i.iface,ip:i.ip,status:i.status||'UP'})),
+        interfaces:netInfo.ipv4List.map(i=>({iface:i.iface,ip:i.ip,status:'UP'})),
         listenersCount:audit.listeningPorts.length,
         listeners:audit.listeningPorts,
         establishedCount:(getSystemNetworkInfo().ipv4List.length),
@@ -3636,8 +3657,8 @@ async function startServer() {
     }
 
     const { indexerHost, indexerPort = 9997, dryRun = false } = req.body;
-    if (!dryRun && (!indexerHost || !fs.existsSync(path.join(splunkHome,'bin/splunk')))) return res.status(400).json({success:false,error:'A real indexerHost and Splunk binary are required.'});
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
+    if (!dryRun && (!indexerHost || !fs.existsSync(path.join(splunkHome,'bin/splunk')))) return res.status(400).json({success:false,error:'A real indexerHost and Splunk binary are required.'});
     const logs: string[] = [];
 
     logs.push(`[+] Starting Heavy Forwarder Automated Fixer (dryRun=${dryRun})`);
@@ -3760,8 +3781,8 @@ index = _thefishbucket
     }
 
     const { listenPort = 9997, dryRun = false } = req.body;
-    if (!dryRun && !fs.existsSync(path.join(splunkHome,'bin/splunk'))) return res.status(400).json({success:false,error:'Real Splunk binary is required for live indexer remediation.'});
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
+    if (!dryRun && !fs.existsSync(path.join(splunkHome,'bin/splunk'))) return res.status(400).json({success:false,error:'Real Splunk binary is required for live indexer remediation.'});
     const logs: string[] = [];
 
     logs.push(`[+] Starting Indexer Automated Fixer (dryRun=${dryRun})`);
