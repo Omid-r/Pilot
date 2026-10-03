@@ -622,7 +622,8 @@ export type SplunkAgentComponentRole =
   | 'indexer_node' 
   | 'search_head' 
   | 'deployment_server'
-  | 'cluster_master';
+  | 'cluster_master'
+  | 'unknown';
 
 export interface ComponentAgentPackage {
   id: string;
