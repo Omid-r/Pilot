@@ -4302,7 +4302,10 @@ disabled = 0
     });
   }
 
-  // Never create synthetic Splunk configuration at startup.\n  // Configuration is read from the actual installation/artifact only.\n\n  const server = app.listen(PORT, '0.0.0.0', () => {
+  // Never create synthetic Splunk configuration at startup.
+  // Configuration is read from the actual installation/artifact only.
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Standalone Splunk Cluster Doctor & Architecture Studio running on port ${PORT}`);
   });
   activeHttpServer = server;
