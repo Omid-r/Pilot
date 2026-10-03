@@ -2746,6 +2746,13 @@ mgmtHostPort = 127.0.0.1:${restPort}
     }
   });
 
+  function backupFile(sourcePath: string, backupRoot: string): string {
+    fs.mkdirSync(backupRoot, { recursive: true });
+    const destination = path.join(backupRoot, path.basename(sourcePath));
+    fs.copyFileSync(sourcePath, destination);
+    return destination;
+  }
+
   // Copy configuration into an already-installed real Splunk instance, then validate with btool.
   app.post('/api/parallel-cluster/copy-configs', requireRoles('super_admin', 'cluster_admin'), async (req, res) => {
     const configs = req.body?.configs && typeof req.body.configs === 'object' ? req.body.configs : {};
