@@ -4281,7 +4281,6 @@ disabled = 0
 
   // Never create synthetic Splunk configuration at startup.\n  // Configuration is read from the actual installation/artifact only.\n\n  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Standalone Splunk Cluster Doctor & Architecture Studio running on port ${PORT}`);
-  });
 }
 
 startServer();
