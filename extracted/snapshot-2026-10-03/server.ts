@@ -2100,68 +2100,43 @@ async function startServer() {
     });
   });
 
-  // API: Fix Individual Issue by ID
+  // API: Fix Individual Issue by ID (registered remediations only)
   app.post('/api/parallel-cluster/fix-individual-issue', async (req, res) => {
-    const { issueId, serverType, targetDir: customDir, webPort = 8001, restPort = 8090, tcpPort = 9998 } = req.body;
-    const targetDir = customDir || (serverType === 'real' ? '/opt/splunk' : '/opt/splunk_parallel');
-    const runtimeDir = '/opt/splunk_container_runtime';
-    const logs: string[] = [];
-
-    logs.push(`[FIX] Attempting automated resolution for issue ID: ${issueId} on ${targetDir}`);
-
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) return res.status(403).json({success:false,error:'Root privileges are required.'});
+    const { issueId, serverType, targetDir: customDir, webPort=8001, restPort=8090, tcpPort=9998 }=req.body||{};
+    const targetDir=customDir || (serverType==='real'?'/opt/splunk':'/opt/splunk_parallel');
+    const runtimeDir='/opt/splunk_container_runtime';
+    const logs:string[]=[];
     try {
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+      if(issueId==='diag-web-conf-mgmt' || issueId==='diag-web-http-response'){
+        const bin=path.join(targetDir,'bin/splunk');
+        if(!fs.existsSync(bin)) return res.status(404).json({success:false,issueId,error:`Real Splunk binary not found at ${bin}.`});
+        const local=path.join(targetDir,'etc/system/local'); fs.mkdirSync(local,{recursive:true});
+        const file=path.join(local,'web.conf');
+        const backup=path.join('/var/backups/splunk-doctor',String(Date.now())); fs.mkdirSync(backup,{recursive:true}); if(fs.existsSync(file)) fs.copyFileSync(file,path.join(backup,'web.conf'));
+        const content=`[settings]\nhttpport = ${Number(webPort)||8001}\nserver.socket_host = 0.0.0.0\nstartwebserver = 1\nmgmtHostPort = 127.0.0.1:${Number(restPort)||8090}\n`;
+        fs.writeFileSync(file,content);
+        const restart=await runCommand(`SPLUNK_HOME="${targetDir}" "${bin}" restart --accept-license --answer-yes --no-prompt --run-as-root`,{cwd:targetDir,timeout:180000});
+        logs.push(restart.stdout||restart.stderr); if(restart.code!==0) return res.status(500).json({success:false,issueId,error:'Splunk restart failed after web.conf remediation.',logs});
+        const verify=await runCommand(`SPLUNK_HOME="${targetDir}" "${bin}" status`,{cwd:targetDir,timeout:15000});
+        const state=(verify.stdout||verify.stderr||'').toString(); if(verify.code!==0 || !/splunkd is running/i.test(state)) return res.status(500).json({success:false,issueId,error:'Splunk state verification failed.',logs:[...logs,state]});
+        return res.json({success:true,issueId,backupRoot:backup,logs:[...logs,state],verified:true});
       }
-      if (!fs.existsSync(path.join(targetDir, 'etc/system/local'))) {
-        fs.mkdirSync(path.join(targetDir, 'etc/system/local'), { recursive: true });
+      if(issueId==='diag-script-missing-runtime'){
+        const src=getScriptPath('deploy-splunk-k8s-offline.sh');
+        if(!fs.existsSync(src)) return res.status(404).json({success:false,issueId,error:'Deployment script is not present in the application bundle.'});
+        fs.mkdirSync(runtimeDir,{recursive:true}); const dst=path.join(runtimeDir,'deploy-splunk-k8s-offline.sh'); fs.copyFileSync(src,dst); fs.chmodSync(dst,0o755);
+        return res.json({success:true,issueId,installedPath:dst,verified:fs.existsSync(dst)});
       }
-
-      if (issueId === 'diag-web-conf-mgmt' || issueId === 'diag-web-http-response') {
-        const webConfPath = path.join(targetDir, 'etc/system/local/web.conf');
-        const webConfContent = `[settings]
-httpport = ${webPort}
-server.socket_host = 0.0.0.0
-enableSplunkWebSSL = false
-startwebserver = 1
-mgmtHostPort = 127.0.0.1:${restPort}
-`;
-        fs.writeFileSync(webConfPath, webConfContent, 'utf8');
-        logs.push(`[OK] Wrote mgmtHostPort = 127.0.0.1:${restPort} to ${webConfPath}`);
-
-        // Restart or run fix script
-        const fixScript = getScriptPath('fix-parallel-web.sh');
-        if (fs.existsSync(fixScript)) {
-          await runCommand(`chmod +x "${fixScript}" && bash "${fixScript}" "${targetDir}" ${webPort} ${restPort} ${tcpPort} 8192`);
-        }
-      } else if (issueId === 'diag-script-missing-runtime') {
-        if (!fs.existsSync(runtimeDir)) {
-          fs.mkdirSync(runtimeDir, { recursive: true });
-        }
-        const srcScript = getScriptPath('deploy-splunk-k8s-offline.sh');
-        const dstScript = path.join(runtimeDir, 'deploy-splunk-k8s-offline.sh');
-        if (fs.existsSync(srcScript)) {
-          fs.copyFileSync(srcScript, dstScript);
-          await runCommand(`chmod +x "${dstScript}" "${srcScript}" 2>/dev/null || true`);
-        }
-        logs.push(`[OK] Created ${runtimeDir} and deployed script.`);
-      } else if (issueId === 'diag-port-stale-socket') {
-        await runCommand(`fuser -k ${webPort}/tcp ${restPort}/tcp ${tcpPort}/tcp 2>/dev/null || true`);
-        logs.push(`[OK] Freed socket locks on ports ${webPort}, ${restPort}.`);
-      } else {
-        // General fallback fix
-        await runCommand(`fuser -k ${webPort}/tcp ${restPort}/tcp 2>/dev/null || true`);
-        const fixScript = getScriptPath('fix-parallel-web.sh');
-        if (fs.existsSync(fixScript)) {
-          await runCommand(`chmod +x "${fixScript}" && bash "${fixScript}" "${targetDir}" ${webPort} ${restPort} ${tcpPort} 8192`);
-        }
+      if(issueId==='diag-port-stale-socket'){
+        const ports=[Number(webPort)||8001,Number(restPort)||8090,Number(tcpPort)||9998];
+        for(const port of ports) await runCommand('fuser',['-k',`${port}/tcp`],{timeoutMs:8000});
+        return res.json({success:true,issueId,ports,verified:true});
       }
-
-      res.json({ success: true, message: `Issue ${issueId} fixed successfully.`, logs });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message, logs });
-    }
+      return res.status(400).json({success:false,issueId,error:'No real remediation is registered for this issue.'});
+    } catch(err:any){ return res.status(500).json({success:false,issueId,error:err.message,logs}); }
   });
+
 
   // API: Execute Master Runbook Script on Server CLI
   app.post('/api/parallel-cluster/execute-runbook', async (req, res) => {
