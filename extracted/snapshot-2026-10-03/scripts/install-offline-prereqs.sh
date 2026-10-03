@@ -62,26 +62,9 @@ if [ ! -d "${RPM_DIR}" ]; then
 fi
 
 RPM_COUNT=0
-RPM_FILES=()
 for rpm_file in "${RPM_DIR}"/*.rpm; do
   [ -f "${rpm_file}" ] || continue
   RPM_COUNT=$((RPM_COUNT + 1))
-  pkg_name="$(rpm -qp --qf '%{NAME}' "${rpm_file}" 2>/dev/null || true)"
-  [ -n "${pkg_name}" ] || continue
-
-  # Never replace the native package-manager stack from application media.
-  case "${pkg_name}" in
-    dnf|dnf-data|dnf-plugins-core|python3-dnf*|yum|yum-utils|libdnf*)
-      continue
-      ;;
-  esac
-
-  # Do not try to reinstall/upgrade packages already present on the host.
-  # This avoids cross-patching the OS base while still installing every
-  # missing application prerequisite from the local bundle.
-  if ! rpm -q "${pkg_name}" >/dev/null 2>&1; then
-    RPM_FILES+=("${rpm_file}")
-  fi
 done
 if [ "${RPM_COUNT}" -lt 1 ]; then
   echo "[-] No RPMs were found in ${RPM_DIR}"
@@ -89,31 +72,43 @@ if [ "${RPM_COUNT}" -lt 1 ]; then
 fi
 
 echo "[+] Bundled RPM files: ${RPM_COUNT}"
-echo "[+] RPMs requiring installation: ${#RPM_FILES[@]}"
 
-if [ "${#RPM_FILES[@]}" -gt 0 ]; then
-  # Install only from the media. Network repositories are explicitly disabled.
-  dnf \
-    --disablerepo='*' \
-    --setopt=install_weak_deps=False \
-    --setopt=keepcache=True \
-    -y install "${RPM_FILES[@]}"
-else
-  echo "[i] All bundled prerequisite package names are already present."
+# The bundle ships DNF repository metadata so the native package manager can
+# resolve the complete dependency graph from the local media instead of
+# treating hundreds of RPM files as unrelated command-line packages.
+OFFLINE_REPO_ID="splunk-doctor-offline"
+OFFLINE_REPO_FILE="/etc/yum.repos.d/${OFFLINE_REPO_ID}.repo"
+if [ ! -f "${RPM_DIR}/repodata/repomd.xml" ]; then
+  echo "[-] Missing offline DNF repository metadata: ${RPM_DIR}/repodata/repomd.xml"
+  exit 1
 fi
 
-echo "[+] RHEL major version: ${MAJOR}"
-echo "[+] Architecture:      ${ARCH}"
-echo "[+] Bundled RPM count: ${RPM_COUNT}"
+cat > "${OFFLINE_REPO_FILE}" <<EOF
+[${OFFLINE_REPO_ID}]
+name=Splunk Doctor Offline Media
+baseurl=file://${RPM_DIR}
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+metadata_expire=-1
+EOF
+trap 'rm -f "${OFFLINE_REPO_FILE}"' EXIT
 
-# Install only from the media. Network repositories are explicitly disabled.
+REQUIRED_PACKAGES=(
+  curl openssl openssh-clients iproute iputils gawk sed grep findutils
+  coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools
+  tar gzip ca-certificates firewalld iptables policycoreutils
+  policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool
+)
+
+echo "[+] Installing required packages exclusively from offline DNF media..."
 dnf \
   --disablerepo='*' \
+  --enablerepo="${OFFLINE_REPO_ID}" \
   --setopt=install_weak_deps=False \
   --setopt=keepcache=True \
-  -y install "${RPM_DIR}"/*.rpm
+  -y install "${REQUIRED_PACKAGES[@]}"
 
-# Install the bundled Kubernetes client if it is not already present.
 if [ -f "${KUBECTL_BIN}" ]; then
   install -d -m 0755 /usr/local/bin
   install -m 0755 "${KUBECTL_BIN}" /usr/local/bin/kubectl
