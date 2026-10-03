@@ -64,6 +64,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
   const [singleResult, setSingleResult] = useState<ToolValidationResult | null>(null);
   const [allResults, setAllResults] = useState<Record<string, ToolValidationResult>>({});
   const [totalTested, setTotalTested] = useState<number>(0);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -75,6 +76,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
   const runValidationForTool = async (tId: string) => {
     setIsValidating(true);
     setSingleResult(null);
+    setValidationError(null);
     try {
       const res = await fetch('/api/tools/validate', {
         method: 'POST',
@@ -85,39 +87,9 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         const data = await res.json();
         setSingleResult(data);
       }
-    } catch (_) {
-      // Fallback client-side simulated validation if offline
-      setSingleResult({
-        toolId: tId,
-        status: 'healthy',
-        score: 100,
-        latencyMs: 12,
-        checks: [
-          {
-            nameFa: 'پاسخ‌دهی وب‌سرویس و درگاه محلی',
-            nameEn: 'Web Service Endpoint Readiness',
-            status: 'pass',
-            detailFa: 'پردازش‌های مربوط به ابزار به درستی بارگذاری شده و به درخواست‌ها پاسخ می‌دهند.',
-            detailEn: 'Tool backend handlers operational and responding.'
-          },
-          {
-            nameFa: 'سینتکس و ساختار فایل‌های کانفیگ',
-            nameEn: 'Config Stanza Integrity & Syntax',
-            status: 'pass',
-            detailFa: 'فایل‌های استنزا فاقد هرگونه خطای ساختاری و مغایرت پارامتر هستند.',
-            detailEn: 'No stanza syntax collisions detected.'
-          },
-          {
-            nameFa: 'سطح دسترسی سیستم‌عامل و هسته لینوکس',
-            nameEn: 'OS & Linux Runtime Permissions',
-            status: 'pass',
-            detailFa: 'مجوزهای خواندن و نوشتن دایرکتوری‌های ایزوله تایید شد.',
-            detailEn: 'Read/write rights verified across runtime directories.'
-          }
-        ],
-        summaryFa: 'ابزار کاملاً سالم است و به صورت فعال در حال کار می‌باشد.',
-        summaryEn: 'Tool is operating at 100% health in runtime.'
-      });
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'Validation request failed.');
+      setSingleResult(null);
     } finally {
       setIsValidating(false);
     }
@@ -135,30 +107,10 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         setAllResults(data.results || {});
         setTotalTested(data.totalTools || allModules.length);
       }
-    } catch (_) {
-      // fallback
-      const simulated: Record<string, ToolValidationResult> = {};
-      allModules.forEach(m => {
-        simulated[m.id] = {
-          toolId: m.id,
-          status: 'healthy',
-          score: 100,
-          latencyMs: Math.floor(Math.random() * 10) + 5,
-          checks: [
-            {
-              nameFa: 'پاسخ‌دهی وب‌سرویس و API',
-              nameEn: 'API Health',
-              status: 'pass',
-              detailFa: 'نودها و ابزار متصل است.',
-              detailEn: 'Tool endpoints connected.'
-            }
-          ],
-          summaryFa: 'ابزار سالم است و کار می‌کند.',
-          summaryEn: 'Tool verified and active.'
-        };
-      });
-      setAllResults(simulated);
-      setTotalTested(allModules.length);
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'Full validation request failed.');
+      setAllResults({});
+      setTotalTested(0);
     } finally {
       setIsValidating(false);
     }
@@ -186,7 +138,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                   {isFa ? 'اعتبار سنجی و تست زنده عملکرد ابزارها' : 'Tool Health & Validation Engine'}
                 </h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                  {isFa ? '۱۰۰٪ سالم' : '100% Healthy'}
+                  {isFa ? 'اعتبارسنجی واقعی' : 'Live Validation'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -238,6 +190,15 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
 
         {/* Content Area */}
         <div className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
+          {validationError && (
+            <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-rose-200 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold">{isFa ? 'اعتبارسنجی واقعی ناموفق بود' : 'Live validation failed'}</div>
+                <div className="text-[11px] text-rose-300/80 mt-1 break-words">{validationError}</div>
+              </div>
+            </div>
+          )}
           {activeTab === 'current' ? (
             <div className="space-y-4">
               {/* Tool Selector Dropdown */}
@@ -300,7 +261,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                         تاخیر: <strong className="text-emerald-400">{singleResult.latencyMs}ms</strong>
                       </span>
                       <span className="text-[11px] font-mono bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30 text-emerald-300 font-bold">
-                        امتیاز: ۱۰۰/۱۰۰
+                        امتیاز: {singleResult.score}/100
                       </span>
                     </div>
                   </div>
