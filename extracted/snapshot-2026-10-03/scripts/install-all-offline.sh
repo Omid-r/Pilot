@@ -16,11 +16,10 @@ PACKAGES_DIR="/opt/splunk_packages"
 RUNTIME_DIR="/opt/splunk_container_runtime"
 PARALLEL_DIR="/opt/splunk_parallel"
 
-echo "[1/6] Granting executable permissions to all offline scripts and tools..."
-chmod -R 755 "${INSTALL_DIR}" 2>/dev/null || true
-if [ -d "${SCRIPTS_DIR}" ]; then
-    chmod +x "${SCRIPTS_DIR}"/*.sh "${SCRIPTS_DIR}"/*.py 2>/dev/null || true
-fi
+echo "[1/6] Applying safe executable permissions..."
+find "${INSTALL_DIR}" -type d -exec chmod 755 {} +
+find "${INSTALL_DIR}" -type f -exec chmod 644 {} +
+if [ -d "${SCRIPTS_DIR}" ]; then chmod +x "${SCRIPTS_DIR}"/*.sh "${SCRIPTS_DIR}"/*.py 2>/dev/null || true; fi
 chmod +x "${INSTALL_DIR}"/*.sh 2>/dev/null || true
 
 echo "[2/6] Preparing air-gapped workspace directories..."
@@ -55,7 +54,7 @@ if [ -d "/opt/splunk/bin" ]; then
         chmod -R +x "${PARALLEL_DIR}/bin" 2>/dev/null || true
     fi
 else
-    echo "  [!] Notice: Main Splunk not in /opt/splunk. Standalone embedded engine ready."
+    echo "  [!] Main Splunk not installed in /opt/splunk. No Splunk engine has been created."
 fi
 
 if command -v docker >/dev/null 2>&1; then
@@ -63,13 +62,16 @@ if command -v docker >/dev/null 2>&1; then
 elif command -v podman >/dev/null 2>&1; then
     echo "  [✓] Podman Container Engine is installed: $(podman --version)"
 else
-    echo "  [!] Notice: Container engine not installed. Running in Standalone Native mode."
+    echo "  [!] Container engine not installed. Real container deployment will remain unavailable until an offline runtime is staged."
 fi
 
 echo "[6/6] Configuring OS Firewall & Port Access Rules..."
-if command -v firewall-cmd >/dev/null 2>&1; then
-    firewall-cmd --permanent --zone=public --add-port=3000/tcp --add-port=8001/tcp --add-port=8090/tcp --add-port=9998/tcp 2>/dev/null || true
-    firewall-cmd --reload 2>/dev/null || true
+if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --permanent --zone=public --add-port=3000/tcp
+    firewall-cmd --permanent --zone=public --add-port=8001/tcp
+    firewall-cmd --permanent --zone=public --add-port=8090/tcp
+    firewall-cmd --permanent --zone=public --add-port=9998/tcp
+    firewall-cmd --reload
 fi
 
 if command -v iptables >/dev/null 2>&1; then
