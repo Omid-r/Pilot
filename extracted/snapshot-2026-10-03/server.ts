@@ -2130,7 +2130,7 @@ async function startServer() {
       }
       if(issueId==='diag-port-stale-socket'){
         const ports=[Number(webPort)||8001,Number(restPort)||8090,Number(tcpPort)||9998];
-        for(const port of ports) await runCommand('fuser',['-k',`${port}/tcp`],{timeoutMs:8000});
+        for(const port of ports) { const r=await runCommand(`fuser -k ${port}/tcp`); if(r.code!==0 && !/no process|not found/i.test(r.stderr||'')) logs.push(r.stderr||r.stdout); }
         return res.json({success:true,issueId,ports,verified:true});
       }
       return res.status(400).json({success:false,issueId,error:'No real remediation is registered for this issue.'});
@@ -2194,7 +2194,7 @@ async function startServer() {
       if(!/\[general\]/.test(server)) server=`[general]\n`+server;
       if(/mgmtHostPort\s*=/.test(server)) server=server.replace(/mgmtHostPort\s*=.*$/m,`mgmtHostPort = 127.0.0.1:${restPort}`); else server+=`\nmgmtHostPort = 127.0.0.1:${restPort}\n`;
       if(/pass4SymmKey\s*=\s*(changeme|default)/i.test(server)){
-        const key=await runCommand('openssl',['rand','-hex','32'],{timeout:5000});
+        const key=await runCommand('openssl rand -hex 32',{timeout:5000});
         if(key.code!==0||!key.stdout.trim()) throw new Error('Unable to generate a secure pass4SymmKey with openssl.');
         server=server.replace(/pass4SymmKey\s*=.*$/m,`pass4SymmKey = ${key.stdout.trim()}`);
       }
@@ -2649,7 +2649,8 @@ async function startServer() {
     const scriptPath=getScriptPath('install-real-parallel-splunk.sh');
     if(!artifact && !fs.existsSync('/opt/splunk/bin/splunk')) return res.status(404).json({success:false,error:'No real Splunk TGZ/TAR.GZ artifact or existing /opt/splunk installation is available.'});
     if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'install-real-parallel-splunk.sh not found.'});
-    const passKey=pass4SymmKey || (await runCommand('openssl',['rand','-hex','32'],{timeout:5000})).stdout.trim();
+    const passKeyResult=pass4SymmKey ? {code:0,stdout:pass4SymmKey,stderr:''} : await runCommand('openssl rand -hex 32',{timeout:5000});
+    const passKey=String(passKeyResult.stdout||'').trim();
     if(passKey.length<32) return res.status(500).json({success:false,error:'Unable to generate secure pass4SymmKey.'});
     const source=artifact || '/opt/splunk';
     const scriptCmd=`bash "${scriptPath}" "${source}" /opt/splunk_parallel ${Number(ports.web)||8001} ${Number(ports.rest)||8090} ${Number(ports.splunkTcp)||9998} ${Number(ports.kvstore)||8193} "${String(adminPassword).replace(/"/g,'\\"')}" "${String(passKey).replace(/"/g,'\\"')}"`;
@@ -3479,17 +3480,20 @@ async function startServer() {
       const interfaces = os.networkInterfaces();
       const ipv4List:any[]=[];
       for(const [iface,addrs] of Object.entries(interfaces)){ for(const a of addrs||[]){ if(a.family==='IPv4') ipv4List.push({iface,ip:a.address,status:a.internal?'LOOPBACK':'UP'}); } }
-      const route=await runCommand('ip',['-json','route']);
-      const neigh=await runCommand('ip',['-json','neigh']);
-      const sockets=await runCommand('ss',['-H','-lntup']);
-      const routes=parseJsonSafe(route.stdout,[]);
-      const neighbors=parseJsonSafe(neigh.stdout,[]);
-      const listeners=parseSs(sockets.stdout);
+      const route=await runCommand('ip -json route');
+      const neigh=await runCommand('ip -json neigh');
+      const sockets=await runCommand('ss -H -lntup');
+      const connections=await runCommand('ss -H -tanp');
+      let routes:any[]=[]; let neighbors:any[]=[];
+      try { routes=JSON.parse(route.stdout||'[]'); } catch {}
+      try { neighbors=JSON.parse(neigh.stdout||'[]'); } catch {}
+      const listenerLines=(sockets.stdout||'').split('\n').filter(Boolean);
+      const establishedLines=(connections.stdout||'').split('\n').filter(Boolean);
       const splunkHome=resolveSplunkDirectory({} as any);
       const splunkExists=fs.existsSync(path.join(splunkHome,'bin/splunk'));
-      const role=splunkExists?(splunkHome.includes('forwarder')?'forwarder':'server'):(listeners.listeners.length>2?'server':'client');
-      const firewalld=await runCommand('firewall-cmd',['--state']);
-      res.json({role,score:{[role]:1},evidence:[`${ipv4List.length} IPv4 interfaces detected`,`${listeners.listeners.length} listeners detected`,splunkExists?`Splunk detected at ${splunkHome}`:'No Splunk binary detected'],ifacesCount:ipv4List.length,interfaces:ipv4List,listenersCount:listeners.listeners.length,establishedCount:parseSs((await runCommand('ss',['-H','-tanp'])).stdout).connections.length,routes,neighbors,dnsServers:[],firewallStatus:firewalld.code===0?firewalld.stdout.trim():'firewalld unavailable',checkedAt:new Date().toISOString()});
+      const role=splunkExists?(splunkHome.includes('forwarder')?'forwarder':'server'):(listenerLines.length>2?'server':'client');
+      const firewalld=await runCommand('firewall-cmd --state');
+      res.json({role,score:{[role]:1},evidence:[`${ipv4List.length} IPv4 interfaces detected`,`${listenerLines.length} listeners detected`,splunkExists?`Splunk detected at ${splunkHome}`:'No Splunk binary detected'],ifacesCount:ipv4List.length,interfaces:ipv4List,listenersCount:listenerLines.length,establishedCount:establishedLines.filter(x=>/ESTAB/i.test(x)).length,routes,neighbors,dnsServers:[],firewallStatus:firewalld.code===0?firewalld.stdout.trim():'firewalld unavailable',checkedAt:new Date().toISOString()});
     } catch(err:any){ res.status(500).json({success:false,error:err.message}); }
   });
 
