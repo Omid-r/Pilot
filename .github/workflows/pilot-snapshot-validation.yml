@@ -34,7 +34,9 @@ jobs:
           BASE="https://nodejs.org/dist/v${NODE_VERSION}"
           curl -fsSL "${BASE}/${NAME}.tar.xz" -o "${RUNNER_TEMP}/node.tar.xz"
           curl -fsSL "${BASE}/SHASUMS256.txt" -o "${RUNNER_TEMP}/SHASUMS256.txt"
-          grep " ${NAME}.tar.xz$" "${RUNNER_TEMP}/SHASUMS256.txt" | sha256sum -c -
+          EXPECTED="$(awk -v name="${NAME}.tar.xz" '$2 == name {print $1}' "${RUNNER_TEMP}/SHASUMS256.txt")"
+          test -n "${EXPECTED}"
+          echo "${EXPECTED}  ${RUNNER_TEMP}/node.tar.xz" | sha256sum -c -
           tar -xJf "${RUNNER_TEMP}/node.tar.xz" -C "${RUNNER_TEMP}"
           test -x "${RUNNER_TEMP}/${NAME}/bin/node"
           echo "BUNDLED_NODE_BIN=${RUNNER_TEMP}/${NAME}/bin/node" >> "${GITHUB_ENV}"
