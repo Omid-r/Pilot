@@ -2894,52 +2894,77 @@ mgmtHostPort = 127.0.0.1:${restPort}
     }
   });
 
-  // API: Copy all configurations from Real/Main Server to Parallel Instance
-  app.post('/api/parallel-cluster/copy-configs', (req, res) => {
-    const { configs = {}, targetPorts = { web: 8001, rest: 8090, splunkTcp: 9998 } } = req.body;
-    const targetDir = '/opt/splunk_parallel/etc/system/local';
+  // Copy configuration into an already-installed real Splunk instance, then validate with btool.
+  app.post('/api/parallel-cluster/copy-configs', requireRoles('super_admin', 'cluster_admin'), async (req, res) => {
+    const configs = req.body?.configs && typeof req.body.configs === 'object' ? req.body.configs : {};
+    const targetDir = String(req.body?.targetDir || '/opt/splunk_parallel');
+    const binary = path.join(targetDir, 'bin/splunk');
+    const targetConfigDir = path.join(targetDir, 'etc/system/local');
+
+    if (!fs.existsSync(binary)) {
+      return res.status(404).json({
+        success: false,
+        code: 'REAL_SPLUNK_NOT_FOUND',
+        error: `Real Splunk binary not found at ${binary}. No synthetic installation is created.`
+      });
+    }
+
     const copiedFiles: string[] = [];
     const sanitizedParams: string[] = [];
+    const backupRoot = '/var/backups/splunk-orchestrator/config-copy/' + Date.now();
 
     try {
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+      fs.mkdirSync(targetConfigDir, { recursive: true });
+      for (const [filename, content] of Object.entries(configs)) {
+        if (!/^(server|web|inputs|outputs|props|transforms|indexes|limits|distsearch|authentication|authorize)\.conf$/.test(filename)) {
+          continue;
+        }
+        const fullPath = path.join(targetConfigDir, filename);
+        if (fs.existsSync(fullPath)) backupFile(fullPath, backupRoot);
+
+        let mod = String(content);
+        const targetPorts = req.body?.targetPorts || {};
+        if (filename === 'inputs.conf' && targetPorts.splunkTcp) {
+          mod = mod.replace(/\[splunktcp:\/\/\d+\]/g, `[splunktcp://${Number(targetPorts.splunkTcp)}]`);
+          sanitizedParams.push('inputs.conf: target S2S port remapped');
+        }
+        if (filename === 'web.conf' && targetPorts.web) {
+          mod = mod.replace(/httpport\s*=\s*\d+/g, `httpport = ${Number(targetPorts.web)}`);
+          sanitizedParams.push('web.conf: httpport remapped');
+        }
+        if (filename === 'server.conf' && targetPorts.rest) {
+          mod = mod.replace(/mgmtHostPort\s*=\s*[^\n]+/g, `mgmtHostPort = 127.0.0.1:${Number(targetPorts.rest)}`);
+          sanitizedParams.push('server.conf: mgmtHostPort remapped');
+        }
+
+        fs.writeFileSync(fullPath, mod, { encoding: 'utf8', mode: 0o640 });
+        copiedFiles.push(filename);
       }
-    } catch (_) {}
 
-    const sanitizedConfigs: Record<string, string> = {};
-
-    Object.entries(configs).forEach(([filename, content]) => {
-      let mod = String(content);
-      if (filename === 'inputs.conf') {
-        mod = mod.replace(/\[splunktcp:\/\/9997\]/g, `[splunktcp://${targetPorts.splunkTcp || 9998}]`);
-        sanitizedParams.push('inputs.conf: remapped splunktcp 9997 -> 9998');
-      } else if (filename === 'web.conf') {
-        mod = mod.replace(/httpport\s*=\s*8000/g, `httpport = ${targetPorts.web || 8001}`);
-        sanitizedParams.push(`web.conf: remapped httpport 8000 -> ${targetPorts.web || 8001}`);
-      } else if (filename === 'server.conf') {
-        mod = mod.replace(/mgmtHostPort\s*=\s*127\.0\.0\.1:8089/g, `mgmtHostPort = 127.0.0.1:${targetPorts.rest || 8090}`)
-                 .replace(/\[general\]\nserverName\s*=\s*[^\n]+/g, `[general]\nserverName = splunk-parallel-staging-01`);
-        sanitizedParams.push(`server.conf: remapped mgmtHostPort 8089 -> ${targetPorts.rest || 8090} and renamed serverName`);
+      const btool = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" btool check --debug`, { cwd: targetDir, timeout: 30000 });
+      if (btool.code !== 0) {
+        return res.status(422).json({
+          success: false,
+          code: 'BTOOL_VALIDATION_FAILED',
+          copiedFiles,
+          sanitizedParams,
+          backupRoot,
+          btoolOutput: btool.stdout || btool.stderr
+        });
       }
 
-      sanitizedConfigs[filename] = mod;
-      copiedFiles.push(filename);
-
-      try {
-        fs.writeFileSync(path.join(targetDir, filename), mod, 'utf8');
-      } catch (_) {}
-    });
-
-    res.json({
-      success: true,
-      copiedCount: copiedFiles.length,
-      copiedFiles,
-      sanitizedParams,
-      btoolResult: 'btool check: 0 stanza collisions, all sanitized ports validated.',
-      sanitizedConfigs,
-      syncedAt: new Date().toISOString()
-    });
+      return res.json({
+        success: true,
+        copiedCount: copiedFiles.length,
+        copiedFiles,
+        sanitizedParams,
+        backupRoot,
+        btoolResult: btool.stdout || 'btool check completed successfully.',
+        syncedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message, copiedFiles, backupRoot });
+    }
   });
 
   // API: Deep Diagnostic Probe across host, configs, sockets, and container runtimes
