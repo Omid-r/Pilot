@@ -1237,6 +1237,26 @@ async function startServer() {
     res.json({ success: true, message: 'خروج با موفقیت انجام شد.' });
   });
 
+  // Read-only license/entitlement status from the runtime security store.
+  app.get('/api/security/license-status', requireAuth, (_req, res) => {
+    const store = getSecurityStore();
+    const hardwareId = getHardwareFingerprint();
+    const verified = verifySignedLicenseKey(store.license.licenseKey, hardwareId);
+    return res.json({
+      success: true,
+      hardwareId,
+      status: verified.status,
+      tier: verified.tier,
+      companyName: verified.companyName,
+      maxNodes: verified.maxNodes,
+      expiresAt: verified.expiresAt,
+      daysRemaining: verified.daysRemaining,
+      features: verified.features,
+      isTampered: verified.isTampered,
+      watermarkNote: verified.watermarkNote
+    });
+  });
+
   // API: Change Self Password
   app.post('/api/auth/change-password', requireAuth, (req, res) => {
     const user = (req as any).user as UserAccount;
