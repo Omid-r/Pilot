@@ -77,10 +77,10 @@ jobs:
             curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" \
               -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256"
             chmod 0755 "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
-            (
-              cd "offline-prereqs/rhel${rhel}/x86_64/bin"
-              sha256sum -c kubectl.sha256
-            )
+            EXPECTED_SHA="$(tr -d '[:space:]' < "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256")"
+            test "${#EXPECTED_SHA}" -eq 64
+            ACTUAL_SHA="$(sha256sum "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl" | awk '{print $1}')"
+            test "${ACTUAL_SHA}" = "${EXPECTED_SHA}"
           done
 
       - name: Verify offline media
@@ -91,6 +91,8 @@ jobs:
           test "$(find offline-prereqs/rhel9/x86_64/rpms -name '*.rpm' -type f | wc -l)" -gt 0
           test -x offline-prereqs/rhel8/x86_64/bin/kubectl
           test -x offline-prereqs/rhel9/x86_64/bin/kubectl
+          test "$(find offline-prereqs/rhel8/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -ge 1
+          test "$(find offline-prereqs/rhel9/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -ge 1
           test -x scripts/install-offline-prereqs.sh
 
       - name: Assemble one complete offline installer
