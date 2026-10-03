@@ -83,7 +83,8 @@ jobs:
           print("Initial TypeScript diagnostics:")
           print(initial_output)
           if not initial:
-              raise SystemExit("No syntax diagnostics available for bounded repair.")
+              print("No syntax diagnostics detected; continuing to full TypeScript check.")
+              raise SystemExit(0)
 
           lines = original.splitlines()
           candidate_indexes = set()
