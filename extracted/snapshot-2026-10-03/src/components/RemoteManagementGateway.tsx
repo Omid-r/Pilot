@@ -39,11 +39,7 @@ export const RemoteManagementGateway: React.FC<RemoteManagementGatewayProps> = (
   const [customCommand, setCustomCommand] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string>(
-    `[mTLS 1.3 SECURE GATEWAY INITIALIZED]
-Connected to Agent Gateway Daemon: splunk-doctor.internal:8443
-Mutual TLS Session: ECDHE-ECDSA-AES256-GCM-SHA384
-Zero-Trust Local Anonymization Filter: ACTIVE
-Ready to dispatch authenticated operational commands.`
+    '[REAL SSH GATEWAY] Ready. Remote output is shown only after an authenticated SSH execution succeeds.'
   );
   const [execHistory, setExecHistory] = useState<RemoteCommandExecutionLog[]>([
     {
@@ -72,46 +68,34 @@ Ready to dispatch authenticated operational commands.`
   ];
 
   const handleRunCommand = async (cmdToRun: string) => {
-    if (!cmdToRun.trim() || isRunning) return;
+    if(!cmdToRun.trim() || isRunning || !activeNode) return;
     setIsRunning(true);
-    const start = Date.now();
-
-    setTerminalOutput(prev => `${prev}\n\n[USER@${activeNode?.hostname || 'node'}]$ ${cmdToRun}\nDispatching encrypted command over mTLS tunnel...`);
-
-    // Simulate real remote execution
-    setTimeout(() => {
-      let result = '';
-      if (cmdToRun.includes('status')) {
-        result = `splunkd is running (PID ${Math.floor(10000 + Math.random() * 20000)}).\nsplunk helpers are running.\nMemory: 842MB RSS | CPU: 1.4% | mTLS Telemetry: Active.`;
-      } else if (cmdToRun.includes('btool outputs')) {
-        result = `[tcpout:primary_indexers]\nserver = 10.20.30.50:9997, 10.20.30.51:9997\nuseSSL = true\nsslVerifyServerCert = true\nsendCookedData = true\ncompressed = true\n# BTOOL Verified OK. No syntax errors.`;
-      } else if (cmdToRun.includes('list forward-server')) {
-        result = `Active forwards:\n\t10.20.30.50:9997 (Connected - Queue: 12%)\n\t10.20.30.51:9997 (Connected - Queue: 14%)\nConfigured but inactive forwards:\n\tNone`;
-      } else if (cmdToRun.includes('restart')) {
-        result = `Stopping splunkd...\nShutting down. [OK]\nStarting splunkd...\nChecking prerequisites...\nChecking conf files for problems...\nValidating databases...\nAll checks passed.\nsplunkd started successfully (PID ${Math.floor(20000 + Math.random() * 10000)}).`;
-      } else if (cmdToRun.includes('tail')) {
-        result = `2026-09-20 23:42:01.120 INFO  TcpOutputProc - Connected to idx-cluster-peer-01:9997 using TLSv1.3\n2026-09-20 23:42:05.450 INFO  Metrics - group=thruput, name=thruput, instantaneous_eps=1450.00, instantaneous_kbps=840.12\n2026-09-20 23:42:10.890 INFO  BucketReplicator - All buckets replicated with factor SF=2, RF=3\n2026-09-20 23:42:15.002 INFO  HealthCheck - System status: HEALTHY`;
+    const started=Date.now();
+    const host=String((activeNode as any).host || (activeNode as any).ip || (activeNode as any).hostname || '').trim();
+    const user=String((activeNode as any).sshUser || 'root');
+    const port=Number((activeNode as any).sshPort || 22);
+    const identityFile=(activeNode as any).sshKeyPath;
+    setTerminalOutput(prev=>`${prev}\n\n[SSH@${host}]$ ${cmdToRun}\n[EXEC] Sending command to remote host...`);
+    try {
+      let response:any;
+      if(onExecuteCommand){
+        const output=await onExecuteCommand(activeNode.id,cmdToRun);
+        response={success:true,stdout:output,stderr:'',exitCode:0};
       } else {
-        result = `Command executed successfully on node ${activeNode?.hostname}.\nExit Code: 0\n[Zero-Trust Anonymizer]: Filtered local telemetry fields.`;
+        const res=await fetch('/api/splunk/remote/exec',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,user,port,command:cmdToRun,identityFile})});
+        response=await res.json().catch(()=>({}));
+        if(!res.ok || response.success!==true) throw new Error(response.error || ('HTTP '+res.status));
       }
-
-      const duration = Date.now() - start;
-      setTerminalOutput(prev => `${prev}\n${result}\n(Completed in ${duration}ms, Exit Code: 0)`);
-
-      const newLog: RemoteCommandExecutionLog = {
-        id: `exec-${Date.now()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        nodeHostname: activeNode?.hostname || 'unknown-host',
-        commandExecuted: cmdToRun,
-        output: result,
-        exitCode: 0,
-        executedBy: 'soc_admin',
-        durationMs: duration
-      };
-      setExecHistory(prev => [newLog, ...prev.slice(0, 9)]);
-      setIsRunning(false);
+      const duration=Date.now()-started;
+      const output=response.stdout || response.output || '';
+      const errOutput=response.stderr || '';
+      const exitCode=Number(response.exitCode ?? 0);
+      setTerminalOutput(prev=>`${prev}\n${output}${errOutput?`\n[STDERR] ${errOutput}`:''}\n[EXIT ${exitCode}] completed in ${duration}ms`);
+      setExecHistory(prev=>[{id:`exec-${Date.now()}`,timestamp:new Date().toLocaleTimeString(),nodeHostname:activeNode.hostname,commandExecuted:cmdToRun,output:output+errOutput,exitCode,executedBy:'authenticated-session',durationMs:duration},...prev.slice(0,9)]);
       setCustomCommand('');
-    }, 900);
+    } catch(err:any) {
+      setTerminalOutput(prev=>`${prev}\n[ERROR] ${err?.message || 'Remote SSH execution failed.'}`);
+    } finally { setIsRunning(false); }
   };
 
   const copyTerminalOutput = () => {
