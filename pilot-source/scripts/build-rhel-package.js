@@ -12,17 +12,17 @@ const rootDir = path.resolve(__dirname, '..');
 const stagingDir = path.join('/tmp', 'splunk_doctor_rhel_staging');
 const publicDir = path.join(rootDir, 'public');
 
-function die(message: string): never {
+function die(message) {
   console.error('[RHEL Packager] ERROR:', message);
   process.exit(1);
 }
 
-function copyTree(source: string, target: string): void {
+function copyTree(source, target) {
   fs.mkdirSync(target, { recursive: true });
   execFileSync('cp', ['-a', source + '/.', target], { stdio: 'inherit' });
 }
 
-function chmodIfExists(file: string, mode: number): void {
+function chmodIfExists(file, mode) {
   if (fs.existsSync(file)) fs.chmodSync(file, mode);
 }
 
