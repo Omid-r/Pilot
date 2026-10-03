@@ -31,7 +31,7 @@ import { getSplunkWebHtml } from './src/server/splunkWebHtml';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
 
   app.use(express.json());
 
@@ -2723,57 +2723,14 @@ PASSWORD = ${password}
     req.pipe(proxyReq);
   });
 
-  // REST API Endpoints for Splunk Client & CLI emulation
+  // Legacy Splunk REST paths are intentionally not emulated.
+  // They must resolve against a real Splunk installation discovered by the control plane.
   app.all(['/services/auth/login', '/services/server/info', '/servicesNS/*'], (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('X-Splunk-Version', '9.2.1');
-    return res.json({
-      entry: [
-        {
-          name: 'node-info',
-          content: {
-            version: '9.2.1',
-            build: 'e781a9',
-            serverName: 'splunk-parallel-staging-01',
-            mode: 'standalone',
-            os_name: 'Linux',
-            cpu_arch: 'x86_64',
-            status: 'running'
-          }
-        }
-      ],
-      sessionKey: 'splunk-session-' + Date.now()
+    return res.status(404).json({
+      success: false,
+      error: 'Splunk REST emulator disabled. Install/configure a real Splunk instance and use the real control-plane endpoints.'
     });
   });
-
-  // Dedicated Port 8001 Genuine Splunk Daemon Socket Listener
-  try {
-    const parallelApp = express();
-    parallelApp.use(express.json());
-    parallelApp.use((_req, res, next) => {
-      res.setHeader('X-Splunk-Version', '9.2.1');
-      res.setHeader('Server', 'Splunkd/9.2.1 (Linux-x86_64)');
-      next();
-    });
-    parallelApp.get('*', (req, res) => {
-      const html = getSplunkWebHtml({ port: 8001, serverName: 'splunk-parallel-staging-01', version: '9.2.1' });
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(html);
-    });
-    parallelApp.post('/api/auth/login', (_req, res) => {
-      res.json({ success: true, token: 'splunk-session-token-' + Date.now(), user: 'admin' });
-    });
-
-    const parallelDaemonServer = http.createServer(parallelApp);
-    parallelDaemonServer.listen(8001, '0.0.0.0', () => {
-      console.log('\x1b[32m[SPLUNK DAEMON]\x1b[0m Genuine Parallel Splunk Web instance online and listening on 0.0.0.0:8001');
-    });
-    parallelDaemonServer.on('error', (err: any) => {
-      if (err.code !== 'EADDRINUSE') {
-        console.error('Parallel Splunk daemon listener error:', err.message);
-      }
-    });
-  } catch (_) {}
 
   // API: Deploy Splunk on Kubernetes / Docker (Offline Container Pipeline)
   app.post('/api/k8s/deploy-splunk', async (req, res) => {
@@ -2849,114 +2806,81 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Auto-detect main Splunk version and host environment
-  app.get('/api/splunk/detect-version', async (req, res) => {
-    const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
-    const binaryPath = path.join(splunkHome, 'bin/splunk');
-    let version = '9.2.1';
-    let build = '5a1e7238dc8e';
-    let osInfo = 'Linux x86_64 (Enterprise)';
-    let isRealBinary = false;
-    let rawOutput = '';
+  // API: Detect installed Splunk version from the actual host.
+  app.get('/api/splunk/detect-version', async (_req, res) => {
+    const configuredHome = process.env.SPLUNK_HOME || '/opt/splunk';
+    const binaryPath = path.join(configuredHome, 'bin/splunk');
 
-    if (fs.existsSync(binaryPath)) {
-      try {
-        const cmdRes = await runCommand(`"${binaryPath}" version`);
-        rawOutput = cmdRes.stdout || cmdRes.stderr;
-        const vMatch = rawOutput.match(/Splunk\s+([0-9\.]+)\s+\(build\s+([a-zA-Z0-9]+)\)/i);
-        if (vMatch) {
-          version = vMatch[1];
-          build = vMatch[2];
-          isRealBinary = true;
-        }
-      } catch (_) {}
-    } else {
-      // Check version file if binary not executable
-      const versionFile = path.join(splunkHome, 'etc/splunk.version');
-      if (fs.existsSync(versionFile)) {
-        try {
-          const vContent = fs.readFileSync(versionFile, 'utf8');
-          const vMatch = vContent.match(/VERSION=([^\n]+)/);
-          const bMatch = vContent.match(/BUILD=([^\n]+)/);
-          if (vMatch) version = vMatch[1].trim();
-          if (bMatch) build = bMatch[1].trim();
-          isRealBinary = true;
-        } catch (_) {}
-      }
+    if (!fs.existsSync(binaryPath)) {
+      return res.status(404).json({
+        success: false,
+        isRealBinary: false,
+        splunkHome: configuredHome,
+        error: 'Real Splunk binary not detected on this host.'
+      });
     }
 
-    // Detect system OS
     try {
-      const uname = execSync('uname -s -m 2>/dev/null || true', { encoding: 'utf8' }).trim();
-      if (uname) osInfo = uname;
-    } catch (_) {}
-
-    res.json({
-      success: true,
-      version,
-      build,
-      os: osInfo,
-      splunkHome,
-      isRealBinary,
-      edition: 'Splunk Enterprise Server',
-      defaultPackage: `splunk-${version}-enterprise-linux-x86_64.tgz`,
-      rawOutput
-    });
+      const cmdRes = await runCommand(`"${binaryPath}" version`);
+      const rawOutput = cmdRes.stdout || cmdRes.stderr || '';
+      const match = rawOutput.match(/Splunk\s+([0-9.]+)\s+\(build\s+([A-Za-z0-9]+)\)/i);
+      if (!match) {
+        return res.status(502).json({
+          success: false,
+          isRealBinary: true,
+          splunkHome: configuredHome,
+          rawOutput,
+          error: 'Splunk binary responded, but its version output could not be parsed.'
+        });
+      }
+      const uname = execSync('uname -s -m', { encoding: 'utf8' }).trim();
+      return res.json({
+        success: true,
+        version: match[1],
+        build: match[2],
+        os: uname,
+        splunkHome: configuredHome,
+        isRealBinary: true,
+        edition: 'Splunk Enterprise Server',
+        defaultPackage: `splunk-${match[1]}-enterprise-linux-x86_64.tgz`,
+        rawOutput
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        isRealBinary: true,
+        splunkHome: configuredHome,
+        error: err.message
+      });
+    }
   });
 
-  // API: List local available packages for parallel installation
-  app.get('/api/parallel-cluster/packages', (req, res) => {
+  // API: Inventory only the packages that physically exist on disk.
+  app.get('/api/parallel-cluster/packages', (_req, res) => {
     const searchDirs = ['/opt/splunk_packages', '/tmp', '/opt', process.cwd()];
-    const foundPackages: Array<{ name: string; path: string; sizeMb: number; type: string }> = [
-      {
-        name: 'splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        sizeMb: 482,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        sizeMb: 476,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.1.4-linux-2.6-x86_64.rpm',
-        path: '/opt/splunk_packages/splunk-9.1.4-linux-2.6-x86_64.rpm',
-        sizeMb: 468,
-        type: 'RHEL / CentOS RPM Package'
-      }
-    ];
+    const foundPackages: Array<{ name: string; path: string; sizeMb: number; type: string }> = [];
+    const seen = new Set<string>();
 
-    searchDirs.forEach(dir => {
+    for (const dir of searchDirs) {
       try {
-        if (fs.existsSync(dir)) {
-          const files = fs.readdirSync(dir);
-          files.forEach(f => {
-            if (/splunk.*(\.tgz|\.tar\.gz|\.rpm|\.deb)$/i.test(f)) {
-              const fullPath = path.join(dir, f);
-              if (!foundPackages.some(p => p.path === fullPath)) {
-                let sizeMb = 480;
-                try {
-                  const stat = fs.statSync(fullPath);
-                  sizeMb = Math.round(stat.size / (1024 * 1024));
-                } catch (_) {}
-                foundPackages.push({
-                  name: f,
-                  path: fullPath,
-                  sizeMb,
-                  type: f.endsWith('.rpm') ? 'RPM Package' : 'TGZ Archive'
-                });
-              }
-            }
+        if (!fs.existsSync(dir)) continue;
+        for (const fileName of fs.readdirSync(dir)) {
+          if (!/splunk.*(?:\.tgz|\.tar\.gz|\.rpm|\.deb)$/i.test(fileName)) continue;
+          const fullPath = path.join(dir, fileName);
+          if (seen.has(fullPath)) continue;
+          const stat = fs.statSync(fullPath);
+          seen.add(fullPath);
+          foundPackages.push({
+            name: fileName,
+            path: fullPath,
+            sizeMb: Number((stat.size / (1024 * 1024)).toFixed(2)),
+            type: /\.rpm$/i.test(fileName) ? 'RPM Package' : 'TGZ Archive'
           });
         }
       } catch (_) {}
-    });
+    }
 
-    res.json({
-      packages: foundPackages
-    });
+    res.json({ packages: foundPackages });
   });
 
   // API: Real installation & provisioning execution for Parallel Splunk instance
