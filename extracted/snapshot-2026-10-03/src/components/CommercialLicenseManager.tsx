@@ -20,7 +20,7 @@ import {
   Server
 } from 'lucide-react';
 import { DigitalCertificateLicense } from '../types';
-import { generatePemCertificateText, issueCustomCompanyLicense } from '../data/commercialLicense';
+import { generatePemCertificateText } from '../data/commercialLicense';
 
 interface CommercialLicenseManagerProps {
   license: DigitalCertificateLicense;
