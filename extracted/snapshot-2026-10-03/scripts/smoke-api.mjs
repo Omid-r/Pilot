@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 const base = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000';
 const username = process.env.SMOKE_ADMIN_USER || 'admin';
-const password = process.env.SMOKE_ADMIN_PASSWORD || 'Splunk@Doctor2026!';
+const password = process.env.SMOKE_ADMIN_PASSWORD;
+if (!password) throw new Error('SMOKE_ADMIN_PASSWORD must be supplied by the test runner');
 
 async function call(path, init = {}) {
   const controller = new AbortController();
