@@ -50,8 +50,8 @@ jobs:
           const fs = require('fs');
           const file = 'server.ts';
           const text = fs.readFileSync(file, 'utf8');
-          const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-          const ds = sf.parseDiagnostics;
+          const sf = ts.createSourceFile(file, text, 99, true, ts.ScriptKind.TS);
+          const ds = sf.parseDiagnostics || [];
           const lines = text.split(/\r?\n/);
           for (const d of ds) {
             const lc = sf.getLineAndCharacterOfPosition(d.start ?? 0);
