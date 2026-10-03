@@ -61,30 +61,54 @@ export const AlertNotificationCenter: React.FC<AlertNotificationCenterProps> = (
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
   };
 
-  const handleTestDispatch = (channel: AlertNotificationChannel) => {
+  const handleTestDispatch = async (channel: AlertNotificationChannel) => {
     setTestingChannelId(channel.id);
     setTestStatusMessage(null);
+    const started = Date.now();
 
-    setTimeout(() => {
-      const now = new Date().toTimeString().split(' ')[0];
+    try {
+      const response = await fetch('/api/alerts/test-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: channel.type,
+          endpoint: channel.endpointOrTarget,
+          secret: channel.authSecretOrToken,
+          message: isFa
+            ? `تست زنده کانال ${channel.name} از Splunk Cluster Doctor`
+            : `Live notification test from Splunk Cluster Doctor: ${channel.name}`
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+
       const newLog: DispatchedAlertLog = {
         id: `disp-${Date.now()}`,
-        timestamp: now,
-        ruleTitle: isFa ? `تست آنی کانال ${channel.name}` : `Test Dispatch for ${channel.name}`,
+        timestamp: new Date().toTimeString().split(' ')[0],
+        ruleTitle: isFa ? `تست کانال ${channel.name}` : `Test Dispatch for ${channel.name}`,
         channelType: channel.type === 'TEAMS_SLACK' ? 'WEBHOOK' : channel.type as any,
         targetRecipient: channel.endpointOrTarget,
-        severity: 'INFO',
-        messagePreview: `[TEST LIVE DISPATCH] ${channel.name} verified successfully via Splunk Cluster Doctor Gateway.`,
-        deliveryStatus: 'DELIVERED_SUCCESS',
-        latencyMs: Math.floor(Math.random() * 200) + 80
+        severity: data?.success ? 'INFO' : 'WARNING',
+        messagePreview: data?.success
+          ? (isFa ? 'تحویل واقعی توسط gateway تأیید شد.' : 'Live gateway delivery confirmed.')
+          : (data?.error || (isFa ? 'تحویل واقعی انجام نشد.' : 'Live delivery failed.')),
+        deliveryStatus: data?.success ? 'DELIVERED_SUCCESS' : 'DELIVERY_FAILED',
+        latencyMs: Number(data?.latencyMs || (Date.now() - started))
       };
 
       setLogs(prev => [newLog, ...prev]);
+      if (data?.success) {
+        setTestStatusMessage(isFa ? `ارسال واقعی به ${channel.name} تأیید شد.` : `Live dispatch to ${channel.name} confirmed.`);
+      } else {
+        setTestStatusMessage(isFa ? `ارسال واقعی انجام نشد: ${data?.error || 'خطای gateway'}` : `Live dispatch failed: ${data?.error || 'gateway error'}`);
+      }
+    } catch (error) {
+      setTestStatusMessage(isFa
+        ? `خطا در gateway: ${error instanceof Error ? error.message : 'Unknown error'}`
+        : `Gateway error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
       setTestingChannelId(null);
-      setTestStatusMessage(isFa ? `پیام تست با موفقیت به ${channel.name} ارسال و تحویل شد!` : `Test dispatched successfully to ${channel.name}!`);
-
       setTimeout(() => setTestStatusMessage(null), 4000);
-    }, 800);
+    }
   };
 
   const handleCreateChannel = (e: React.FormEvent) => {
