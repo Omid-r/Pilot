@@ -4066,6 +4066,257 @@ disabled = 0
     };
   }
 
+  // =========================================================================
+  // OFFLINE READINESS / REAL BACKGROUND TOOL VALIDATION
+  // This endpoint proves local runtime capability without internet access.
+  // It intentionally performs only read-only probes and never auto-installs or
+  // modifies Splunk, Docker, Kubernetes, firewall, or host configuration.
+  // =========================================================================
+  app.get('/api/tools/offline-readiness', async (req, res) => {
+    try {
+      const started = Date.now();
+      const root = getAppProjectRoot();
+      const dataDir = process.env.SPLUNK_DOCTOR_DATA_DIR || '/var/lib/splunk-doctor';
+      const routeSurface = new Set<string>();
+      const stack = (app as any)?._router?.stack || [];
+      for (const layer of stack) {
+        if (layer?.route?.path) routeSurface.add(String(layer.route.path));
+      }
+
+      const commandPath = (name: string) => {
+        try { return execSync(`command -v ${name} 2>/dev/null || true`, { encoding: 'utf8' }).trim(); }
+        catch (_) { return ''; }
+      };
+      const runReadOnly = (cmd: string) => {
+        try {
+          return { ok: true, stdout: execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(), stderr: '' };
+        } catch (e: any) {
+          return { ok: false, stdout: String(e?.stdout || '').trim(), stderr: String(e?.stderr || e?.message || '').trim() };
+        }
+      };
+      const fileCheck = (p: string) => ({ path: p, exists: fs.existsSync(p) });
+      const dirWritable = (p: string) => {
+        try {
+          fs.mkdirSync(p, { recursive: true });
+          fs.accessSync(p, fs.constants.R_OK | fs.constants.W_OK);
+          return true;
+        } catch (_) { return false; }
+      };
+
+      const commandChecks: Record<string, any> = {};
+      const coreCommands = ['bash','sh','tar','gzip','openssl','curl','ip','ss','ssh','awk','sed','grep','find','df','uname','systemctl'];
+      for (const name of coreCommands) {
+        const resolved = commandPath(name);
+        commandChecks[name] = { installed: Boolean(resolved), path: resolved || null };
+      }
+      const optionalCommands = ['docker','podman','kubectl'];
+      for (const name of optionalCommands) {
+        const resolved = commandPath(name);
+        commandChecks[name] = { installed: Boolean(resolved), path: resolved || null };
+      }
+
+      const bundledNode = path.join(root, 'node-runtime/bin/node');
+      const effectiveNode = fs.existsSync(bundledNode) ? bundledNode : process.execPath;
+      const nodeProbe = runReadOnly(`"${effectiveNode}" -v`);
+      const appFiles = [
+        path.join(root, 'dist/server.cjs'),
+        path.join(root, 'dist/index.html'),
+        path.join(root, 'package.json'),
+        path.join(root, 'scripts'),
+        path.join(root, 'server.ts')
+      ].map(fileCheck);
+
+      const securityKey = path.join(dataDir, 'master-signing.key');
+      const securityDb = path.join(dataDir, 'security-db.json');
+      const bootstrapPassword = path.join(dataDir, 'bootstrap-admin-password');
+      const securityKeyExists = fs.existsSync(securityKey);
+      const dataDirReady = dirWritable(dataDir);
+      const store = getSecurityStore();
+
+      const splunkCandidates = [
+        process.env.SPLUNK_HOME || '',
+        '/opt/splunk',
+        '/opt/splunkforwarder'
+      ].filter(Boolean);
+      let splunkHome = '';
+      for (const candidate of splunkCandidates) {
+        if (fs.existsSync(path.join(candidate, 'bin', 'splunk'))) { splunkHome = candidate; break; }
+      }
+      const splunkBinary = splunkHome ? path.join(splunkHome, 'bin', 'splunk') : '';
+      let splunkVersion = '';
+      let splunkStatus = 'NOT_STAGED';
+      if (splunkBinary) {
+        const versionProbe = runReadOnly(`SPLUNK_HOME="${splunkHome}" "${splunkBinary}" version`);
+        splunkVersion = versionProbe.stdout || versionProbe.stderr;
+        const statusProbe = runReadOnly(`SPLUNK_HOME="${splunkHome}" "${splunkBinary}" status`);
+        splunkStatus = statusProbe.ok && /splunkd is running/i.test(statusProbe.stdout) ? 'RUNNING' : 'INSTALLED_NOT_RUNNING';
+      }
+
+      const localSignals = {
+        nodeRuntime: nodeProbe.ok,
+        nodeVersion: nodeProbe.stdout || process.version,
+        nodePath: effectiveNode,
+        appBundle: appFiles.every(x => x.exists),
+        appFiles,
+        dataDir,
+        dataDirReady,
+        securityKeyExists,
+        securityDbExists: fs.existsSync(securityDb),
+        bootstrapPasswordExists: fs.existsSync(bootstrapPassword),
+        registeredRouteCount: routeSurface.size,
+        servicePid: process.pid,
+        runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
+        splunkHome: splunkHome || null,
+        splunkBinary: splunkBinary || null,
+        splunkVersion,
+        splunkStatus
+      };
+
+      const toolSpecs: Record<string, any> = {
+        bento_overview: { labelFa: 'داشبورد بنتو', commands: ['ip','ss'], routes: ['/api/real/system','/api/real/network/scan'] },
+        architect_overseer: { labelFa: 'Overseer', commands: ['ip','ss','systemctl'], routes: ['/api/real/overseer/step'] },
+        autonomous_agent: { labelFa: 'Agent خودکار', commands: ['ip','ss','ssh'], routes: ['/api/real/node/probe','/api/real/deploy/direct','/api/real/deploy/container','/api/real/deploy/kubernetes'] },
+        ai_diagnostics: { labelFa: 'AI Diagnostics', commands: ['ip','ss','systemctl'], routes: ['/api/parallel-cluster/deep-diagnostics'] },
+        cluster_deployer: { labelFa: 'Cluster Deployer', commands: ['ssh'], routes: ['/api/real/deploy/direct','/api/real/deploy/container','/api/real/deploy/kubernetes'] },
+        architecture_auditor: { labelFa: 'SVA Auditor', commands: ['uname','df'], routes: ['/api/real/system','/api/real/design'] },
+        topology: { labelFa: 'Topology', commands: ['ip','ss'], routes: ['/api/real/network/scan','/api/real/splunk/topology'] },
+        management_nodes: { labelFa: 'Management Nodes', commands: ['ssh'], routes: ['/api/real/node/probe'] },
+        commercial_license: { labelFa: 'Commercial PKI', commands: ['openssl'], routes: ['/api/auth/me'] },
+        parallel_provisioning: { labelFa: 'Parallel Provisioning', commands: ['ssh'], routes: ['/api/parallel-cluster/start'] },
+        docker_k8s: { labelFa: 'Docker / Kubernetes', commands: [], routes: ['/api/real/deploy/container','/api/real/deploy/kubernetes'], containerRuntime: true },
+        health_audit: { labelFa: 'Health Audit', commands: ['ip','ss'], routes: ['/api/tools/validate'] },
+        live_logs: { labelFa: 'Live Logs', commands: ['find'], routes: ['/api/splunk/logs'], splunkRequired: true },
+        config_editor: { labelFa: 'Config Editor', commands: ['find'], routes: ['/api/splunk/confs'], splunkRequired: true },
+        doc_reference: { labelFa: 'Docs KB', commands: [], routes: [] },
+        heartbeat_radar: { labelFa: 'Heartbeat Radar', commands: ['ip','ss'], routes: ['/api/real/node/probe'] },
+        alert_manager: { labelFa: 'Alert Manager', commands: ['openssl'], routes: [] },
+        network_sources: { labelFa: 'Network Sources', commands: ['ip','ss'], routes: ['/api/real/network/scan'] },
+        component_agents: { labelFa: 'Component Agents', commands: ['tar','gzip','openssl'], routes: [] },
+        remote_gateway: { labelFa: 'Remote Gateway', commands: ['ssh','openssl'], routes: ['/api/real/node/probe','/api/real/deploy/remote-hardening'] },
+        package_center: { labelFa: 'Package Center', commands: ['find','tar','gzip'], routes: ['/api/download/package-info','/api/download/rhel-package'] },
+        backup_archive: { labelFa: 'Backup Archive', commands: ['tar','gzip'], routes: [] },
+        network_toolbox: { labelFa: 'Network Toolbox', commands: ['ip','ss'], routes: ['/api/real/network/scan'] },
+        admin_security: { labelFa: 'Admin Security', commands: ['openssl'], routes: ['/api/auth/me'] }
+      };
+
+      const toolResults: Record<string, any> = {};
+      for (const [toolId, spec] of Object.entries(toolSpecs)) {
+        const checks: any[] = [];
+        const missingCommands = spec.commands.filter((name: string) => !commandChecks[name]?.installed);
+        checks.push({
+          nameFa: 'وابستگی‌های سیستم',
+          nameEn: 'System dependencies',
+          status: missingCommands.length ? 'warn' : 'pass',
+          detailFa: missingCommands.length ? `Missing: ${missingCommands.join(', ')}` : 'تمام وابستگی‌های لازم در سیستم موجود است.',
+          detailEn: missingCommands.length ? `Missing: ${missingCommands.join(', ')}` : 'Required local system dependencies are installed.'
+        });
+
+        const missingRoutes = spec.routes.filter((route: string) => !routeSurface.has(route));
+        checks.push({
+          nameFa: 'سطح API',
+          nameEn: 'Backend route surface',
+          status: missingRoutes.length ? 'warn' : 'pass',
+          detailFa: missingRoutes.length ? `Route ثبت نشده: ${missingRoutes.join(', ')}` : `تمام ${spec.routes.length} مسیر backend مورد انتظار ثبت شده است.`,
+          detailEn: missingRoutes.length ? `Missing route: ${missingRoutes.join(', ')}` : `All ${spec.routes.length} expected backend routes are registered.`
+        });
+
+        if (spec.containerRuntime) {
+          const hasEngine = commandChecks.docker.installed || commandChecks.podman.installed;
+          const hasKube = commandChecks.kubectl.installed;
+          checks.push({
+            nameFa: 'Runtime کانتینر آفلاین',
+            nameEn: 'Offline container runtime',
+            status: hasEngine && hasKube ? 'pass' : 'warn',
+            detailFa: hasEngine && hasKube ? 'Docker/Podman و kubectl موجود هستند.' : `Docker/Podman=${hasEngine ? 'OK' : 'MISSING'} | kubectl=${hasKube ? 'OK' : 'MISSING'}`,
+            detailEn: hasEngine && hasKube ? 'Docker/Podman and kubectl are installed.' : `Docker/Podman=${hasEngine ? 'OK' : 'MISSING'} | kubectl=${hasKube ? 'OK' : 'MISSING'}`
+          });
+        }
+
+        if (spec.splunkRequired) {
+          checks.push({
+            nameFa: 'Splunk واقعی',
+            nameEn: 'Real Splunk runtime',
+            status: splunkStatus === 'RUNNING' ? 'pass' : 'warn',
+            detailFa: splunkStatus === 'RUNNING' ? `Splunk در ${splunkHome} در حال اجراست.` : 'نسخه واقعی Splunk در این سرور استیج/Running نشده است؛ این ابزار عمداً سبز اعلام نمی‌شود.',
+            detailEn: splunkStatus === 'RUNNING' ? `Splunk is running from ${splunkHome}.` : 'Real Splunk is not staged/running on this host; the tool is not falsely marked healthy.'
+          });
+        }
+
+        if (toolId === 'commercial_license' || toolId === 'admin_security') {
+          checks.push({
+            nameFa: 'کلید امنیتی و Store',
+            nameEn: 'Security key & store',
+            status: dataDirReady && securityKeyExists && store.users.length > 0 ? 'pass' : 'warn',
+            detailFa: dataDirReady && securityKeyExists ? `Security store آماده است؛ کاربران: ${store.users.length}` : 'مسیر داده یا کلید امضای واقعی آماده نیست.',
+            detailEn: dataDirReady && securityKeyExists ? `Security store ready; users: ${store.users.length}` : 'Security data directory or signing key is not ready.'
+          });
+        }
+
+        if (toolId === 'live_logs' || toolId === 'config_editor' || toolId === 'health_audit') {
+          const cfgDir = splunkHome ? path.join(splunkHome, 'etc/system/local') : '';
+          checks.push({
+            nameFa: 'مسیر فایل‌های Splunk',
+            nameEn: 'Splunk filesystem',
+            status: cfgDir && fs.existsSync(cfgDir) ? 'pass' : 'warn',
+            detailFa: cfgDir && fs.existsSync(cfgDir) ? `مسیر ${cfgDir} موجود است.` : 'مسیر واقعی etc/system/local روی این سرور پیدا نشد.',
+            detailEn: cfgDir && fs.existsSync(cfgDir) ? `Directory ${cfgDir} exists.` : 'Real Splunk etc/system/local directory was not found.'
+          });
+        }
+
+        const hasWarning = checks.some(c => c.status === 'warn');
+        const requiredCommandCount = spec.commands.length;
+        const passedCommandCount = requiredCommandCount - missingCommands.length;
+        const routeCount = spec.routes.length;
+        const passedRouteCount = routeCount - missingRoutes.length;
+        const checkCount = checks.length;
+        const passedChecks = checks.filter(c => c.status === 'pass').length;
+        const score = checkCount ? Math.round((passedChecks / checkCount) * 100) : 100;
+        toolResults[toolId] = {
+          toolId,
+          status: hasWarning ? 'warning' : 'healthy',
+          score,
+          installed: missingCommands.length === 0,
+          operational: !hasWarning,
+          latencyMs: Date.now() - started,
+          checks,
+          summaryFa: hasWarning ? 'نیازمند بررسی واقعی یا وابستگی تکمیلی است.' : 'وابستگی‌ها و سطح backend این ابزار بررسی شد.',
+          summaryEn: hasWarning ? 'Needs real-world verification or an additional dependency.' : 'Dependencies and backend surface verified.'
+        };
+      }
+
+      const values = Object.values(toolResults);
+      const healthyCount = values.filter((r: any) => r.status === 'healthy').length;
+      const warningCount = values.filter((r: any) => r.status === 'warning').length;
+      const overallStatus = warningCount > 0 ? 'warning' : 'healthy';
+      const score = values.length ? Math.round(values.reduce((sum: number, r: any) => sum + r.score, 0) / values.length) : 0;
+
+      res.json({
+        success: true,
+        mode: 'OFFLINE_READINESS',
+        checkedAt: new Date().toISOString(),
+        durationMs: Date.now() - started,
+        overallStatus,
+        score,
+        totalTools: values.length,
+        healthyCount,
+        warningCount,
+        errorCount: 0,
+        commandChecks,
+        localSignals,
+        tools: toolResults,
+        results: toolResults,
+        messageFa: overallStatus === 'healthy'
+          ? `اعتبارسنجی آفلاین ${values.length} ابزار کامل شد و تمام بررسی‌های قابل اجرای محلی موفق بودند.`
+          : `اعتبارسنجی آفلاین ${values.length} ابزار کامل شد؛ ${warningCount} ابزار نیازمند بررسی یا وابستگی تکمیلی هستند.`,
+        messageEn: overallStatus === 'healthy'
+          ? `Offline readiness validation completed for ${values.length} tools; all executable local checks passed.`
+          : `Offline readiness validation completed for ${values.length} tools; ${warningCount} tools need attention or an additional dependency.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || String(err), mode: 'OFFLINE_READINESS' });
+    }
+  });
+
   // API: Validate a single tool by ID
   app.post('/api/tools/validate', async (req, res) => {
     try {
