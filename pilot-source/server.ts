@@ -3762,119 +3762,49 @@ disabled = 0
   // VIRTUAL SERVER (VPS) LIFECYCLE MANAGEMENT ENDPOINTS
   // =========================================================================
 
-  // API: Get Virtual Server Status on Server and in Background
-  app.get('/api/virtual-server/status', async (req, res) => {
-    try {
-      const dirsExist = fs.existsSync('/opt/splunk_virtual') || fs.existsSync('/var/lib/splunk_virtual');
-      
-      // Probe if port 8080 or 8091 is listening
-      const checkPort = (port: number): Promise<boolean> => {
-        return new Promise((resolve) => {
-          const s = new net.Socket();
-          s.setTimeout(400);
-          s.once('connect', () => { s.destroy(); resolve(true); });
-          s.once('error', () => { s.destroy(); resolve(false); });
-          s.once('timeout', () => { s.destroy(); resolve(false); });
-          s.connect(port, '127.0.0.1');
-        });
-      };
-
-      const [port8080, port8091, port9999] = await Promise.all([
-        checkPort(8080),
-        checkPort(8091),
-        checkPort(9999)
-      ]);
-
-      const isRunning = port8080 || port8091;
-      
-      res.json({
-        success: true,
-        isInstalled: dirsExist || isRunning,
-        status: isRunning ? 'running' : (dirsExist ? 'stopped' : 'deleted'),
-        ports: {
-          web: 8080,
-          mgmt: 8091,
-          indexer: 9999
-        },
-        portStates: {
-          web: port8080,
-          mgmt: port8091,
-          indexer: port9999
-        },
-        directories: {
-          opt: fs.existsSync('/opt/splunk_virtual'),
-          var: fs.existsSync('/var/lib/splunk_virtual'),
-          etc: fs.existsSync('/etc/splunk_virtual')
-        }
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+  // API: Get Virtual Server Status — report only real resources.
+  app.get('/api/virtual-server/status', async (_req,res) => {
+    const results:any[]=[];
+    for(const runtime of ['podman','docker']){
+      const exists=await runCommand(`${runtime} inspect splunk_virtual`);
+      if(exists.code===0){
+        let state='unknown';
+        try{
+          const parsed=JSON.parse(exists.stdout);
+          state=parsed?.[0]?.State?.Status || (parsed?.[0]?.State?.Running?'running':'stopped');
+        }catch{}
+        results.push({runtime,state,container:'splunk_virtual',raw:exists.stdout});
+      }
     }
-  });
-
-  // API: Completely wipe & delete Virtual Server (VPS) and selected servers from background
-  app.post('/api/virtual-server/delete', async (req, res) => {
-    const logs: string[] = [];
-    const selectedServers: string[] = Array.isArray(req.body?.selectedServers) && req.body.selectedServers.length > 0
-      ? req.body.selectedServers
-      : ['virtual'];
-
-    logs.push(`[${new Date().toLocaleTimeString()}] [INIT] Decommissioning selected targets: [${selectedServers.join(', ')}]...`);
-
-    try {
-      // 1. If Virtual Cloud server is selected
-      if (selectedServers.includes('virtual')) {
-        logs.push(`[${new Date().toLocaleTimeString()}] [VIRTUAL] Purging Virtual Cloud (Ports 8080, 8091, 9999)...`);
-        await runCommand('docker compose -f /opt/splunk_virtual/docker-compose.yml down --volumes --remove-orphans 2>/dev/null || true');
-        await runCommand('docker stop splunk_virtual 2>/dev/null || true');
-        await runCommand('docker rm -f splunk_virtual 2>/dev/null || true');
-        await runCommand('docker volume rm splunk_virtual_data splunk_virtual_etc 2>/dev/null || true');
-        await runCommand('fuser -k 8080/tcp 8091/tcp 9999/tcp 2>/dev/null || true');
-        await runCommand('rm -rf /opt/splunk_virtual /var/lib/splunk_virtual /etc/splunk_virtual /tmp/splunk_virtual* 2>/dev/null || true');
-        await runCommand('systemctl stop splunk_virtual.service 2>/dev/null || true');
-        await runCommand('systemctl disable splunk_virtual.service 2>/dev/null || true');
-        await runCommand('rm -f /etc/systemd/system/splunk_virtual.service 2>/dev/null || true');
-        await runCommand('systemctl daemon-reload 2>/dev/null || true');
-        logs.push(`[${new Date().toLocaleTimeString()}] [VIRTUAL] Virtual Server storage, sockets and services completely deleted.`);
-      }
-
-      // 2. If Parallel Staging server is selected
-      if (selectedServers.includes('parallel')) {
-        logs.push(`[${new Date().toLocaleTimeString()}] [PARALLEL] Purging Parallel Staging server (Ports 8001, 8089, 9998)...`);
-        await runCommand('fuser -k 8001/tcp 8089/tcp 9998/tcp 2>/dev/null || true');
-        await runCommand('rm -rf /opt/splunk_parallel /var/lib/splunk_parallel /etc/splunk_parallel /tmp/splunk_parallel* 2>/dev/null || true');
-        logs.push(`[${new Date().toLocaleTimeString()}] [PARALLEL] Parallel Staging files and socket bindings purged.`);
-      }
-
-      // 3. If Docker sandbox containers are selected
-      if (selectedServers.includes('containers')) {
-        logs.push(`[${new Date().toLocaleTimeString()}] [CONTAINERS] Cleaning orphaned docker containers and test volumes...`);
-        await runCommand('docker stop splunk_test splunk_sandbox splunk_virtual 2>/dev/null || true');
-        await runCommand('docker rm -f splunk_test splunk_sandbox splunk_virtual 2>/dev/null || true');
-        await runCommand('docker volume prune -f 2>/dev/null || true');
-        logs.push(`[${new Date().toLocaleTimeString()}] [CONTAINERS] Docker test containers stopped and pruned.`);
-      }
-
-      // 4. If Socket locks & ephemeral cache are selected
-      if (selectedServers.includes('locks_cache')) {
-        logs.push(`[${new Date().toLocaleTimeString()}] [CACHE] Cleaning socket locks and temporary PID files...`);
-        await runCommand('rm -f /tmp/splunk*.pid /tmp/splunk*.lock /var/run/splunk*.pid 2>/dev/null || true');
-        await runCommand('rm -rf /tmp/splunk_doctor_* 2>/dev/null || true');
-        logs.push(`[${new Date().toLocaleTimeString()}] [CACHE] Stale locks and temporary PID files removed.`);
-      }
-
-      logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] All selected server targets decommissioned successfully!`);
-
-      res.json({
-        success: true,
-        messageFa: 'سرورهای انتخابی با موفقیت و به صورت کامل از پس‌زمینه سیستم حذف گردیدند.',
-        messageEn: 'Selected servers successfully and completely wiped from background.',
-        logs
+    const found=results.find(x=>x.state==='running') || results[0];
+    if(!found){
+      return res.json({
+        success:true,
+        isInstalled:false,
+        status:'not-provisioned',
+        ports:{web:8080,mgmt:8091,indexer:9999},
+        portStates:{web:false,mgmt:false,indexer:false},
+        directories:{
+          opt:fs.existsSync('/opt/splunk_virtual'),
+          var:fs.existsSync('/var/lib/splunk_virtual'),
+          etc:fs.existsSync('/etc/splunk_virtual')
+        },
+        runtimes:results
       });
-    } catch (err: any) {
-      logs.push(`[${new Date().toLocaleTimeString()}] [ERROR] Deletion failed: ${err.message}`);
-      res.status(500).json({ success: false, error: err.message, logs });
     }
+    const checks=await Promise.all([8080,8091,9999].map(async port=>{
+      const probe=await runCommand(`curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 2 http://127.0.0.1:${port}/`);
+      return {port,open:probe.code===0 && probe.stdout.trim()!=='000',http:probe.stdout.trim()};
+    }));
+    res.json({
+      success:true,
+      isInstalled:true,
+      status:found.state,
+      ports:{web:8080,mgmt:8091,indexer:9999},
+      portStates:Object.fromEntries(checks.map(x=>[x.port,x.open])),
+      directories:{opt:fs.existsSync('/opt/splunk_virtual'),var:fs.existsSync('/var/lib/splunk_virtual'),etc:fs.existsSync('/etc/splunk_virtual')},
+      runtime:found.runtime
+    });
   });
 
   // Synthetic virtual-server recreation is disabled.
