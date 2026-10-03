@@ -398,6 +398,48 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     ok(res,{detected:Boolean(home),splunkHome:home,version,status,ports,artifacts:artifactSearch(/splunk.*\.(rpm|tgz|tar\.gz)$/i)});
   });
 
+  app.post('/api/real/splunk/reset-password', auth, async (req,res) => {
+    if(!isRoot()) return fail(res,403,'Password reset requires root.');
+    const home=findSplunkHome();
+    if(!home) return fail(res,404,'Splunk binary not found.');
+    const currentPassword=String(req.body?.currentPassword||'');
+    const newPassword=String(req.body?.newPassword||'');
+    if(currentPassword.length<1 || newPassword.length<12) return fail(res,400,'Current password is required and new password must be at least 12 characters.');
+    const splunk=path.join(home,'bin','splunk');
+    const authArg=`admin:${currentPassword}`;
+    const r=await command(splunk,['edit','user','admin','-password',newPassword,'-auth',authArg],{timeoutMs:30000,cwd:home});
+    const success=r.code===0;
+    res.status(success?200:500).json({
+      success,
+      exitCode:r.code,
+      message:success?'Admin password changed successfully.':'Splunk rejected the password change.',
+      stdout:r.stdout,
+      stderr:r.stderr
+    });
+  });
+
+  app.post('/api/real/splunk/troubleshoot', auth, async (_req,res) => {
+    const home=findSplunkHome();
+    if(!home) return fail(res,404,'Splunk binary not found.');
+    const logs:string[]=[];
+    const status=await command(path.join(home,'bin','splunk'),['status'],{timeoutMs:15000,cwd:home});
+    logs.push('[SPLUNK STATUS]',status.stdout||status.stderr||'');
+    const btool=await command(path.join(home,'bin','splunk'),['btool','check'],{timeoutMs:30000,cwd:home});
+    logs.push('[BTOOL]',btool.stdout||btool.stderr||'');
+    const listeners=await command('ss',['-lntup'],{timeoutMs:10000});
+    logs.push('[SOCKETS]',listeners.stdout||listeners.stderr||'');
+    const webLog=path.join(home,'var','log','splunk','web_service.log');
+    const daemonLog=path.join(home,'var','log','splunk','splunkd.log');
+    for(const file of [webLog,daemonLog]){
+      if(fs.existsSync(file)){
+        const tail=await command('tail',['-n','80',file],{timeoutMs:10000});
+        logs.push(`[TAIL ${file}]`,tail.stdout||tail.stderr||'');
+      }
+    }
+    const healthy=status.code===0 && /splunkd is running|splunkweb is running/i.test((status.stdout||status.stderr||'').toString()) && btool.code===0;
+    res.status(healthy?200:500).json({success:healthy,healthy,logs,checkedAt:new Date().toISOString()});
+  });
+
   app.post('/api/real/splunk/control', auth, async (req,res) => {
     const action=String(req.body?.action||'');
     if(!['start','stop','restart'].includes(action)) return fail(res,400,'action must be start, stop or restart');
