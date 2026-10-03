@@ -22,8 +22,10 @@ fs.copyFileSync(process.execPath,path.join(stagingDir,'node-runtime','bin','node
 fs.chmodSync(path.join(stagingDir,'node-runtime','bin','node'),0o755);
 
 // Copy the installer and operational scripts but never ship runtime-generated DB/keys.
-const rootScripts=['setup.sh','reinstall-and-run.sh','uninstall.sh'];
-for (const f of rootScripts) { const src=path.join(rootDir,'scripts',f); if(fs.existsSync(src)) { fs.copyFileSync(src,path.join(stagingDir,f)); fs.chmodSync(path.join(stagingDir,f),0o755); } }
+const rootSetup = '#!/usr/bin/env bash\nset -euo pipefail\nBASE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec bash "$BASE/scripts/setup.sh"\n';
+fs.writeFileSync(path.join(stagingDir,'setup.sh'), rootSetup, { mode: 0o755 });
+const rootReinstall = '#!/usr/bin/env bash\nset -euo pipefail\nBASE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\nexec bash "$BASE/scripts/reinstall-and-run.sh" "$@"\n';
+fs.writeFileSync(path.join(stagingDir,'reinstall-and-run.sh'), rootReinstall, { mode: 0o755 });
 for (const file of fs.readdirSync(path.join(stagingDir,'scripts'))) { const p=path.join(stagingDir,'scripts',file); const st=fs.statSync(p); if(st.isFile() && /\.(sh|py)$/.test(file)) fs.chmodSync(p,0o755); else if(st.isFile()) fs.chmodSync(p,0o644); }
 
 fs.writeFileSync(path.join(stagingDir,'README_OFFLINE.md'),`# Splunk Cluster Doctor Offline RHEL Bundle v${PACKAGE_VERSION}
