@@ -2737,57 +2737,35 @@ PASSWORD = ${password}
     req.pipe(proxyReq);
   });
 
-  // REST API Endpoints for Splunk Client & CLI emulation
-  app.all(['/services/auth/login', '/services/server/info', '/servicesNS/*'], (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('X-Splunk-Version', '9.2.1');
-    return res.json({
-      entry: [
-        {
-          name: 'node-info',
-          content: {
-            version: '9.2.1',
-            build: 'e781a9',
-            serverName: 'splunk-parallel-staging-01',
-            mode: 'standalone',
-            os_name: 'Linux',
-            cpu_arch: 'x86_64',
-            status: 'running'
-          }
-        }
-      ],
-      sessionKey: 'splunk-session-' + Date.now()
+  // Proxy legacy Splunk REST/UI routes only when a real local Splunk Web listener exists.
+  app.use(['/services','/servicesNS'], (req,res,next) => {
+    const targetPort = Number(process.env.SPLUNK_PARALLEL_WEB_PORT || 8001);
+    const proxyReq = http.request({
+      hostname: '127.0.0.1',
+      port: targetPort,
+      path: req.originalUrl,
+      method: req.method,
+      headers: { ...req.headers, host: '127.0.0.1:' + targetPort }
+    }, proxyRes => {
+      res.statusCode = proxyRes.statusCode || 502;
+      for (const [key,value] of Object.entries(proxyRes.headers)) {
+        if (value !== undefined) res.setHeader(key,value as any);
+      }
+      proxyRes.pipe(res);
     });
+    proxyReq.on('error', err => {
+      if (!res.headersSent) res.status(503).json({
+        success:false,
+        error:'Real Splunk Web is not reachable on localhost:' + targetPort,
+        detail:err.message
+      });
+      else res.end();
+    });
+    req.pipe(proxyReq);
   });
 
-  // Dedicated Port 8001 Genuine Splunk Daemon Socket Listener
-  try {
-    const parallelApp = express();
-    parallelApp.use(express.json());
-    parallelApp.use((_req, res, next) => {
-      res.setHeader('X-Splunk-Version', '9.2.1');
-      res.setHeader('Server', 'Splunkd/9.2.1 (Linux-x86_64)');
-      next();
-    });
-    parallelApp.get('*', (req, res) => {
-      const html = getSplunkWebHtml({ port: 8001, serverName: 'splunk-parallel-staging-01', version: '9.2.1' });
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(html);
-    });
-    parallelApp.post('/api/auth/login', (_req, res) => {
-      res.json({ success: true, token: 'splunk-session-token-' + Date.now(), user: 'admin' });
-    });
-
-    const parallelDaemonServer = http.createServer(parallelApp);
-    parallelDaemonServer.listen(8001, '0.0.0.0', () => {
-      console.log('\x1b[32m[SPLUNK DAEMON]\x1b[0m Genuine Parallel Splunk Web instance online and listening on 0.0.0.0:8001');
-    });
-    parallelDaemonServer.on('error', (err: any) => {
-      if (err.code !== 'EADDRINUSE') {
-        console.error('Parallel Splunk daemon listener error:', err.message);
-      }
-    });
-  } catch (_) {}
+  // No synthetic Splunk Web listener is started by Doctor.
+  // The actual Splunk process must own its configured Web port.
 
   // API: Deploy Splunk on Kubernetes / Docker (Offline Container Pipeline)
   app.post('/api/k8s/deploy-splunk', async (req, res) => {
@@ -2820,292 +2798,65 @@ PASSWORD = ${password}
   });
 
   // API: Get Kubernetes / Docker Container Status
-  app.get('/api/k8s/status', async (req, res) => {
-    let dockerInstalled = false;
-    let k8sInstalled = false;
-    let isContainerRunning = false;
-    let containerInfo = '';
-    let podInfo = '';
-
-    try {
-      const dCheck = await runCommand('docker --version 2>/dev/null || podman --version 2>/dev/null || true');
-      if (dCheck.stdout.trim()) {
-        dockerInstalled = true;
-        const psCheck = await runCommand('docker ps --filter "name=splunk_k8s_parallel" --format "{{.Status}}" 2>/dev/null || true');
-        if (psCheck.stdout.trim()) {
-          isContainerRunning = true;
-          containerInfo = psCheck.stdout.trim();
-        }
-      }
-    } catch (_) {}
-
-    try {
-      const kCheck = await runCommand('kubectl version --client 2>/dev/null || k3s --version 2>/dev/null || true');
-      if (kCheck.stdout.trim()) {
-        k8sInstalled = true;
-        const podCheck = await runCommand('kubectl get pods -n splunk-parallel -l app=splunk-parallel -o wide 2>/dev/null || k3s kubectl get pods -n splunk-parallel -l app=splunk-parallel 2>/dev/null || true');
-        if (podCheck.stdout && /Running/i.test(podCheck.stdout)) {
-          isContainerRunning = true;
-          podInfo = podCheck.stdout.trim();
-        }
-      }
-    } catch (_) {}
-
+  app.get('/api/k8s/status', async (_req, res) => {
+    const docker=await runCommand('docker info',{toolId:'k8s_status',category:'docker',timeout:15000});
+    const podman=await runCommand('podman info',{toolId:'k8s_status',category:'docker',timeout:15000});
+    const kubectl=await runCommand('kubectl get nodes -o wide',{toolId:'k8s_status',category:'k8s',timeout:15000});
+    const k3s=await runCommand('k3s kubectl get nodes -o wide',{toolId:'k8s_status',category:'k8s',timeout:15000});
     res.json({
-      dockerInstalled,
-      k8sInstalled,
-      isContainerRunning,
-      containerInfo,
-      podInfo,
-      manifestPath: '/opt/splunk_container_runtime/splunk-k8s-standalone.yaml',
-      dockerComposePath: '/opt/splunk_container_runtime/docker-compose.yml',
-      webPort: 8001
+      docker:{installed:docker.code===0,output:docker.stdout||docker.stderr},
+      podman:{installed:podman.code===0,output:podman.stdout||podman.stderr},
+      kubernetes:{reachable:kubectl.code===0,output:kubectl.stdout||kubectl.stderr},
+      k3s:{reachable:k3s.code===0,output:k3s.stdout||k3s.stderr},
+      checkedAt:new Date().toISOString()
     });
   });
 
   // API: Auto-detect main Splunk version and host environment
-  app.get('/api/splunk/detect-version', async (req, res) => {
+  app.get('/api/splunk/detect-version', async (_req, res) => {
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
     const binaryPath = path.join(splunkHome, 'bin/splunk');
-    let version = '9.2.1';
-    let build = '5a1e7238dc8e';
-    let osInfo = 'Linux x86_64 (Enterprise)';
+    let version = 'unknown';
+    let build = 'unknown';
+    let osInfo = 'unknown';
     let isRealBinary = false;
     let rawOutput = '';
 
     if (fs.existsSync(binaryPath)) {
-      try {
-        const cmdRes = await runCommand(`"${binaryPath}" version`);
-        rawOutput = cmdRes.stdout || cmdRes.stderr;
-        const vMatch = rawOutput.match(/Splunk\s+([0-9\.]+)\s+\(build\s+([a-zA-Z0-9]+)\)/i);
-        if (vMatch) {
-          version = vMatch[1];
-          build = vMatch[2];
-          isRealBinary = true;
-        }
-      } catch (_) {}
-    } else {
-      // Check version file if binary not executable
-      const versionFile = path.join(splunkHome, 'etc/splunk.version');
-      if (fs.existsSync(versionFile)) {
-        try {
-          const vContent = fs.readFileSync(versionFile, 'utf8');
-          const vMatch = vContent.match(/VERSION=([^\n]+)/);
-          const bMatch = vContent.match(/BUILD=([^\n]+)/);
-          if (vMatch) version = vMatch[1].trim();
-          if (bMatch) build = bMatch[1].trim();
-          isRealBinary = true;
-        } catch (_) {}
-      }
+      const cmdRes = await runCommand(`"${binaryPath}" version`,{toolId:'splunk_version',toolNameEn:'Real Splunk version detection',category:'splunk',timeout:10000});
+      rawOutput = cmdRes.stdout || cmdRes.stderr;
+      const vMatch = rawOutput.match(/Splunk\\s+([0-9.]+)\\s+\\(build\\s+([A-Za-z0-9]+)\\)/i);
+      if (vMatch) { version=vMatch[1]; build=vMatch[2]; isRealBinary=true; }
     }
-
-    // Detect system OS
     try {
-      const uname = execSync('uname -s -m 2>/dev/null || true', { encoding: 'utf8' }).trim();
-      if (uname) osInfo = uname;
-    } catch (_) {}
-
-    res.json({
-      success: true,
-      version,
-      build,
-      os: osInfo,
-      splunkHome,
-      isRealBinary,
-      edition: 'Splunk Enterprise Server',
-      defaultPackage: `splunk-${version}-enterprise-linux-x86_64.tgz`,
-      rawOutput
-    });
+      const uname = execSync('uname -s -m',{encoding:'utf8'}).trim();
+      if (uname) osInfo=uname;
+    } catch {}
+    res.json({success:true,version,build,os:osInfo,splunkHome,isRealBinary,
+      edition:isRealBinary?'Splunk Enterprise Server':'not-installed',
+      defaultPackage:isRealBinary?`splunk-${version}-enterprise-linux-x86_64.tgz`:null,
+      rawOutput});
   });
 
   // API: List local available packages for parallel installation
-  app.get('/api/parallel-cluster/packages', (req, res) => {
-    const searchDirs = ['/opt/splunk_packages', '/tmp', '/opt', process.cwd()];
-    const foundPackages: Array<{ name: string; path: string; sizeMb: number; type: string }> = [
-      {
-        name: 'splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        sizeMb: 482,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        sizeMb: 476,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.1.4-linux-2.6-x86_64.rpm',
-        path: '/opt/splunk_packages/splunk-9.1.4-linux-2.6-x86_64.rpm',
-        sizeMb: 468,
-        type: 'RHEL / CentOS RPM Package'
+  app.get('/api/parallel-cluster/packages', (req,res) => {
+    const dirs=['/opt/splunk_packages','/opt/splunk-doctor/artifacts','/var/lib/splunk-doctor/artifacts','/tmp'];
+    const foundPackages:Array<{name:string,path:string,sizeMb:number,type:string}>=[];
+    const walk=(dir:string)=>{
+      if(!fs.existsSync(dir)) return;
+      let entries:fs.Dirent[]=[];
+      try{ entries=fs.readdirSync(dir,{withFileTypes:true}); }catch{return;}
+      for(const e of entries){
+        const full=path.join(dir,e.name);
+        if(e.isDirectory()){ walk(full); continue; }
+        if(!/^splunk[-_.].*\\.(tgz|tar\\.gz|rpm|deb)$/i.test(e.name)) continue;
+        let st:any; try{st=fs.statSync(full);}catch{continue;}
+        foundPackages.push({name:e.name,path:full,sizeMb:Number((st.size/1024/1024).toFixed(2)),
+          type:/\\.rpm$/i.test(e.name)?'RPM':'Archive'});
       }
-    ];
-
-    searchDirs.forEach(dir => {
-      try {
-        if (fs.existsSync(dir)) {
-          const files = fs.readdirSync(dir);
-          files.forEach(f => {
-            if (/splunk.*(\.tgz|\.tar\.gz|\.rpm|\.deb)$/i.test(f)) {
-              const fullPath = path.join(dir, f);
-              if (!foundPackages.some(p => p.path === fullPath)) {
-                let sizeMb = 480;
-                try {
-                  const stat = fs.statSync(fullPath);
-                  sizeMb = Math.round(stat.size / (1024 * 1024));
-                } catch (_) {}
-                foundPackages.push({
-                  name: f,
-                  path: fullPath,
-                  sizeMb,
-                  type: f.endsWith('.rpm') ? 'RPM Package' : 'TGZ Archive'
-                });
-              }
-            }
-          });
-        }
-      } catch (_) {}
-    });
-
-    res.json({
-      packages: foundPackages
-    });
-  });
-
-  // API: Real installation & provisioning execution for Parallel Splunk instance
-  app.post('/api/parallel-cluster/install', async (req, res) => {
-    const {
-      packageSelected,
-      customPackagePath,
-      licenseMode,
-      licenseFileContent,
-      licenseFileName,
-      licenseMasterUri,
-      ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8192, hec: 8088 }
-    } = req.body;
-
-    parallelActivePorts = { ...parallelActivePorts, ...ports };
-    const log: string[] = [];
-    const targetDir = '/opt/splunk_parallel';
-
-    log.push(`[1/6] Initializing Parallel Splunk workspace at ${targetDir}...`);
-    try {
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-      fs.mkdirSync(path.join(targetDir, 'bin'), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, 'etc/system/local'), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, 'etc/licenses/enterprise'), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, 'var/log/splunk'), { recursive: true });
-      log.push(`[SUCCESS] Workspace directories created in ${targetDir}.`);
-    } catch (e: any) {
-      log.push(`[WARN] Filesystem setup: ${e.message}`);
-    }
-
-    // 2. Package verification & extraction
-    const pkgToExtract = customPackagePath || (packageSelected ? `/opt/splunk_packages/${packageSelected}` : '');
-    if (pkgToExtract && fs.existsSync(pkgToExtract)) {
-      log.push(`[2/6] Extracting binary package: ${pkgToExtract} into ${targetDir}...`);
-      try {
-        if (pkgToExtract.endsWith('.tgz') || pkgToExtract.endsWith('.tar.gz')) {
-          await runCommand(`tar -xzf "${pkgToExtract}" -C "${targetDir}" --strip-components=1 2>/dev/null || true`);
-        }
-        log.push(`[SUCCESS] Extracted archive files.`);
-      } catch (_) {}
-    } else if (fs.existsSync('/opt/splunk/bin')) {
-      log.push(`[2/6] Linking binaries from main Splunk installation (/opt/splunk/bin)...`);
-      try {
-        await runCommand(`cp -rn /opt/splunk/bin "${targetDir}/" 2>/dev/null || true`);
-      } catch (_) {}
-      log.push(`[SUCCESS] Production binaries linked.`);
-    } else {
-      log.push(`[2/6] Initializing self-contained offline Splunk Engine...`);
-      log.push(`[SUCCESS] Standalone runtime verified.`);
-    }
-
-    // 3. Firewall Ports opening
-    log.push(`[3/6] Opening non-colliding firewall ports (Web:${ports.web}, REST:${ports.rest}, Ingest:${ports.splunkTcp}, KVStore:${ports.kvstore})...`);
-    try {
-      await runCommand(`firewall-cmd --zone=public --add-port=${ports.web}/tcp --add-port=${ports.rest}/tcp --add-port=${ports.splunkTcp}/tcp --add-port=${ports.kvstore}/tcp --permanent 2>/dev/null && firewall-cmd --reload 2>/dev/null || true`);
-      log.push(`[SUCCESS] Firewall rules active for ports ${ports.web}, ${ports.rest}, ${ports.splunkTcp}, ${ports.kvstore}.`);
-    } catch (_) {
-      log.push(`[INFO] Network ports registered in container routing table.`);
-    }
-
-    // 4. Writing non-colliding base configuration files
-    log.push(`[4/6] Generating isolated configuration stanzas...`);
-    const webConf = `[settings]\nhttpport = ${ports.web}\nserver.socket_host = 0.0.0.0\nenableSplunkWebSSL = false\nstartwebserver = 1\nappServerPorts = 8066\nmgmtHostPort = 127.0.0.1:${ports.rest}\n`;
-    const serverConf = `[general]\nserverName = splunk-parallel-staging\nmgmtHostPort = 127.0.0.1:${ports.rest}\npass4SymmKey = changeme-parallel-key\nactive_group = Free\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${ports.rest}\n\n[kvstore]\nport = ${ports.kvstore}\n`;
-    const inputsConf = `[splunktcp://${ports.splunkTcp}]\ndisabled = 0\nqueueSize = 10MB\n`;
-
-    try {
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/web.conf'), webConf, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/server.conf'), serverConf, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/inputs.conf'), inputsConf, 'utf8');
-      log.push(`[SUCCESS] Wrote sanitized web.conf, server.conf, inputs.conf.`);
-    } catch (_) {}
-
-    // 5. Handling License Assignment
-    log.push(`[5/6] Configuring license allocation (${licenseMode})...`);
-    if (licenseMode === 'free_developer') {
-      log.push(`[LICENSE] Active License: Free / Developer Tier (500MB/day quota active, no expiration).`);
-      try {
-        const licConf = `[general]\nactive_group = Free\n`;
-        fs.writeFileSync(path.join(targetDir, 'etc/system/local/server.conf'), serverConf + `\n${licConf}`, 'utf8');
-      } catch (_) {}
-    } else if (licenseMode === 'custom_license' && licenseFileContent) {
-      log.push(`[LICENSE] Custom enterprise license (${licenseFileName || 'enterprise.lic'}) installed.`);
-      try {
-        fs.writeFileSync(path.join(targetDir, 'etc/licenses/enterprise/splunk.lic'), licenseFileContent, 'utf8');
-      } catch (_) {}
-    } else if (licenseMode === 'shared_license_master') {
-      const lmUri = licenseMasterUri || 'https://127.0.0.1:8089';
-      log.push(`[LICENSE] Configured as License Slave pooling from License Master at ${lmUri}.`);
-      try {
-        const licConf = `[license]\nmaster_uri = ${lmUri}\n`;
-        fs.appendFileSync(path.join(targetDir, 'etc/system/local/server.conf'), `\n${licConf}`, 'utf8');
-      } catch (_) {}
-    }
-
-    // 6. Executing Official Splunk Enterprise Daemon on Port 8001
-    log.push(`[6/6] Launching Official Splunk Enterprise daemon on Port ${ports.web}...`);
-    try {
-      // Free port 8001 from any stale process
-      await runCommand(`fuser -k ${ports.web}/tcp ${ports.rest}/tcp 2>/dev/null || true`);
-      
-      const scriptPath = path.join(process.cwd(), 'scripts/install-real-parallel-splunk.sh');
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const runRes = await runCommand(`bash "${scriptPath}" /opt/splunk "${targetDir}" ${ports.web} ${ports.rest} ${ports.splunkTcp} ${ports.kvstore}`);
-        if (runRes.stdout) {
-          log.push(runRes.stdout);
-        }
-      } else {
-        const parallelBin = path.join(targetDir, 'bin/splunk');
-        if (fs.existsSync(parallelBin)) {
-          await runCommand(`chmod +x "${parallelBin}"`);
-          const startRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${parallelBin}" start --accept-license --answer-yes --no-prompt 2>&1 || true`);
-          if (startRes.stdout) log.push(startRes.stdout);
-        }
-      }
-    } catch (e: any) {
-      log.push(`[SPLUNK EXECUTION] ${e.message}`);
-    }
-
-    log.push(`[READY] Genuine Splunk Enterprise Web UI is ACTIVE on Port ${ports.web}!`);
-    log.push(`[LOGIN URL] http://<SERVER-IP>:${ports.web}/en-US/account/login (Username: admin | Password: changeme)`);
-
-    res.json({
-      success: true,
-      targetDir,
-      ports,
-      licenseMode,
-      log,
-      officialWebUrl: `http://localhost:${ports.web}/en-US/account/login`,
-      credentials: { username: 'admin', password: 'changeme' },
-      installedAt: new Date().toISOString()
-    });
+    };
+    dirs.forEach(walk);
+    res.json({success:true,packages:foundPackages.sort((a,b)=>a.name.localeCompare(b.name)),checkedAt:new Date().toISOString()});
   });
 
   // API: Install all offline tools & scripts on the host system
