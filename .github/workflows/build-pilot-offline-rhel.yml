@@ -39,74 +39,75 @@ jobs:
         working-directory: ${{ env.APP_ROOT }}
         shell: bash
         run: |
-          node <<'NODE'
-          const ts = require('typescript');
-          const fs = require('fs');
-          const file = 'server.ts';
-          const text = fs.readFileSync(file, 'utf8');
-          const sf = ts.createSourceFile(file, text, 99, true);
-          const ds = sf.parseDiagnostics || [];
-          const lines = text.split(/\r?\n/);
-          for (const d of ds) {
-            const lc = sf.getLineAndCharacterOfPosition(d.start ?? 0);
-            const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
-            console.log(`DIAG ${lc.line+1}:${lc.character+1} ${msg}`);
-            for (let n=Math.max(0,lc.line-3); n<=Math.min(lines.length-1,lc.line+3); n++) console.log(`${n+1}: ${lines[n]}`);
-          }
-          console.log('EOF line count:', lines.length);
-          if (ds.length) process.exitCode = 1;
-          NODE
+          set +e
+          ./node_modules/.bin/tsc --noEmit --pretty false > /tmp/pilot-tsc.txt 2>&1
+          status=$?
+          cat /tmp/pilot-tsc.txt
+          echo "tsc exit code: $status"
+          exit $status
+
       - name: Diagnose and repair TypeScript syntax
         if: failure()
         working-directory: ${{ env.APP_ROOT }}
         shell: bash
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const fs = require('fs');
-          const ts = require('typescript');
-          const p = 'server.ts';
-          const original = fs.readFileSync(p, 'utf8');
-          const diagnostics = (text) => {
-            const sf = ts.createSourceFile(p, text, 99, true);
-            return sf.parseDiagnostics || [];
-          };
-          const lines = original.split(/\r?\n/);
-          const initial = diagnostics(original);
-          if (!initial.length) {
-            console.log('No parser diagnostics; nothing to repair.');
-            process.exit(0);
-          }
-          console.log('Initial parser diagnostics:');
-          for (const d of initial) {
-            const lc = ts.createSourceFile(p, original, 99, true).getLineAndCharacterOfPosition(d.start ?? 0);
-            console.log(`  ${lc.line + 1}:${lc.character + 1} ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
-          }
-          const candidates = [];
-          const seen = new Set();
-          for (const d of initial) {
-            const sf = ts.createSourceFile(p, original, 99, true);
-            const line = sf.getLineAndCharacterOfPosition(d.start ?? 0).line;
-            for (let delta = -12; delta <= 12; delta++) {
-              const idx = line + delta;
-              if (idx < 0 || idx >= lines.length) continue;
-              if (!/^\s*\}\s*\)?;?\s*$/.test(lines[idx])) continue;
-              const candidate = lines.slice(0, idx).concat(lines.slice(idx + 1)).join('\n');
-              if (!seen.has(candidate)) { seen.add(candidate); candidates.push({idx: idx + 1, candidate}); }
-            }
-          }
-          let accepted = null;
-          for (const item of candidates) {
-            const ds = diagnostics(item.candidate);
-            if (!ds.length) { accepted = item; break; }
-          }
-          if (!accepted) {
-            fs.writeFileSync('/tmp/ts-parse-diagnostics.txt', initial.map(d => ts.flattenDiagnosticMessageText(d.messageText, ' ')).join('\n'));
-            throw new Error('No bounded single-brace parser repair candidate succeeded');
-          }
-          fs.writeFileSync(p, accepted.candidate.endsWith('\n') ? accepted.candidate : accepted.candidate + '\n');
-          console.log(`Accepted parser-only repair: removed server.ts line ${accepted.idx}`);
-          NODE
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          path = Path("server.ts")
+          original = path.read_text()
+          tsc = Path("node_modules/.bin/tsc")
+
+          def run_tsc():
+              p = subprocess.run([str(tsc), "--noEmit", "--pretty", "false"], text=True, capture_output=True)
+              return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+          def syntax_diagnostics(output):
+              result = []
+              for line in output.splitlines():
+                  m = re.search(r"server\.ts\((\d+),(\d+)\): error TS(\d+):", line)
+                  if not m:
+                      continue
+                  code = int(m.group(3))
+                  if 1000 <= code < 2000:
+                      result.append((int(m.group(1)), int(m.group(2)), code, line))
+              return result
+
+          _, initial_output = run_tsc()
+          initial = syntax_diagnostics(initial_output)
+          print("Initial TypeScript diagnostics:")
+          print(initial_output)
+          if not initial:
+              raise SystemExit("No syntax diagnostics available for bounded repair.")
+
+          lines = original.splitlines()
+          candidate_indexes = set()
+          for line_no, _, _, _ in initial:
+              center = line_no - 1
+              for idx in range(max(0, center - 20), min(len(lines), center + 21)):
+                  if re.fullmatch(r"\s*\}\s*\)?;?\s*", lines[idx]):
+                      candidate_indexes.add(idx)
+
+          accepted = None
+          for idx in sorted(candidate_indexes):
+              candidate = lines[:idx] + lines[idx+1:]
+              path.write_text("\n".join(candidate).rstrip() + "\n")
+              _, output = run_tsc()
+              remaining = syntax_diagnostics(output)
+              print(f"Candidate removing server.ts line {idx+1}: syntax_errors={len(remaining)}")
+              if not remaining:
+                  accepted = idx
+                  break
+
+          if accepted is None:
+              path.write_text(original)
+              raise SystemExit("No single-line brace repair removed all syntax diagnostics.")
+
+          print(f"Accepted parser repair: removed server.ts line {accepted + 1}: {lines[accepted]!r}")
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if ! git diff --quiet -- server.ts; then
@@ -114,6 +115,7 @@ jobs:
             git commit -m "fix(server): repair snapshot TypeScript syntax"
             git push origin HEAD:${GITHUB_REF_NAME}
           fi
+
       - name: TypeScript check
         working-directory: ${{ env.APP_ROOT }}
         run: npm run lint
