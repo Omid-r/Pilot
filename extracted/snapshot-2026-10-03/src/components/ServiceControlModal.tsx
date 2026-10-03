@@ -44,7 +44,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
     } else if (cmdKey === 'btool') {
       commandText = `SPLUNK_HOME=${targetDir} ${targetDir}/bin/splunk cmd btool check`;
     } else if (cmdKey === 'reset_pass') {
-      commandText = `bash /scripts/reset-splunk-password.sh ${targetDir} admin changeme`;
+      commandText = 'Password reset requires an explicit new password in the secure dialog.';
     } else if (cmdKey === 'bootstart_troubleshoot') {
       commandText = 'splunk troubleshoot --os-user';
     }
@@ -89,7 +89,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
           body: JSON.stringify({ 
             serverType: selectedServerType,
             targetDir,
-            newPassword: 'changeme'
+            newPassword: ''
           })
         });
         if (res.ok) {
@@ -98,7 +98,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
             ...prev,
             `[LIVE SERVER] ${data.message || 'Password reset applied successfully!'}`,
             '-----------------------------',
-            `User: admin | Password: changeme`,
+            `User: admin | Password: [set by operator]`,
             `Target Directory: ${targetDir}`,
             '-----------------------------'
           ]);
@@ -147,46 +147,10 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
       console.log('Failing over to interactive local sandbox log pipeline...', err);
     }
 
-    // Fallback sandbox simulation if backend not available or call fails
-    const logs: string[] = [];
+    setTerminalOutput(prev => [...prev, '[ERROR] Backend execution failed or returned an unsuccessful status. No simulated result is shown.']);
+    setIsRunning(false);
+    setStatusResult('failed');
 
-    if (cmdKey === 'restart' || cmdKey === 'start') {
-      logs.push(`[1/4] Checking configuration syntax for ${serverLabel}...`);
-      logs.push('[btool] checking inputs.conf, outputs.conf, server.conf... OK');
-      logs.push(`[2/4] ${cmdKey === 'restart' ? 'Stopping splunkd gracefully...' : 'Preparing environment...'}`);
-      logs.push('[3/4] Starting splunk server daemon (splunkd) with --run-as-root...');
-      logs.push(`Checking ports: ${selectedServerType === 'real' ? '8000/tcp (WEB), 8089/tcp (REST)' : '8001/tcp (WEB), 8090/tcp (REST)'} binding successful.`);
-      logs.push(`[4/4] splunkd started for ${serverLabel}. Verification complete.`);
-    } else if (cmdKey === 'stop') {
-      logs.push(`Stopping splunkd daemon for ${serverLabel}...`);
-      logs.push('splunkd is shut down.');
-    } else if (cmdKey === 'reset_pass') {
-      logs.push(`[1/3] Writing fresh user-seed.conf for ${serverLabel}...`);
-      logs.push('[2/3] Purging stale passwd hashes from etc/system/local/passwd...');
-      logs.push('[3/3] Admin credentials updated: user=admin pass=changeme');
-    } else if (cmdKey === 'status') {
-      logs.push(`Checking overall status of ${serverLabel}...`);
-      logs.push(`splunkd is running on ${selectedServerType === 'real' ? 'port 8000/8089' : 'port 8001/8090'}.`);
-    } else if (cmdKey === 'btool') {
-      logs.push(`Executing btool check across ${targetDir}/etc/system/local...`);
-      logs.push('btool check finished with return code 0 (No syntax errors detected).');
-    } else if (cmdKey === 'bootstart_troubleshoot') {
-      logs.push('[DIAGNOSTIC] Analyzing bootstart/service credentials...');
-      logs.push('ANALYSIS / تحلیل ریشه خطا:');
-      logs.push('Executing with explicit SPLUNK_RUN_AS_ROOT=1 flag bypasses OS user restriction.');
-    }
-
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < logs.length) {
-        setTerminalOutput(prev => [...prev, logs[i]]);
-        i++;
-      } else {
-        clearInterval(interval);
-        setIsRunning(false);
-        setStatusResult('success');
-      }
-    }, 400);
   };
 
   return (
@@ -289,7 +253,7 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
               className="px-4 py-2 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 font-semibold flex items-center gap-2 disabled:opacity-50 transition"
             >
               <Terminal className="w-4 h-4 text-indigo-400" />
-              <span>{isFa ? 'ریست پسورد به admin/changeme' : 'Reset Password'}</span>
+              <span>{isFa ? 'ریست پسورد با کلمه عبور جدید' : 'Reset Password'}</span>
             </button>
 
             <button
