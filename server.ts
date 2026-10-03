@@ -125,7 +125,7 @@ async function startServer() {
       const responseBody = await response.text().catch(() => '');
       const success = response.ok;
       logAuditEvent(
-        'NETWORK',
+        'PROBE',
         success ? 'NOTIFICATION_TEST_DELIVERED' : 'NOTIFICATION_TEST_FAILED',
         success ? 'SUCCESS' : 'FAILED',
         ((req as any).user as UserAccount)?.username || 'ANONYMOUS',
