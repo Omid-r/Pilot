@@ -437,7 +437,7 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
           restPort: webPortInfo.restPort,
           tcpPort: webPortInfo.tcpPort,
           kvPort: webPortInfo.kvPort,
-          adminPassword: 'changeme'
+          
         })
       });
 
@@ -535,7 +535,7 @@ cat << 'EOF' > /opt/splunk_parallel/etc/system/local/server.conf
 [general]
 serverName = splunk-parallel-node
 mgmtHostPort = 127.0.0.1:8090
-pass4SymmKey = changeme-passkey
+
 active_group = Free
 
 [sslConfig]
