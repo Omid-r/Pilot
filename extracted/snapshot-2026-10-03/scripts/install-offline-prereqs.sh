@@ -62,14 +62,44 @@ if [ ! -d "${RPM_DIR}" ]; then
 fi
 
 RPM_COUNT=0
+RPM_FILES=()
 for rpm_file in "${RPM_DIR}"/*.rpm; do
-  if [ -f "${rpm_file}" ]; then
-    RPM_COUNT=$((RPM_COUNT + 1))
+  [ -f "${rpm_file}" ] || continue
+  RPM_COUNT=$((RPM_COUNT + 1))
+  pkg_name="$(rpm -qp --qf '%{NAME}' "${rpm_file}" 2>/dev/null || true)"
+  [ -n "${pkg_name}" ] || continue
+
+  # Never replace the native package-manager stack from application media.
+  case "${pkg_name}" in
+    dnf|dnf-data|dnf-plugins-core|python3-dnf*|yum|yum-utils|libdnf*)
+      continue
+      ;;
+  esac
+
+  # Do not try to reinstall/upgrade packages already present on the host.
+  # This avoids cross-patching the OS base while still installing every
+  # missing application prerequisite from the local bundle.
+  if ! rpm -q "${pkg_name}" >/dev/null 2>&1; then
+    RPM_FILES+=("${rpm_file}")
   fi
 done
 if [ "${RPM_COUNT}" -lt 1 ]; then
   echo "[-] No RPMs were found in ${RPM_DIR}"
   exit 1
+fi
+
+echo "[+] Bundled RPM files: ${RPM_COUNT}"
+echo "[+] RPMs requiring installation: ${#RPM_FILES[@]}"
+
+if [ "${#RPM_FILES[@]}" -gt 0 ]; then
+  # Install only from the media. Network repositories are explicitly disabled.
+  dnf \
+    --disablerepo='*' \
+    --setopt=install_weak_deps=False \
+    --setopt=keepcache=True \
+    -y install "${RPM_FILES[@]}"
+else
+  echo "[i] All bundled prerequisite package names are already present."
 fi
 
 echo "[+] RHEL major version: ${MAJOR}"
