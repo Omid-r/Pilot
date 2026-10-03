@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
-const PACKAGE_VERSION = '1.3.0';
+const PACKAGE_VERSION = '1.5.0';
 const BUILD_DATE = new Date().toISOString();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,12 +25,7 @@ if (!fs.existsSync(publicDir)) {
 const distIndex = path.join(rootDir, 'dist/index.html');
 const distServer = path.join(rootDir, 'dist/server.cjs');
 if (!fs.existsSync(distIndex) || !fs.existsSync(distServer)) {
-  console.log('[RHEL Packager] dist/ not fully built, running npm run build...');
-  try {
-    execSync('npm run build', { cwd: rootDir, stdio: 'inherit' });
-  } catch (e) {
-    console.warn('[RHEL Packager] npm run build warning:', e.message);
-  }
+  throw new Error('[RHEL Packager] dist/index.html and dist/server.cjs must exist before packaging. Run npm run build first.');
 }
 
 // 2. Clean staging
@@ -38,6 +33,12 @@ if (fs.existsSync(stagingDir)) {
   fs.rmSync(stagingDir, { recursive: true, force: true });
 }
 fs.mkdirSync(stagingDir, { recursive: true });
+
+// 2b. Bundle the exact Linux Node runtime used to build this release.
+const nodeRuntimeDir = path.join(stagingDir, 'node-runtime', 'bin');
+fs.mkdirSync(nodeRuntimeDir, { recursive: true });
+fs.copyFileSync(process.execPath, path.join(nodeRuntimeDir, 'node'));
+fs.chmodSync(path.join(nodeRuntimeDir, 'node'), 0o755);
 
 // 3. Copy compiled dist/ (excluding nested archives to keep package lightweight and fast)
 const distDir = path.join(rootDir, 'dist');
@@ -47,7 +48,7 @@ fs.mkdirSync(distTarget, { recursive: true });
 if (fs.existsSync(distDir) && fs.readdirSync(distDir).length > 0) {
   execSync(`cp -r "${distDir}"/* "${distTarget}/" 2>/dev/null || true`);
 } else {
-  fs.writeFileSync(path.join(distTarget, 'index.html'), '<!DOCTYPE html><html><body><h1>Splunk Cluster Doctor</h1></body></html>');
+  throw new Error('[RHEL Packager] dist/ is empty; refusing to package a placeholder application.');
 }
 // Remove any nested tarballs from distTarget
 try {
@@ -71,6 +72,12 @@ if (fs.existsSync(path.join(rootDir, 'scripts'))) {
   try {
     execSync(`chmod +x "${scriptsTarget}"/*.sh "${scriptsTarget}"/*.py 2>/dev/null || true`);
   } catch (_) {}
+}
+
+// Remove runtime-generated secrets/state from the package staging tree.
+for (const secret of ['data/security-db.json', 'data/master-signing.key', 'data/bootstrap-admin-password']) {
+  const secretPath = path.join(stagingDir, secret);
+  if (fs.existsSync(secretPath)) fs.rmSync(secretPath, { force: true });
 }
 
 // 4. Create package.json for standalone RHEL server
@@ -106,16 +113,18 @@ echo "=========================================================="
 echo " Starting Splunk Cluster Doctor (RHEL Standalone v${PACKAGE_VERSION})"
 echo "=========================================================="
 
-# Check Node.js
-if ! command -v node >/dev/null 2>&1; then
-    echo "[-] Node.js is not installed."
-    echo "[!] Run: sudo dnf install -y nodejs   (RHEL 8/9, Rocky, AlmaLinux)"
-    echo "[!] Or:  sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
+# Prefer bundled Node.js so the target host needs no internet package repository.
+if [ -x "$DIR/node-runtime/bin/node" ]; then
+    NODE_BIN="$DIR/node-runtime/bin/node"
+else
+    NODE_BIN="$(command -v node 2>/dev/null || true)"
+fi
+if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+    echo "[-] No usable Node.js runtime found."
     exit 1
 fi
-
-NODE_VER=$(node -v)
-echo "[+] Detected Node.js: $NODE_VER"
+NODE_VER=$("$NODE_BIN" -v)
+echo "[+] Detected Node.js: $NODE_VER ($NODE_BIN)"
 
 # Auto-detect Splunk Home if not set
 if [ -z "$SPLUNK_HOME" ]; then
@@ -154,7 +163,7 @@ echo " Access UI in your browser at: http://$(hostname -I 2>/dev/null | awk '{pr
 echo " Press Ctrl+C to stop."
 echo "=========================================================="
 
-exec node dist/server.cjs
+exec "$NODE_BIN" dist/server.cjs
 `;
 fs.writeFileSync(path.join(stagingDir, 'start.sh'), startSh, { encoding: 'utf8', mode: 0o755 });
 
@@ -171,7 +180,8 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/splunk-doctor
-ExecStart=/usr/bin/node /opt/splunk-doctor/dist/server.cjs
+ExecStart=/opt/splunk-doctor/node-runtime/bin/node /opt/splunk-doctor/dist/server.cjs
+UMask=0077
 Restart=always
 RestartSec=5
 KillMode=process
@@ -205,8 +215,14 @@ echo "[+] Installing Splunk Cluster Doctor to $TARGET_DIR..."
 
 mkdir -p "$TARGET_DIR"
 cp -r ./* "$TARGET_DIR/"
-chmod -R 755 "$TARGET_DIR"
-chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
+find "$TARGET_DIR" -type d -exec chmod 755 {} +
+find "$TARGET_DIR" -type f -exec chmod 644 {} +
+chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh "$TARGET_DIR"/node-runtime/bin/node 2>/dev/null || true
+mkdir -p /var/lib/splunk-doctor
+chmod 700 /var/lib/splunk-doctor
+if command -v restorecon >/dev/null 2>&1; then
+  restorecon -RF "$TARGET_DIR" /var/lib/splunk-doctor || true
+fi
 
 # Dynamic Node.js path discovery
 NODE_PATH="$(command -v node 2>/dev/null || echo "/usr/bin/node")"
