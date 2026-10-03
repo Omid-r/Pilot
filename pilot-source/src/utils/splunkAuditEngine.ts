@@ -25,6 +25,15 @@ function findLineAndSnippet(content: string, matcher: RegExp | string): { line: 
   return { line: 1, snippet: lines[0]?.trim() || '' };
 }
 
+function generateStrongSecret(): string {
+  const bytes = new Uint8Array(32);
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  throw new Error('Secure random generator is unavailable; cannot create pass4SymmKey automatically.');
+}
+
 /**
  * Applies a specific remediation option to the target raw configuration text.
  */
@@ -75,9 +84,9 @@ export function applyRemediationOption(
   // 2. Pass4SymmKey Authentication Secret
   else if (optId.startsWith('opt-pass')) {
     if (/pass4SymmKey\s*=\s*(changeme|default)/i.test(newText)) {
-      newText = newText.replace(/pass4SymmKey\s*=\s*(changeme|default)/gi, 'pass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a');
+      newText = newText.replace(/pass4SymmKey\s*=\s*(changeme|default)/gi, `pass4SymmKey = ${generateStrongSecret()}`);
     } else if (!newText.includes('pass4SymmKey')) {
-      newText = newText.replace(/\[general\]/i, '[general]\npass4SymmKey = 9f8a3c8e7b1a2d4f5c6e8b0a1d3e5f7a');
+      newText = newText.replace(/\[general\]/i, `[general]\npass4SymmKey = ${generateStrongSecret()}`);
     }
   }
   // 3. Modernize TLS Versions
