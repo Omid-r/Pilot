@@ -631,43 +631,25 @@ export default function App() {
     showToast(isFa ? 'هشدار تایید شد.' : 'Alert acknowledged.');
   };
 
-  const handleSimulateDisconnect = (nodeId: string) => {
-    setHeartbeatNodes(prev => prev.map(n => {
-      if (n.id === nodeId) {
-        return {
-          ...n,
-          status: 'DISCONNECTED_SILENT',
-          eventsPerSec: 0,
-          bandwidthKbps: 0,
-          secondsSinceLastBeat: 45,
-          sslHandshakeStatus: 'FAILED_HANDSHAKE',
-          queueUtilizationPct: 100
-        };
-      }
-      return n;
-    }));
+  const handleSimulateDisconnect = async (nodeId: string) => {
     const node = heartbeatNodes.find(n => n.id === nodeId);
-    if (node) {
-      const newAlert: HeartbeatDropAlert = {
-        id: `alert-${Date.now()}`,
-        nodeId: node.id,
-        hostname: node.hostname,
-        componentRole: node.componentRole,
-        timestamp: new Date().toLocaleTimeString(),
-        alertType: 'LOG_STREAM_HALTED',
-        severity: 'CRITICAL',
-        messageFa: `قطع ناگهانی جریان لاگ و توقف ضربان قلب روی نود ${node.hostname}`,
-        messageEn: `Sudden log stream halt & heartbeat timeout on ${node.hostname}`,
-        impactFa: 'احتمال توقف ایندکس‌گذاری لاگ‌های امنیتی این نود در SOC',
-        impactEn: 'Risk of security event blind spot in SOC ingestion pipeline',
-        recommendedActionFa: 'اتصال ریموت برقرار کرده و دستور splunk status / restart را اجرا نمایید.',
-        recommendedActionEn: 'Connect via remote gateway and execute diagnostic commands.',
-        isAcknowledged: false
-      };
-      setDropAlerts(prev => [newAlert, ...prev]);
-      showToast(isFa ? `هشدار: لاگ‌های ${node.hostname} قطع شدند!` : `Warning: Log stream halted on ${node.hostname}!`);
+    if (!node) return;
+    try {
+      const res=await fetch('/api/real/node/probe',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({host:node.ip,ports:[22,8000,8089,9997]})
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error||'Connectivity probe failed');
+      const open=Object.values(data.probes||{}).filter((v:any)=>v?.open).length;
+      const updatedStatus=open?'CONNECTED':'DISCONNECTED_SILENT';
+      setHeartbeatNodes(prev=>prev.map(n=>n.id===nodeId?{...n,status:updatedStatus as any}:n));
+      showToast(open ? (isFa ? `نود ${node.hostname} قابل دسترسی است.` : `${node.hostname} is reachable.`) : (isFa ? `نود ${node.hostname} پاسخ نمی‌دهد.` : `${node.hostname} is not reachable.`));
+    }catch(e:any){
+      showToast(isFa ? `پروب واقعی شکست خورد: ${e.message}` : `Real probe failed: ${e.message}`);
     }
   };
+
 
   const handleRecoverAllNodes = () => {
     setHeartbeatNodes(INITIAL_HEARTBEAT_NODES);
@@ -706,38 +688,7 @@ export default function App() {
 
   // Backend Operations & Live Verification Inspector State
   const [isBackendInspectorOpen, setIsBackendInspectorOpen] = useState<boolean>(false);
-  const [backendOperations, setBackendOperations] = useState<BackendOperationRecord[]>([
-    {
-      id: 'op-init-1',
-      timestamp: new Date(Date.now() - 45000).toISOString(),
-      toolId: 'health_audit',
-      toolNameFa: 'موتور ممیزی سلامت کلاستر',
-      toolNameEn: 'Cluster Health Audit Engine',
-      actionSummaryFa: 'اسکن اولیه فایل‌های پیکربندی و اعتبارسنجی استنزاها',
-      actionSummaryEn: 'Initial configuration scan & stanza audit',
-      status: 'success',
-      durationMs: 14,
-      resultSummaryFa: 'تمام فایل‌های inputs.conf، outputs.conf و server.conf بدون تداخل بررسی شدند.',
-      resultSummaryEn: 'All config stanzas validated on disk without collision.',
-      technicalDetails: 'Disk scan: /opt/splunk/etc/system/local/ | Stanzas verified: 34 | Error count: 0',
-      isVerifiedReal: true
-    },
-    {
-      id: 'op-init-2',
-      timestamp: new Date(Date.now() - 25000).toISOString(),
-      toolId: 'network_toolbox',
-      toolNameFa: 'جعبه ابزار شبکه و پورت‌ها',
-      toolNameEn: 'Network & Port Toolbox',
-      actionSummaryFa: 'پایش سوکت‌های لیسنر سرور و پورت‌های اسپلانک (8000, 8089, 9997)',
-      actionSummaryEn: 'Server listening sockets & Splunk ports probe',
-      status: 'success',
-      durationMs: 11,
-      resultSummaryFa: 'پورت‌های شبکه در هسته لینوکس فعال هستند و تداخلی با سایر پروسه‌ها ندارند.',
-      resultSummaryEn: 'Kernel TCP sockets verified open and listening.',
-      technicalDetails: 'Socket scan: TCP:8000 (Web), TCP:8089 (Mgmt), TCP:9997 (Ingest) - Status: Active',
-      isVerifiedReal: true
-    }
-  ]);
+  const [backendOperations, setBackendOperations] = useState<BackendOperationRecord[]>([]);
 
   // Configurations State (Main / Production Server)
   const [configs, setConfigs] = useState<Record<string, string>>(() => {
@@ -822,11 +773,11 @@ export default function App() {
       try { return JSON.parse(saved); } catch (e) {}
     }
     return {
-      isInstalled: true,
-      status: 'running',
+      isInstalled: false,
+      status: 'stopped',
       clusterName: 'Not Installed',
       version: 'N/A',
-      portOffset: 2,
+      portOffset: 0,
       webPort: 0,
       mgmtPort: 0,
       indexerPort: 0
