@@ -823,5 +823,24 @@ export const ROLE_REMEDIATION_WORKFLOWS: Record<SplunkAgentComponentRole, NodeRo
     ],
     successMessageFa: 'کلاستر مستر با موفقیت وضعیت باکت‌ها را تثبیت و باندل پیکربندی را اعمال نمود.',
     successMessageEn: 'Cluster Manager synchronized all peers and applied cluster bundle.'
+  },
+  unknown: {
+    role: 'unknown',
+    badgeLabelFa: 'نود ناشناخته',
+    badgeLabelEn: 'Unclassified Node',
+    colorTheme: {
+      border: 'border-slate-500/40',
+      bgGlow: 'bg-slate-500/5',
+      text: 'text-slate-300',
+      button: 'bg-slate-500/20'
+    },
+    architectureSummaryFa: 'نقش این نود از اسکن شبکه قابل تشخیص قطعی نیست.',
+    architectureSummaryEn: 'Node role cannot be determined safely from network discovery alone.',
+    commonOutageCausesFa: ['نیاز به شناسایی نوع سرویس', 'نیاز به بررسی Splunk یا agent واقعی'],
+    commonOutageCausesEn: ['Service role must be identified', 'A real Splunk/agent probe is required'],
+    daemonPath: 'Not identified',
+    steps: [],
+    successMessageFa: 'هیچ remediation خودکاری برای نود ناشناخته اجرا نشد.',
+    successMessageEn: 'No automatic remediation is executed for an unclassified node.'
   }
 };
