@@ -906,6 +906,79 @@ async function startServer() {
     next();
   }
 
+  // Real outbound notification test. No synthetic delivery success is generated.
+  app.post('/api/alerts/test-dispatch', requireAuth, async (req, res) => {
+    const type = String(req.body?.type || '').toUpperCase();
+    const endpoint = String(req.body?.endpoint || '').trim();
+    const secret = typeof req.body?.secret === 'string' ? req.body.secret : '';
+    const message = typeof req.body?.message === 'string' && req.body.message.trim()
+      ? req.body.message.trim()
+      : 'Splunk Cluster Doctor live notification test';
+
+    if (type === 'SMS' || type === 'EMAIL') {
+      return res.status(501).json({
+        success: false,
+        code: 'PROVIDER_NOT_CONFIGURED',
+        error: 'SMS/Email delivery requires a configured provider integration; no synthetic delivery is reported.'
+      });
+    }
+
+    if (type !== 'WEBHOOK' && type !== 'TEAMS_SLACK') {
+      return res.status(400).json({ success: false, error: 'Unsupported notification channel type.' });
+    }
+
+    let url: URL;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      return res.status(400).json({ success: false, error: 'Notification endpoint is not a valid URL.' });
+    }
+    if (url.protocol !== 'https:') {
+      return res.status(400).json({ success: false, error: 'Webhook endpoint must use HTTPS.' });
+    }
+
+    const allowlist = (process.env.SPLUNK_DOCTOR_ALERT_WEBHOOK_ALLOWLIST || '')
+      .split(',')
+      .map(v => v.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowlist.length === 0 || !allowlist.includes(url.hostname.toLowerCase())) {
+      return res.status(403).json({
+        success: false,
+        code: 'WEBHOOK_HOST_NOT_ALLOWLISTED',
+        error: 'Webhook host is not present in SPLUNK_DOCTOR_ALERT_WEBHOOK_ALLOWLIST.'
+      });
+    }
+
+    const started = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (secret) headers.set('X-Webhook-Secret', secret);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: message, source: 'splunk-cluster-doctor' }),
+        signal: controller.signal
+      });
+      const body = await response.text();
+      return res.status(response.ok ? 200 : 502).json({
+        success: response.ok,
+        statusCode: response.status,
+        latencyMs: Date.now() - started,
+        responsePreview: body.slice(0, 500)
+      });
+    } catch (err: any) {
+      return res.status(502).json({
+        success: false,
+        latencyMs: Date.now() - started,
+        error: err?.name === 'AbortError' ? 'Webhook request timed out.' : err?.message || String(err)
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+
   // RBAC Middleware: Checks User Role against Allowed Roles
   function requireRoles(...allowedRoles: UserRole[]) {
     return (req: express.Request, res: express.Response, next: express.NextFunction) => {
