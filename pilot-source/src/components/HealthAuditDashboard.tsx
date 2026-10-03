@@ -597,7 +597,7 @@ cat << 'EOF' > "$PARALLEL_DIR/etc/system/local/server.conf"
 [general]
 serverName = splunk-parallel-staging
 mgmtHostPort = 127.0.0.1:8090
-pass4SymmKey = changeme-parallel-key
+pass4SymmKey = <GENERATE_AT_RUNTIME>
 active_group = Free
 
 [kvstore]
@@ -607,7 +607,7 @@ EOF
 cat << 'EOF' > "$PARALLEL_DIR/etc/system/local/user-seed.conf"
 [user_info]
 USERNAME = admin
-PASSWORD = changeme
+PASSWORD = <REAL_ADMIN_PASSWORD>
 EOF
 
 cat << 'EOF' > "$PARALLEL_DIR/etc/system/local/inputs.conf"
@@ -626,7 +626,7 @@ export SPLUNK_HOME="$PARALLEL_DIR"
 "$PARALLEL_DIR/bin/splunk" start --accept-license --answer-yes --no-prompt
 
 echo "[SUCCESS] Official Splunk Web is ready at http://<SERVER-IP>:8001/en-US/account/login"
-echo "[CREDENTIALS] Username: admin | Password: changeme"`;
+echo "[CREDENTIALS] Username: admin | Password: <REAL_ADMIN_PASSWORD>"`;
 
   return (
     <div className="space-y-6 text-start">
@@ -823,7 +823,7 @@ echo "[CREDENTIALS] Username: admin | Password: changeme"`;
                 </div>
                 <p className="text-xs text-rose-200/90 mt-1 max-w-3xl leading-relaxed">
                   {isFa 
-                    ? 'به دلیل تداخل‌های متعدد در outputs.conf، عدم رمزنگاری TLS، کلید پیش‌فرض changeme و ارجاع‌های شکسته، اصلاح دستی ریسک قطع لاگ‌های زنده SOC را دارد. سیستم پیشنهاد می‌دهد یک نسخه موازی از اسپلنک روی همین سرور با مشخصات یکسان و پورت‌های موازی بالا آورده شده، کانفیگ‌های پاک‌سازی‌شده به آن منتقل و سپس ترافیک بدون قطعی سوئیچ شود.'
+                    ? 'به دلیل تداخل‌های متعدد در outputs.conf، عدم رمزنگاری TLS، کلید پیش‌فرض شناخته‌شده و ارجاع‌های شکسته، اصلاح دستی ریسک قطع لاگ‌های زنده SOC را دارد. سیستم پیشنهاد می‌دهد یک نسخه موازی از اسپلنک روی همین سرور با مشخصات یکسان و پورت‌های موازی بالا آورده شده، کانفیگ‌های پاک‌سازی‌شده به آن منتقل و سپس ترافیک بدون قطعی سوئیچ شود.'
                     : 'Multiple severe security & pipeline defects detected. To guarantee zero-downtime, the engine recommends provisioning a clean parallel Splunk instance side-by-side on non-colliding ports before seamless cutover.'}
                 </p>
               </div>
@@ -1909,7 +1909,7 @@ echo "[CREDENTIALS] Username: admin | Password: changeme"`;
                     <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
                       <span>{isFa ? 'نام کاربری:' : 'User:'} <strong className="text-cyan-300 font-mono">admin</strong></span>
                       <span>•</span>
-                      <span>{isFa ? 'رمز عبور:' : 'Password:'} <strong className="text-cyan-300 font-mono">changeme</strong></span>
+                      <span>{isFa ? 'رمز عبور:' : 'Password:'} <strong className="text-cyan-300 font-mono">set securely at runtime</strong></span>
                     </div>
                   </div>
                 </div>
