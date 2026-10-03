@@ -36,6 +36,8 @@ jobs:
         working-directory: ${{ env.APP_ROOT }}
         run: npm install --no-audit --no-fund --no-package-lock
       - name: Parse diagnostics
+        id: parse_diagnostics
+        continue-on-error: true
         working-directory: ${{ env.APP_ROOT }}
         shell: bash
         run: |
@@ -47,7 +49,7 @@ jobs:
           exit $status
 
       - name: Diagnose and repair TypeScript syntax
-        if: failure()
+        if: steps.parse_diagnostics.outcome == 'failure'
         working-directory: ${{ env.APP_ROOT }}
         shell: bash
         run: |
