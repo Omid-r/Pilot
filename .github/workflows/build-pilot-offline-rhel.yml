@@ -1,0 +1,112 @@
+name: Build Pilot Snapshot Offline RHEL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - pilot-production-rebuild-20261003
+  workflow_dispatch:
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    env:
+      APP_ROOT: extracted/snapshot-2026-10-03
+      CI: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Verify snapshot
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          test -f package.json
+          test -f server.ts
+          test -f index.html
+          node -e "console.log(require('./package.json').name, require('./package.json').version)"
+
+      - name: Install dependencies
+        working-directory: ${{ env.APP_ROOT }}
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript check
+        working-directory: ${{ env.APP_ROOT }}
+        run: npm run lint
+
+      - name: Production build
+        working-directory: ${{ env.APP_ROOT }}
+        run: npm run build
+
+      - name: Real runtime smoke test
+        working-directory: ${{ env.APP_ROOT }}
+        run: npm run smoke
+
+      - name: Verify packaged output
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          test -f dist/server.cjs
+          test -x dist/../node-runtime/bin/node 2>/dev/null || true
+          echo "=== offline artifacts ==="
+          find public dist . -maxdepth 3 -type f \
+            \( -name '*rhel*.tar.gz' -o -name '*offline*.tar.gz' -o -name '*.sha256' \) \
+            -print 2>/dev/null | sort
+
+      - name: Build final self-contained RHEL tarball
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          mkdir -p release/splunk-doctor
+          cp -a dist release/splunk-doctor/
+          cp -a scripts release/splunk-doctor/
+          cp -a package.json release/splunk-doctor/
+          cp -a README.md release/splunk-doctor/
+          cp -a metadata.json release/splunk-doctor/
+          cp -a node_modules 2>/dev/null || true
+          if [ -x node-runtime/bin/node ]; then
+            mkdir -p release/splunk-doctor/node-runtime/bin
+            cp -a node-runtime/bin/node release/splunk-doctor/node-runtime/bin/node
+          else
+            mkdir -p release/splunk-doctor/node-runtime/bin
+            cp "$(command -v node)" release/splunk-doctor/node-runtime/bin/node
+            chmod 755 release/splunk-doctor/node-runtime/bin/node
+          fi
+          rm -f release/splunk-doctor/data/security-db.json
+          rm -f release/splunk-doctor/data/master-signing.key
+          chmod -R u=rwX,go=rX release/splunk-doctor
+          chmod 755 release/splunk-doctor/node-runtime/bin/node
+          tar -czf release/splunk-doctor-offline-rhel-1.5.0.tar.gz -C release splunk-doctor
+          sha256sum release/splunk-doctor-offline-rhel-1.5.0.tar.gz > release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
+
+      - name: Inspect final bundle
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          sha256sum -c release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -E 'splunk-doctor/(dist/server.cjs|dist/index.html|scripts/setup.sh|node-runtime/bin/node)$'
+          if tar -tzf release/splunk-doctor-offline-rhel-1.5.0.tar.gz | grep -Eq '(security-db\.json|master-signing\.key)$'; then
+            echo "SECURITY ERROR: generated runtime secret found in release"
+            exit 1
+          fi
+
+      - name: Upload offline RHEL release
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0.tar.gz.sha256
+          if-no-files-found: error
