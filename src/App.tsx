@@ -1238,7 +1238,7 @@ export default function App() {
     addLog(isFa ? "🗑️ شروع فرآیند تخریب کامل سرور مجازی کانتینری اسپلانک..." : "🗑️ Starting decommissioning of virtual cloud container instance...");
     
     setTimeout(() => {
-      addLog(isFa ? "������ توقف کانتینرهای فعال داکر و حذف اتصالات شبکه مجاری..." : "🐳 Stopping active Docker container stack and cleaning virtual networks...");
+      addLog(isFa ? "������ توقف کانتینرهای فعال داکر و حذف اتصالات شبکه مجاری..." : "🐳 Stopping active Docker container stack and cleaning virtual networks...");
       addLog("🐳 Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml down --volumes --remove-orphans");
     }, 800);
 
