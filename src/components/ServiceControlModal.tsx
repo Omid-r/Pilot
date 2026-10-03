@@ -28,165 +28,83 @@ export const ServiceControlModal: React.FC<ServiceControlModalProps> = ({ onClos
     setIsRunning(true);
     setStatusResult('running');
     setActiveCommand(cmdKey);
-    
-    const targetDir = selectedServerType === 'real' ? '/opt/splunk' : '/opt/splunk_parallel';
-    const serverLabel = selectedServerType === 'real' ? 'Real Primary Instance (/opt/splunk :8000)' : 'Parallel Staging Instance (/opt/splunk_parallel :8001)';
-    
-    let commandText = '';
-    if (cmdKey === 'restart') {
-      commandText = `SPLUNK_HOME=${targetDir} ${targetDir}/bin/splunk restart --run-as-root`;
-    } else if (cmdKey === 'start') {
-      commandText = `SPLUNK_HOME=${targetDir} ${targetDir}/bin/splunk start --run-as-root`;
-    } else if (cmdKey === 'stop') {
-      commandText = `SPLUNK_HOME=${targetDir} ${targetDir}/bin/splunk stop --run-as-root`;
-    } else if (cmdKey === 'status') {
-      commandText = `SPLUNK_HOME=${targetDir} ${targetDir}/bin/splunk status`;
-    } else if (cmdKey === 'btool') {
-      commandText = `SPLUNK_HOME=${targetDir} ${targetDir}/bin/splunk cmd btool check`;
-    } else if (cmdKey === 'reset_pass') {
-      commandText = `bash /scripts/reset-splunk-password.sh ${targetDir} admin changeme`;
-    } else if (cmdKey === 'bootstart_troubleshoot') {
-      commandText = 'splunk troubleshoot --os-user';
-    }
-    
-    setTerminalOutput([
-      `[TARGET] ${serverLabel}`,
-      `$ ${commandText}`
-    ]);
 
-    // Attempt real live server execution
+    const targetDir = selectedServerType === 'real' ? '/opt/splunk' : '/opt/splunk_parallel';
+    const serverLabel = selectedServerType === 'real'
+      ? 'Real Primary Instance (/opt/splunk :8000)'
+      : 'Parallel Splunk Instance (/opt/splunk_parallel :8001)';
+
+    setTerminalOutput([`[TARGET] ${serverLabel}`]);
+
     try {
       if (cmdKey === 'restart' || cmdKey === 'start' || cmdKey === 'stop') {
         const res = await fetch('/api/splunk/control', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            action: cmdKey,
-            serverType: selectedServerType,
-            targetDir
-          })
+          body: JSON.stringify({ action: cmdKey, serverType: selectedServerType, targetDir })
         });
-        if (res.ok) {
-          const data = await res.json();
-          setTerminalOutput(prev => [
-            ...prev,
-            `[LIVE SERVER] Connected to ${serverLabel}.`,
-            `[LIVE SERVER] Executed action: splunk ${cmdKey}`,
-            '-----------------------------',
-            ...(data.stdout ? data.stdout.split('\n') : []),
-            ...(data.stderr ? [`ERROR: ${data.stderr}`] : []),
-            '-----------------------------',
-            `${cmdKey.toUpperCase()} complete!`
-          ]);
-          setIsRunning(false);
-          setStatusResult('success');
-          return;
-        }
-      } else if (cmdKey === 'reset_pass') {
-        const res = await fetch('/api/parallel-cluster/reset-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            serverType: selectedServerType,
-            targetDir,
-            newPassword: 'changeme'
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setTerminalOutput(prev => [
-            ...prev,
-            `[LIVE SERVER] ${data.message || 'Password reset applied successfully!'}`,
-            '-----------------------------',
-            `User: admin | Password: changeme`,
-            `Target Directory: ${targetDir}`,
-            '-----------------------------'
-          ]);
-          setIsRunning(false);
-          setStatusResult('success');
-          return;
-        }
+        const data = await res.json().catch(() => ({}));
+        setTerminalOutput(prev => [
+          ...prev,
+          ...(data.stdout ? String(data.stdout).split('\\n') : []),
+          ...(data.stderr ? [`ERROR: ${data.stderr}`] : []),
+          `HTTP ${res.status}`
+        ]);
+        if (!res.ok || data.success !== true) throw new Error(data.error || `splunk ${cmdKey} failed`);
       } else if (cmdKey === 'status') {
         const res = await fetch(`/api/splunk/status?serverType=${selectedServerType}&targetDir=${encodeURIComponent(targetDir)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setTerminalOutput(prev => [
-            ...prev,
-            `[LIVE SERVER] Fetching status from ${serverLabel}...`,
-            '-----------------------------',
-            `Target Directory: ${data.targetDir || targetDir}`,
-            `Service Detected: ${data.installed ? 'Yes' : 'No'}`,
-            `Process running: ${data.running ? 'Yes (Active)' : 'No (Stopped)'}`,
-            `PID: ${data.processId || 'None'}`,
-            `Output Status:\n${data.status}`,
-            '-----------------------------'
-          ]);
-          setIsRunning(false);
-          setStatusResult('success');
-          return;
-        }
+        const data = await res.json().catch(() => ({}));
+        setTerminalOutput(prev => [
+          ...prev,
+          `Service detected: ${data.installed ? 'Yes' : 'No'}`,
+          `Process running: ${data.running ? 'Yes' : 'No'}`,
+          `PID: ${data.processId || 'None'}`,
+          String(data.status || '')
+        ]);
+        if (!res.ok) throw new Error(data.error || 'Status query failed');
       } else if (cmdKey === 'btool') {
         const res = await fetch(`/api/splunk/btool?serverType=${selectedServerType}&targetDir=${encodeURIComponent(targetDir)}`);
-        if (res.ok) {
-          const data = await res.json();
-          const errList = data.errors || [];
-          setTerminalOutput(prev => [
-            ...prev,
-            `[LIVE SERVER] Executing btool syntax check on ${serverLabel}...`,
-            '-----------------------------',
-            ...errList.map((err: any) => err.message || JSON.stringify(err)),
-            errList.length === 0 ? 'No syntax errors detected by btool check!' : `${errList.length} syntax issues found.`,
-            '-----------------------------'
-          ]);
-          setIsRunning(false);
-          setStatusResult('success');
-          return;
-        }
-      }
-    } catch (err: any) {
-      console.log('Failing over to interactive local sandbox log pipeline...', err);
-    }
-
-    // Fallback sandbox simulation if backend not available or call fails
-    const logs: string[] = [];
-
-    if (cmdKey === 'restart' || cmdKey === 'start') {
-      logs.push(`[1/4] Checking configuration syntax for ${serverLabel}...`);
-      logs.push('[btool] checking inputs.conf, outputs.conf, server.conf... OK');
-      logs.push(`[2/4] ${cmdKey === 'restart' ? 'Stopping splunkd gracefully...' : 'Preparing environment...'}`);
-      logs.push('[3/4] Starting splunk server daemon (splunkd) with --run-as-root...');
-      logs.push(`Checking ports: ${selectedServerType === 'real' ? '8000/tcp (WEB), 8089/tcp (REST)' : '8001/tcp (WEB), 8090/tcp (REST)'} binding successful.`);
-      logs.push(`[4/4] splunkd started for ${serverLabel}. Verification complete.`);
-    } else if (cmdKey === 'stop') {
-      logs.push(`Stopping splunkd daemon for ${serverLabel}...`);
-      logs.push('splunkd is shut down.');
-    } else if (cmdKey === 'reset_pass') {
-      logs.push(`[1/3] Writing fresh user-seed.conf for ${serverLabel}...`);
-      logs.push('[2/3] Purging stale passwd hashes from etc/system/local/passwd...');
-      logs.push('[3/3] Admin credentials updated: user=admin pass=changeme');
-    } else if (cmdKey === 'status') {
-      logs.push(`Checking overall status of ${serverLabel}...`);
-      logs.push(`splunkd is running on ${selectedServerType === 'real' ? 'port 8000/8089' : 'port 8001/8090'}.`);
-    } else if (cmdKey === 'btool') {
-      logs.push(`Executing btool check across ${targetDir}/etc/system/local...`);
-      logs.push('btool check finished with return code 0 (No syntax errors detected).');
-    } else if (cmdKey === 'bootstart_troubleshoot') {
-      logs.push('[DIAGNOSTIC] Analyzing bootstart/service credentials...');
-      logs.push('ANALYSIS / تحلیل ریشه خطا:');
-      logs.push('Executing with explicit SPLUNK_RUN_AS_ROOT=1 flag bypasses OS user restriction.');
-    }
-
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < logs.length) {
-        setTerminalOutput(prev => [...prev, logs[i]]);
-        i++;
+        const data = await res.json().catch(() => ({}));
+        const errors = Array.isArray(data.errors) ? data.errors : [];
+        setTerminalOutput(prev => [
+          ...prev,
+          ...(errors.length ? errors.map((x: any) => String(x.message || JSON.stringify(x))) : ['No btool errors reported by the backend.'])
+        ]);
+        if (!res.ok) throw new Error(data.error || 'btool check failed');
+      } else if (cmdKey === 'reset_pass') {
+        const newPassword = window.prompt(isFa ? 'رمز عبور جدید ادمین را وارد کنید (حداقل 12 کاراکتر):' : 'Enter the new admin password (minimum 12 characters):') || '';
+        if (newPassword.length < 12) throw new Error(isFa ? 'رمز باید حداقل 12 کاراکتر باشد.' : 'Password must be at least 12 characters.');
+        const currentPassword = window.prompt(isFa ? 'رمز فعلی ادمین را وارد کنید:' : 'Enter the current admin password:') || '';
+        if (!currentPassword) throw new Error(isFa ? 'رمز فعلی لازم است.' : 'Current password is required.');
+        const res = await fetch('/api/splunk/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetDir, currentPassword, newPassword })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success !== true) throw new Error(data.error || 'Password reset failed.');
+        setTerminalOutput(prev => [...prev, data.message || 'Admin password changed successfully.']);
+      } else if (cmdKey === 'bootstart_troubleshoot') {
+        const res = await fetch('/api/splunk/troubleshoot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetDir })
+        });
+        const data = await res.json().catch(() => ({}));
+        setTerminalOutput(prev => [...prev, ...(Array.isArray(data.logs) ? data.logs : [String(data.message || '')])]);
+        if (!res.ok || data.success !== true) throw new Error(data.error || 'Troubleshoot failed.');
       } else {
-        clearInterval(interval);
-        setIsRunning(false);
-        setStatusResult('success');
+        throw new Error(`Unsupported command: ${cmdKey}`);
       }
-    }, 400);
+
+      setStatusResult('success');
+    } catch (err: any) {
+      const message = err?.message || 'Operation failed.';
+      setTerminalOutput(prev => [...prev, `[FAILED] ${message}`]);
+      setStatusResult('failed');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
