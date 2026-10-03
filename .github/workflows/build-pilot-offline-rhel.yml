@@ -62,32 +62,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-          p = Path('server.ts')
-          original = p.read_text()
-          lines = original.rstrip().splitlines()
-          candidates = [original.rstrip() + '\n\nstartServer();\n']
-          if lines and lines[-1].strip() == '}':
-              candidates.append('\n'.join(lines[:-1]).rstrip() + '\n}\n\nstartServer();\n')
-          if len(lines) >= 2 and lines[-1].strip() == '}' and lines[-2].strip() == '}':
-              candidates.append('\n'.join(lines[:-2]).rstrip() + '\n}\n\nstartServer();\n')
-          for idx in range(max(0, len(lines)-320), len(lines)-1):
-              candidates.append('\n'.join(lines[:idx] + lines[idx+1:]).rstrip() + '\n\nstartServer();\n')
-          seen = set()
-          for i, candidate in enumerate(candidates, 1):
-              if candidate in seen: continue
-              seen.add(candidate)
-              p.write_text(candidate)
-              r = subprocess.run(['./node_modules/.bin/tsc', '--noEmit'], text=True, capture_output=True)
-              if r.returncode == 0:
-                  print(f'Accepted candidate {i}')
-                  break
-          else:
-              p.write_text(original)
-              raise SystemExit('No bounded syntax-repair candidate compiled')
-          PY
+          node <<'NODE'
+          const fs = require('fs');
+          const ts = require('typescript');
+          const p = 'server.ts';
+          const original = fs.readFileSync(p, 'utf8');
+          const diagnostics = (text) => {
+            const sf = ts.createSourceFile(p, text, ts.ScriptTarget.Latest, true);
+            return sf.parseDiagnostics || [];
+          };
+          const lines = original.split(/\r?\n/);
+          const initial = diagnostics(original);
+          if (!initial.length) {
+            console.log('No parser diagnostics; nothing to repair.');
+            process.exit(0);
+          }
+          console.log('Initial parser diagnostics:');
+          for (const d of initial) {
+            const lc = ts.createSourceFile(p, original, ts.ScriptTarget.Latest, true).getLineAndCharacterOfPosition(d.start ?? 0);
+            console.log(`  ${lc.line + 1}:${lc.character + 1} ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+          }
+          const candidates = [];
+          const seen = new Set();
+          for (const d of initial) {
+            const sf = ts.createSourceFile(p, original, ts.ScriptTarget.Latest, true);
+            const line = sf.getLineAndCharacterOfPosition(d.start ?? 0).line;
+            for (let delta = -12; delta <= 12; delta++) {
+              const idx = line + delta;
+              if (idx < 0 || idx >= lines.length) continue;
+              if (!/^\s*\}\s*\)?;?\s*$/.test(lines[idx])) continue;
+              const candidate = lines.slice(0, idx).concat(lines.slice(idx + 1)).join('\n');
+              if (!seen.has(candidate)) { seen.add(candidate); candidates.push({idx: idx + 1, candidate}); }
+            }
+          }
+          let accepted = null;
+          for (const item of candidates) {
+            const ds = diagnostics(item.candidate);
+            if (!ds.length) { accepted = item; break; }
+          }
+          if (!accepted) {
+            fs.writeFileSync('/tmp/ts-parse-diagnostics.txt', initial.map(d => ts.flattenDiagnosticMessageText(d.messageText, ' ')).join('\n'));
+            throw new Error('No bounded single-brace parser repair candidate succeeded');
+          }
+          fs.writeFileSync(p, accepted.candidate.endsWith('\n') ? accepted.candidate : accepted.candidate + '\n');
+          console.log(`Accepted parser-only repair: removed server.ts line ${accepted.idx}`);
+          NODE
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if ! git diff --quiet -- server.ts; then
