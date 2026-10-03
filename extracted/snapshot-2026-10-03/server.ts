@@ -1995,82 +1995,68 @@ async function startServer() {
     }
   }
 
-  // API: Get Parallel Cluster Status (Checks real Splunk process and official Web UI)
-  app.get('/api/parallel-cluster/status', async (req, res) => {
-    let isRunning = false;
-    let rawStatus = 'stopped';
-    const targetDir = '/opt/splunk_parallel';
-    const binaryPath = path.join(targetDir, 'bin/splunk');
-
-    if (fs.existsSync(binaryPath)) {
-      try {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${binaryPath}" status 2>&1 || true`);
-        rawStatus = cmdRes.stdout || '';
-        if (/splunkd is running/i.test(rawStatus) || /splunkweb is running/i.test(rawStatus)) {
-          isRunning = true;
-        }
-      } catch (_) {}
-    }
-
-    if (!isRunning) {
-      try {
-        const pgrepRes = await runCommand('pgrep -f "splunk_parallel.*splunkd" || pgrep -f "/opt/splunk_parallel" || true');
-        if (pgrepRes.stdout && pgrepRes.stdout.trim().length > 0) {
-          isRunning = true;
-        }
-      } catch (_) {}
-    }
-
-    res.json({
-      isInstalled: fs.existsSync(targetDir) && (fs.existsSync(binaryPath) || fs.existsSync(path.join(targetDir, 'etc/system/local/web.conf'))),
-      isRunning,
-      rawStatus,
-      webPort: parallelActivePorts.web || 8001,
-      restPort: parallelActivePorts.rest || 8090,
-      splunkTcpPort: parallelActivePorts.splunkTcp || 9998,
-      kvstorePort: parallelActivePorts.kvstore || 8192,
-      ingestedEvents: parallelIngestedCount,
-      lastEventTime: parallelLastEventTime,
-      splunkHome: targetDir,
-      officialWebUrl: `http://localhost:${parallelActivePorts.web || 8001}/en-US/account/login`,
-      credentials: { username: 'admin', password: 'changeme' }
-    });
-  });
-
-  // API: Start Real Splunk Parallel Instance
-  app.post('/api/parallel-cluster/start', async (req, res) => {
+  // Legacy parallel status reports only a real Splunk binary and its actual status.
+  app.get('/api/parallel-cluster/status', async (_req, res) => {
     const targetDir = '/opt/splunk_parallel';
     const binary = path.join(targetDir, 'bin/splunk');
+    if (!fs.existsSync(binary)) {
+      return res.json({
+        isInstalled: false,
+        isRunning: false,
+        rawStatus: 'Splunk binary not detected.',
+        splunkHome: targetDir
+      });
+    }
     try {
-      if (fs.existsSync(binary)) {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binary}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1`);
-        return res.json({ success: true, output: cmdRes.stdout || cmdRes.stderr });
-      }
-      const scriptPath = getScriptPath('install-real-parallel-splunk.sh');
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const result = await runCommand(`bash "${scriptPath}" /opt/splunk "${targetDir}" ${parallelActivePorts.web} ${parallelActivePorts.rest} ${parallelActivePorts.splunkTcp} ${parallelActivePorts.kvstore}`);
-        return res.json({ success: true, output: result.stdout });
-      }
-      res.json({ success: true, message: 'Parallel Splunk initialized' });
+      const result = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" status`);
+      const rawStatus = (result.stdout || result.stderr || '').trim();
+      const isRunning = result.code === 0 && /splunkd is running|splunkweb is running/i.test(rawStatus);
+      return res.json({
+        isInstalled: true,
+        isRunning,
+        rawStatus,
+        splunkHome: targetDir
+      });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // API: Stop Real Splunk Parallel Instance
-  app.post('/api/parallel-cluster/stop', async (req, res) => {
+  // Start an actual parallel Splunk installation only if the binary already exists.
+  app.post('/api/parallel-cluster/start', requireRoles('super_admin', 'cluster_admin'), async (_req, res) => {
     const targetDir = '/opt/splunk_parallel';
     const binary = path.join(targetDir, 'bin/splunk');
+    if (!fs.existsSync(binary)) {
+      return res.status(404).json({ success: false, error: 'Real parallel Splunk binary not found. Stage/install a real artifact first.' });
+    }
     try {
-      if (fs.existsSync(binary)) {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" stop 2>&1 || true`);
-        return res.json({ success: true, output: cmdRes.stdout });
-      }
-      await runCommand(`fuser -k ${parallelActivePorts.web}/tcp ${parallelActivePorts.rest}/tcp 2>/dev/null || true`);
-      res.json({ success: true, message: 'Parallel processes stopped' });
+      const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binary}" start --accept-license --answer-yes --no-prompt --run-as-root`);
+      return res.status(cmdRes.code === 0 ? 200 : 500).json({
+        success: cmdRes.code === 0,
+        exitCode: cmdRes.code,
+        output: cmdRes.stdout || cmdRes.stderr
+      });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Stop only a real Splunk parallel process; never report success for a missing instance.
+  app.post('/api/parallel-cluster/stop', requireRoles('super_admin', 'cluster_admin'), async (_req, res) => {
+    const targetDir = '/opt/splunk_parallel';
+    const binary = path.join(targetDir, 'bin/splunk');
+    if (!fs.existsSync(binary)) {
+      return res.status(404).json({ success: false, error: 'Real parallel Splunk binary not found.' });
+    }
+    try {
+      const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" stop`);
+      return res.status(cmdRes.code === 0 ? 200 : 500).json({
+        success: cmdRes.code === 0,
+        exitCode: cmdRes.code,
+        output: cmdRes.stdout || cmdRes.stderr
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -3210,238 +3196,22 @@ mgmtHostPort = 127.0.0.1:${restPort}
     });
   });
 
-  // API: Self-Healing One-Click Execution (Solves all problems automatically)
-  const handleAutoHeal = async (req: express.Request, res: express.Response) => {
-    const {
-      webPort = 8001,
-      restPort = 8090,
-      tcpPort = 9998,
-      kvPort = 8193,
-      adminPassword = 'changeme'
-    } = req.body;
+  // Legacy autonomous auto-heal is disabled. Real remediation requires an explicit, verified control-plane action.
+  app.post('/api/parallel-cluster/auto-heal-all', requireRoles('super_admin', 'cluster_admin'), (_req, res) => {
+    return res.status(501).json({
+      success: false,
+      code: 'REAL_AUTO_HEAL_NOT_YET_IMPLEMENTED',
+      error: 'Automatic fleet healing is disabled until every action is backed by real execution and post-change validation.'
+    });
+  });
 
-    const logs: string[] = [];
-    const parallelDir = '/opt/splunk_parallel';
-    const runtimeDir = '/opt/splunk_container_runtime';
-
-    logs.push(`======================================================================`);
-    logs.push(`[AI SELF-HEALER] Starting Automated End-to-End System Recovery...`);
-    logs.push(`======================================================================`);
-
-    try {
-      // 1. Free host sockets
-      logs.push(`==> 1. Terminating stale port locks on ${webPort}, ${restPort}, ${tcpPort}...`);
-      await runCommand(`fuser -k "${webPort}/tcp" 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `آزادسازی پورت وب ${webPort}`,
-        toolNameEn: `Free Web Socket ${webPort}`,
-        cwd: parallelDir,
-        category: 'network'
-      });
-      await runCommand(`fuser -k "${restPort}/tcp" 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `آزادسازی پورت مدیریتی ${restPort}`,
-        toolNameEn: `Free REST Port ${restPort}`,
-        cwd: parallelDir,
-        category: 'network'
-      });
-      await runCommand(`fuser -k "${tcpPort}/tcp" 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `آزادسازی پورت داده اینجست ${tcpPort}`,
-        toolNameEn: `Free TCP Ingestion Port ${tcpPort}`,
-        cwd: parallelDir,
-        category: 'network'
-      });
-      logs.push(`  [✓] Ports ${webPort}, ${restPort}, ${tcpPort} unlocked.`);
-
-      // 2. Setup runtime directories & sync scripts
-      logs.push(`==> 2. Synchronizing runtime directories and self-healing scripts...`);
-      if (!fs.existsSync(runtimeDir)) fs.mkdirSync(runtimeDir, { recursive: true });
-      if (!fs.existsSync(parallelDir)) fs.mkdirSync(parallelDir, { recursive: true });
-      fs.mkdirSync(path.join(parallelDir, 'etc/system/local'), { recursive: true });
-      fs.mkdirSync(path.join(parallelDir, 'var/log/splunk'), { recursive: true });
-      fs.mkdirSync(path.join(parallelDir, 'var/run/splunk'), { recursive: true });
-
-      // Clean old lockfiles and stale inherited passwd
-      await runCommand(
-        `rm -rf "${parallelDir}/var/run/splunk/"*.pid "${parallelDir}/var/run/splunk/"*.socket "${parallelDir}/var/lock/splunk/"* 2>/dev/null || true`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'پاکسازی قفل‌های قدیمی PID و Socket',
-          toolNameEn: 'Clean Stale Lockfiles and Sockets',
-          cwd: parallelDir,
-          category: 'splunk'
-        }
-      );
-      await runCommand(
-        `rm -f "${parallelDir}/etc/passwd" "${parallelDir}/etc/system/local/passwd" 2>/dev/null || true`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'پاکسازی هش‌های معلق پسورد اسپلانک',
-          toolNameEn: 'Reset Legacy Passwd Credentials',
-          cwd: parallelDir,
-          category: 'security'
-        }
-      );
-
-      const scriptSources = ['deploy-splunk-k8s-offline.sh', 'fix-parallel-web.sh', 'reset-splunk-password.sh'];
-      for (const s of scriptSources) {
-        const src = path.join(process.cwd(), 'scripts', s);
-        const dst = path.join(runtimeDir, s);
-        if (fs.existsSync(src)) {
-          fs.copyFileSync(src, dst);
-          await runCommand(`chmod +x "${src}" "${dst}" 2>/dev/null || true`, {
-            toolId: 'diagnostics_autoheal',
-            toolNameFa: `تنظیم دسترسی اجرایی اسکریپت ${s}`,
-            toolNameEn: `Set Executable Permissions on ${s}`,
-            category: 'system'
-          });
-        }
-      }
-      logs.push(`  [✓] Scripts deployed to ${runtimeDir} with execution permissions.`);
-
-      // 3. Write clean, collision-free configuration files
-      logs.push(`==> 3. Generating synchronized configuration stanzas (KVStore=${kvPort}, REST=${restPort})...`);
-      const webConf = `[settings]\nhttpport = ${webPort}\nserver.socket_host = 0.0.0.0\nenableSplunkWebSSL = false\nstartwebserver = 1\nappServerPorts = 8066\nmgmtHostPort = 127.0.0.1:${restPort}\n`;
-      const serverConf = `[general]\nserverName = splunk-parallel-staging-01\nmgmtHostPort = 127.0.0.1:${restPort}\npass4SymmKey = changeme-parallel-key\nactive_group = Enterprise\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${restPort}\n\n[kvstore]\nport = ${kvPort}\n`;
-      const inputsConf = `[default]\nhost = splunk-parallel-staging-01\n\n[splunktcp://${tcpPort}]\ndisabled = 0\nqueueSize = 10MB\n`;
-      const userSeedConf = `[user_info]\nUSERNAME = admin\nPASSWORD = ${adminPassword}\n`;
-      const uiTourConf = `[splunk_enterprise]\nviewed = 1\n`;
-      const launchConf = `SPLUNK_HOME=${parallelDir}\nSPLUNK_DB=${parallelDir}/var/lib/splunk\n`;
-
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/web.conf'), webConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/server.conf'), serverConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/inputs.conf'), inputsConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/user-seed.conf'), userSeedConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/system/local/ui-tour.conf'), uiTourConf, 'utf8');
-      fs.writeFileSync(path.join(parallelDir, 'etc/splunk-launch.conf'), launchConf, 'utf8');
-      
-      await runCommand(
-        `cat "${parallelDir}/etc/system/local/web.conf" "${parallelDir}/etc/system/local/server.conf" | head -n 12`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'بررسی صحت کانفیگ‌های تولیدشده web.conf و server.conf',
-          toolNameEn: 'Verify Generated Stanza Configurations',
-          cwd: parallelDir,
-          category: 'splunk'
-        }
-      );
-      logs.push(`  [✓] Clean web.conf, server.conf, inputs.conf, user-seed.conf written.`);
-
-      // 4. Open Firewall
-      logs.push(`==> 4. Configuring firewall access rules for TCP ${webPort}, ${restPort}, ${tcpPort}...`);
-      await runCommand(
-        `firewall-cmd --permanent --zone=public --add-port=${webPort}/tcp --add-port=${restPort}/tcp --add-port=${tcpPort}/tcp --add-port=${kvPort}/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'تنظیم قوانین پورت‌های فایروال سیستم‌عامل',
-          toolNameEn: 'Firewall Port Authorization Rules',
-          category: 'security'
-        }
-      );
-      await runCommand(`iptables -I INPUT -p tcp --dport ${webPort} -j ACCEPT 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `باز کردن پورت ورودی iptables ${webPort}`,
-        toolNameEn: `Accept Inbound TCP Port ${webPort}`,
-        category: 'security'
-      });
-      await runCommand(`iptables -I INPUT -p tcp --dport ${restPort} -j ACCEPT 2>/dev/null || true`, {
-        toolId: 'diagnostics_autoheal',
-        toolNameFa: `باز کردن پورت ورودی iptables ${restPort}`,
-        toolNameEn: `Accept Inbound TCP Port ${restPort}`,
-        category: 'security'
-      });
-      logs.push(`  [✓] Firewall rules configured successfully.`);
-
-      // 5. Execute binary or repair script
-      logs.push(`==> 5. Starting Splunk daemon on Port ${webPort} (with --run-as-root)...`);
-      const fixScript = path.join(process.cwd(), 'scripts/fix-parallel-web.sh');
-      if (fs.existsSync(fixScript)) {
-        await runCommand(`chmod +x "${fixScript}"`);
-        const fixRun = await runCommand(`bash "${fixScript}" "${parallelDir}" ${webPort} ${restPort} ${tcpPort} ${kvPort}`, {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'اجرای اسکریپت خودترمیمی و استارت دیمن اسپلانک',
-          toolNameEn: 'Execute Splunk Fix & Bootstrap Script',
-          cwd: parallelDir,
-          category: 'splunk'
-        });
-        if (fixRun.stdout) {
-          logs.push(fixRun.stdout);
-        }
-      } else if (fs.existsSync(path.join(parallelDir, 'bin/splunk'))) {
-        const binPath = path.join(parallelDir, 'bin/splunk');
-        await runCommand(`chmod -R +x "${parallelDir}/bin" 2>/dev/null || true`);
-        const startRun = await runCommand(
-          `SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`,
-          {
-            toolId: 'diagnostics_autoheal',
-            toolNameFa: 'راه‌اندازی سرویس اسپلانک با مجوز روت',
-            toolNameEn: 'Splunk Daemon Start with Root Privileges',
-            cwd: parallelDir,
-            category: 'splunk'
-          }
-        );
-        if (startRun.stdout) logs.push(startRun.stdout);
-      } else {
-        // Link from main splunk if parallel binary is empty
-        if (fs.existsSync('/opt/splunk/bin')) {
-          await runCommand(`cp -rn /opt/splunk/bin /opt/splunk/lib /opt/splunk/share /opt/splunk/openssl "${parallelDir}/" 2>/dev/null || true`);
-          await runCommand(`chmod -R +x "${parallelDir}/bin" 2>/dev/null || true`);
-          const startRun = await runCommand(
-            `SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${parallelDir}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`,
-            {
-              toolId: 'diagnostics_autoheal',
-              toolNameFa: 'کپی باینری‌ها و استارت دیمن موازی',
-              toolNameEn: 'Bootstrap Parallel Splunk Binary & Daemon',
-              cwd: parallelDir,
-              category: 'splunk'
-            }
-          );
-          if (startRun.stdout) logs.push(startRun.stdout);
-        }
-      }
-
-      // 6. Verification probe
-      logs.push(`==> 6. Testing Web Service Listener on Port ${webPort}...`);
-      await runCommand(
-        `curl -s -I --connect-timeout 3 "http://127.0.0.1:${webPort}/en-US/account/login" | head -n 5`,
-        {
-          toolId: 'diagnostics_autoheal',
-          toolNameFa: 'تست اعتبارسنجی نهایی وب‌سایت اسپلانک (HTTP 200 OK)',
-          toolNameEn: 'Final Post-Recovery HTTP Validation',
-          cwd: parallelDir,
-          category: 'splunk'
-        }
-      );
-      await new Promise(r => setTimeout(r, 1500));
-
-      let httpCode = '200';
-      const netInfo = getSystemNetworkInfo();
-      const loginUrl = `http://${netInfo.primaryIp || '127.0.0.1'}:${webPort}/en-US/account/login`;
-
-      logs.push(`======================================================================`);
-      logs.push(`[SUCCESS] AI Auto-Healing Completed!`);
-      logs.push(`  Status: HTTP 200 OK`);
-      logs.push(`  Login URL: ${loginUrl}`);
-      logs.push(`  Admin Username: admin | Password: ${adminPassword}`);
-      logs.push(`======================================================================`);
-
-      res.json({
-        success: true,
-        httpStatus: httpCode,
-        webUrl: loginUrl,
-        credentials: { username: 'admin', password: adminPassword },
-        logs,
-        healedAt: new Date().toISOString()
-      });
-    } catch (err: any) {
-      logs.push(`[-] Error during auto-heal: ${err.message}`);
-      res.status(500).json({ success: false, error: err.message, logs });
-    }
-  };
-
-  app.post('/api/parallel-cluster/auto-heal-all', handleAutoHeal);
-  app.post('/api/parallel-cluster/ai-auto-heal', handleAutoHeal);
+  app.post('/api/parallel-cluster/ai-auto-heal', requireRoles('super_admin', 'cluster_admin'), (_req, res) => {
+    return res.status(501).json({
+      success: false,
+      code: 'REAL_AUTO_HEAL_NOT_YET_IMPLEMENTED',
+      error: 'Automatic fleet healing is disabled until every action is backed by real execution and post-change validation.'
+    });
+  });
 
   // API: Targeted Single Issue Auto-Fix (Fixes individual issue clicked in UI)
   app.post('/api/parallel-cluster/fix-individual-issue', async (req, res) => {
@@ -3770,40 +3540,12 @@ mgmtHostPort = 127.0.0.1:${restPort}
     }
   });
 
-  // API: Autonomous workflow step executor
-  app.post('/api/autonomous/execute-step', async (req, res) => {
-    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password = 'changeme' } = req.body;
-    const logs: string[] = [];
-
-    logs.push(`[AI_AGENT] Executing Step: ${stepId}`);
-
-    if (stepId === 'step-discovery') {
-      const audit = getSystemAudit();
-      const netInfo = getSystemNetworkInfo();
-      logs.push(`[+] Host: ${netInfo.hostname} (${netInfo.primaryIp})`);
-      logs.push(`[+] Listening Ports: ${audit.listeningPorts.map(p => p.port).join(', ')}`);
-      logs.push(`[+] Splunk Detected: ${audit.splunkHome.detected ? audit.splunkHome.path : 'None'}`);
-      logs.push(`[SUCCESS] Discovery audit complete.`);
-    } else if (stepId === 'step-container-k8s') {
-      const script = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
-      if (fs.existsSync(script)) {
-        await runCommand(`chmod +x "${script}"`);
-        const run = await runCommand(`bash "${script}" ${ports.web} ${ports.rest} ${ports.splunkTcp} "${password}"`);
-        logs.push(run.stdout);
-      }
-    } else if (stepId === 'step-deploy-splunk' || stepId === 'step-auto-healing') {
-      const fixScript = path.join(process.cwd(), 'scripts/fix-parallel-web.sh');
-      if (fs.existsSync(fixScript)) {
-        await runCommand(`chmod +x "${fixScript}"`);
-        const run = await runCommand(`bash "${fixScript}" /opt/splunk_parallel ${ports.web} ${ports.rest} ${ports.splunkTcp} ${ports.kvstore || 8193}`);
-        logs.push(run.stdout);
-      }
-    }
-
-    res.json({
-      success: true,
-      stepId,
-      logs
+  // Legacy autonomous executor is disabled; the UI uses the real overseer control plane.
+  app.post('/api/autonomous/execute-step', requireRoles('super_admin', 'cluster_admin'), (_req, res) => {
+    return res.status(410).json({
+      success: false,
+      code: 'USE_REAL_CONTROL_PLANE',
+      error: 'Legacy autonomous execution is disabled. Use /api/real/overseer/step.'
     });
   });
 
@@ -4671,96 +4413,6 @@ disabled = 0
     }
     return primary;
   }
-
-  // API: Get latest RHEL package metadata
-  app.get('/api/download/package-info', (req, res) => {
-    const appRootDir = getAppProjectRoot();
-    const pkgPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
-    const fallbackPath = path.join(appRootDir, 'public/splunk_doctor_standalone_ui.tar.gz');
-    
-    let target = fs.existsSync(pkgPath) ? pkgPath : fallbackPath;
-    let size = 0;
-    let modifiedAt = new Date().toISOString();
-    if (fs.existsSync(target)) {
-      const stats = fs.statSync(target);
-      size = stats.size;
-      modifiedAt = stats.mtime.toISOString();
-    }
-
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.json({
-      version: '1.3.0',
-      buildDate: modifiedAt,
-      sizeBytes: size,
-      sizeMb: (size / (1024 * 1024)).toFixed(2),
-      filename: 'splunk_cluster_doctor_rhel_v1.3.0.tar.gz',
-      features: [
-        'Added: Master setup.sh & reinstall-and-run.sh (100% automated clean uninstall, chmod 755, and systemd install)',
-        'Fixed: Splunk Enterprise authentication active_group=Enterprise and password hash reset',
-        'Added: reset-splunk-password.sh for instant admin login reset',
-        'Fixed: KVStore port default 8193 to prevent primary Splunk 8192 conflict',
-        'Fixed: Architecture diagram TCP 9997 arrows pointing to Indexers'
-      ]
-    });
-  });
-
-  // API: Download the latest RHEL standalone tar.gz package with cache-busting headers
-  app.get('/api/download/rhel-package', (req, res) => {
-    const appRootDir = getAppProjectRoot();
-    const primaryPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
-    const legacyPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.2.0.tar.gz');
-    const fallbackPath = path.join(appRootDir, 'public/splunk_doctor_standalone_ui.tar.gz');
-    
-    let filePath = fs.existsSync(primaryPath) ? primaryPath : (fs.existsSync(legacyPath) ? legacyPath : fallbackPath);
-
-    // If neither exists, build it on the fly
-    if (!fs.existsSync(filePath)) {
-      try {
-        const buildScript = getScriptPath('build-rhel-package.js');
-        console.log(`[API] RHEL package not found at ${primaryPath}, running build-rhel-package.js from ${buildScript} (cwd: ${appRootDir})...`);
-        execSync(`node "${buildScript}"`, { cwd: appRootDir, stdio: 'inherit' });
-        filePath = fs.existsSync(primaryPath) ? primaryPath : fallbackPath;
-      } catch (err: any) {
-        console.error('Failed to auto-build RHEL package:', err);
-        return res.status(500).json({ error: 'Failed to build RHEL package: ' + err.message });
-      }
-    }
-
-    // Set aggressive anti-caching headers so the browser NEVER returns a cached previous version
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
-    res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', 'attachment; filename="splunk_cluster_doctor_rhel_v1.3.0.tar.gz"');
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
-  });
-
-  // API: Force rebuild the RHEL package on-demand
-  app.post('/api/download/rebuild-rhel-package', async (req, res) => {
-    try {
-      const appRootDir = getAppProjectRoot();
-      const buildScript = getScriptPath('build-rhel-package.js');
-      console.log(`[API] User requested on-demand rebuild of RHEL package in ${appRootDir} using ${buildScript}...`);
-      execSync('npm run build', { cwd: appRootDir, stdio: 'inherit' });
-      execSync(`node "${buildScript}"`, { cwd: appRootDir, stdio: 'inherit' });
-      const pkgPath = path.join(appRootDir, 'public/splunk_cluster_doctor_rhel_v1.3.0.tar.gz');
-      const fallbackPath = path.join(appRootDir, 'public/splunk_doctor_standalone_ui.tar.gz');
-      const targetPath = fs.existsSync(pkgPath) ? pkgPath : fallbackPath;
-      const stats = fs.statSync(targetPath);
-      res.json({
-        success: true,
-        version: '1.3.0',
-        sizeBytes: stats.size,
-        sizeMb: (stats.size / (1024 * 1024)).toFixed(2),
-        message: 'Successfully rebuilt fresh RHEL standalone package v1.3.0!'
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 
   // Real offline control plane: wire the existing UI to verified host/network/Splunk operations.
   registerRealControlPlane(app, { requireAuth });
