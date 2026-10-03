@@ -2748,86 +2748,33 @@ PASSWORD = ${password}
     req.pipe(proxyReq);
   });
 
-  // REST API Endpoints for Splunk Client & CLI emulation
-  app.all(['/services/auth/login', '/services/server/info', '/servicesNS/*'], (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('X-Splunk-Version', '9.2.1');
-    return res.json({
-      entry: [
-        {
-          name: 'node-info',
-          content: {
-            version: '9.2.1',
-            build: 'e781a9',
-            serverName: 'splunk-parallel-staging-01',
-            mode: 'standalone',
-            os_name: 'Linux',
-            cpu_arch: 'x86_64',
-            status: 'running'
-          }
-        }
-      ],
-      sessionKey: 'splunk-session-' + Date.now()
-    });
-  });
-
-  // Dedicated Port 8001 Genuine Splunk Daemon Socket Listener
-  try {
-    const parallelApp = express();
-    parallelApp.use(express.json());
-    parallelApp.use((_req, res, next) => {
-      res.setHeader('X-Splunk-Version', '9.2.1');
-      res.setHeader('Server', 'Splunkd/9.2.1 (Linux-x86_64)');
-      next();
-    });
-    parallelApp.get('*', (req, res) => {
-      const html = getSplunkWebHtml({ port: 8001, serverName: 'splunk-parallel-staging-01', version: '9.2.1' });
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(html);
-    });
-    parallelApp.post('/api/auth/login', (_req, res) => {
-      return res.status(410).json({ success: false, error: 'Legacy session endpoint disabled; use /api/auth/login.' });
-    });
-
-    const parallelDaemonServer = http.createServer(parallelApp);
-    parallelDaemonServer.listen(8001, '0.0.0.0', () => {
-      console.log('\x1b[32m[SPLUNK DAEMON]\x1b[0m Genuine Parallel Splunk Web instance online and listening on 0.0.0.0:8001');
-    });
-    parallelDaemonServer.on('error', (err: any) => {
-      if (err.code !== 'EADDRINUSE') {
-        console.error('Parallel Splunk daemon listener error:', err.message);
-      }
-    });
-  } catch (_) {}
-
-  // API: Deploy Splunk on Kubernetes / Docker (Offline Container Pipeline)
+  // No synthetic Splunk REST API or port-8001 listener is created here.
+  // The real Splunk listener, if installed, owns its configured ports.
+  
   app.post('/api/k8s/deploy-splunk', async (req, res) => {
-    const { ports = { web: 8001, rest: 8090, splunkTcp: 9998 }, password } = req.body;
-    const scriptPath = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
-    const runtimePath = '/opt/splunk_container_runtime/deploy-splunk-k8s-offline.sh';
-    try {
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        try {
-          if (!fs.existsSync('/opt/splunk_container_runtime')) {
-            fs.mkdirSync('/opt/splunk_container_runtime', { recursive: true });
-          }
-          fs.copyFileSync(scriptPath, runtimePath);
-          await runCommand(`chmod +x "${runtimePath}" 2>/dev/null || true`);
-        } catch (_) {}
-
-        const result = await runCommand(`bash "${scriptPath}" ${ports.web || 8001} ${ports.rest || 8090} ${ports.splunkTcp || 9998} "${password}"`);
-        return res.json({
-          success: true,
-          logs: result.stdout.split('\n'),
-          webUrl: `http://localhost:${ports.web || 8001}/en-US/account/login`,
-          credentials: { username: 'admin', password }
-        });
-      }
-      res.status(500).json({ success: false, error: 'deploy-splunk-k8s-offline.sh not found' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+    const { ports = { web: 8001, rest: 8090, splunkTcp: 9998 }, password, imageRef, namespace } = req.body || {};
+    if (typeof password !== 'string' || password.length < 12) {
+      return res.status(400).json({ success: false, error: 'A real admin password of at least 12 characters is required.' });
     }
+    const scriptPath = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
+    if (!fs.existsSync(scriptPath)) {
+      return res.status(404).json({ success: false, error: 'Offline Kubernetes deployment script not found.' });
+    }
+    if (!imageRef || typeof imageRef !== 'string') {
+      return res.status(400).json({ success: false, error: 'imageRef is required; no registry pull is performed offline.' });
+    }
+    const result = await runCommand(
+      `bash "${scriptPath}" ${Number(ports.web)||8001} ${Number(ports.rest)||8090} ${Number(ports.splunkTcp)||9998} "${String(password).replace(/"/g,'\\\"')}" "${String(imageRef).replace(/"/g,'\\\"')}" "${String(namespace||'splunk-parallel').replace(/[^a-z0-9-]/gi,'-')}"`
+    );
+    const success = result.code === 0;
+    return res.status(success ? 200 : 500).json({
+      success,
+      exitCode: result.code,
+      logs: (result.stdout || result.stderr || '').split('\\n'),
+      imageRef,
+      ports,
+      namespace: namespace || 'splunk-parallel'
+    });
   });
 
   // API: Get Kubernetes / Docker Container Status
@@ -2878,9 +2825,9 @@ PASSWORD = ${password}
   app.get('/api/splunk/detect-version', async (req, res) => {
     const splunkHome = process.env.SPLUNK_HOME || '/opt/splunk';
     const binaryPath = path.join(splunkHome, 'bin/splunk');
-    let version = '9.2.1';
-    let build = '5a1e7238dc8e';
-    let osInfo = 'Linux x86_64 (Enterprise)';
+    let version = 'unknown';
+    let build = 'unknown';
+    let osInfo = 'unknown';
     let isRealBinary = false;
     let rawOutput = '';
 
@@ -2931,57 +2878,29 @@ PASSWORD = ${password}
 
   // API: List local available packages for parallel installation
   app.get('/api/parallel-cluster/packages', (req, res) => {
-    const searchDirs = ['/opt/splunk_packages', '/tmp', '/opt', process.cwd()];
-    const foundPackages: Array<{ name: string; path: string; sizeMb: number; type: string }> = [
-      {
-        name: 'splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        sizeMb: 482,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        sizeMb: 476,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.1.4-linux-2.6-x86_64.rpm',
-        path: '/opt/splunk_packages/splunk-9.1.4-linux-2.6-x86_64.rpm',
-        sizeMb: 468,
-        type: 'RHEL / CentOS RPM Package'
-      }
-    ];
+    const searchDirs = ['/opt/splunk_packages', '/opt/splunk-doctor/artifacts', '/opt', process.cwd()];
+    const foundPackages: Array<{ name: string; path: string; sizeMb: number; type: string }> = [];
 
-    searchDirs.forEach(dir => {
+    for (const dir of searchDirs) {
       try {
-        if (fs.existsSync(dir)) {
-          const files = fs.readdirSync(dir);
-          files.forEach(f => {
-            if (/splunk.*(\.tgz|\.tar\.gz|\.rpm|\.deb)$/i.test(f)) {
-              const fullPath = path.join(dir, f);
-              if (!foundPackages.some(p => p.path === fullPath)) {
-                let sizeMb = 480;
-                try {
-                  const stat = fs.statSync(fullPath);
-                  sizeMb = Math.round(stat.size / (1024 * 1024));
-                } catch (_) {}
-                foundPackages.push({
-                  name: f,
-                  path: fullPath,
-                  sizeMb,
-                  type: f.endsWith('.rpm') ? 'RPM Package' : 'TGZ Archive'
-                });
-              }
-            }
+        if (!fs.existsSync(dir)) continue;
+        for (const name of fs.readdirSync(dir)) {
+          if (!/splunk.*(\\.tgz|\\.tar\\.gz|\\.rpm)$/i.test(name)) continue;
+          const fullPath = path.join(dir, name);
+          const stat = fs.statSync(fullPath);
+          if (!stat.isFile()) continue;
+          foundPackages.push({
+            name,
+            path: fullPath,
+            sizeMb: Number((stat.size / (1024*1024)).toFixed(2)),
+            type: /\\.rpm$/i.test(name) ? 'RPM Package' : 'TGZ Archive'
           });
         }
       } catch (_) {}
-    });
+    }
 
-    res.json({
-      packages: foundPackages
-    });
+    const unique = Array.from(new Map(foundPackages.map(x => [x.path, x])).values());
+    return res.json({ packages: unique });
   });
 
   // API: Real installation & provisioning execution for Parallel Splunk instance
@@ -2993,163 +2912,82 @@ PASSWORD = ${password}
       licenseFileContent,
       licenseFileName,
       licenseMasterUri,
+      adminPassword,
+      pass4SymmKey,
       ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8192, hec: 8088 }
-    } = req.body;
+    } = req.body || {};
 
-    parallelActivePorts = { ...parallelActivePorts, ...ports };
-    const log: string[] = [];
-    const targetDir = '/opt/splunk_parallel';
-
-    log.push(`[1/6] Initializing Parallel Splunk workspace at ${targetDir}...`);
-    try {
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-      fs.mkdirSync(path.join(targetDir, 'bin'), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, 'etc/system/local'), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, 'etc/licenses/enterprise'), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, 'var/log/splunk'), { recursive: true });
-      log.push(`[SUCCESS] Workspace directories created in ${targetDir}.`);
-    } catch (e: any) {
-      log.push(`[WARN] Filesystem setup: ${e.message}`);
+    if (typeof adminPassword !== 'string' || adminPassword.length < 12) {
+      return res.status(400).json({ success:false, error:'A real admin password of at least 12 characters is required.' });
+    }
+    if (typeof pass4SymmKey !== 'string' || pass4SymmKey.length < 12) {
+      return res.status(400).json({ success:false, error:'A real pass4SymmKey of at least 12 characters is required.' });
     }
 
-    // 2. Package verification & extraction
-    const pkgToExtract = customPackagePath || (packageSelected ? `/opt/splunk_packages/${packageSelected}` : '');
-    if (pkgToExtract && fs.existsSync(pkgToExtract)) {
-      log.push(`[2/6] Extracting binary package: ${pkgToExtract} into ${targetDir}...`);
-      try {
-        if (pkgToExtract.endsWith('.tgz') || pkgToExtract.endsWith('.tar.gz')) {
-          await runCommand(`tar -xzf "${pkgToExtract}" -C "${targetDir}" --strip-components=1 2>/dev/null || true`);
-        }
-        log.push(`[SUCCESS] Extracted archive files.`);
-      } catch (_) {}
-    } else if (fs.existsSync('/opt/splunk/bin')) {
-      log.push(`[2/6] Linking binaries from main Splunk installation (/opt/splunk/bin)...`);
-      try {
-        await runCommand(`cp -rn /opt/splunk/bin "${targetDir}/" 2>/dev/null || true`);
-      } catch (_) {}
-      log.push(`[SUCCESS] Production binaries linked.`);
+    const pkg = customPackagePath || (packageSelected ? path.join('/opt/splunk_packages', path.basename(String(packageSelected))) : '');
+    if (!pkg || !fs.existsSync(pkg)) {
+      return res.status(404).json({ success:false, error:'A real offline Splunk RPM/TGZ artifact is required.' });
+    }
+
+    const targetDir='/opt/splunk_parallel';
+    const logs:string[]=[];
+    fs.mkdirSync(targetDir,{recursive:true});
+
+    let installResult:any;
+    if (/\\.rpm$/i.test(pkg)) {
+      installResult=await runCommand(`dnf --disablerepo=* -y install "${pkg}"`,{timeout:180000});
+    } else if (/\\.(tgz|tar\\.gz)$/i.test(pkg)) {
+      installResult=await runCommand(`tar -xzf "${pkg}" -C /opt`,{timeout:180000});
     } else {
-      log.push(`[2/6] Initializing self-contained offline Splunk Engine...`);
-      log.push(`[SUCCESS] Standalone runtime verified.`);
+      return res.status(400).json({success:false,error:'Unsupported Splunk artifact type.'});
+    }
+    logs.push(installResult.stdout||'',installResult.stderr||'');
+    if(installResult.code!==0) return res.status(500).json({success:false,exitCode:installResult.code,logs});
+
+    if(!fs.existsSync(path.join(targetDir,'bin','splunk'))) {
+      return res.status(500).json({success:false,error:'Artifact installed but /opt/splunk_parallel/bin/splunk was not found.',logs});
     }
 
-    // 3. Firewall Ports opening
-    log.push(`[3/6] Opening non-colliding firewall ports (Web:${ports.web}, REST:${ports.rest}, Ingest:${ports.splunkTcp}, KVStore:${ports.kvstore})...`);
-    try {
-      await runCommand(`firewall-cmd --zone=public --add-port=${ports.web}/tcp --add-port=${ports.rest}/tcp --add-port=${ports.splunkTcp}/tcp --add-port=${ports.kvstore}/tcp --permanent 2>/dev/null && firewall-cmd --reload 2>/dev/null || true`);
-      log.push(`[SUCCESS] Firewall rules active for ports ${ports.web}, ${ports.rest}, ${ports.splunkTcp}, ${ports.kvstore}.`);
-    } catch (_) {
-      log.push(`[INFO] Network ports registered in container routing table.`);
+    const local=path.join(targetDir,'etc/system/local');
+    fs.mkdirSync(local,{recursive:true});
+    fs.writeFileSync(path.join(local,'web.conf'),
+      `[settings]\\nhttpport = ${Number(ports.web)||8001}\\nserver.socket_host = 0.0.0.0\\nmgmtHostPort = 127.0.0.1:${Number(ports.rest)||8090}\\nenableSplunkWebSSL = false\\nstartwebserver = 1\\n`);
+    fs.writeFileSync(path.join(local,'server.conf'),
+      `[general]\\nserverName = splunk-parallel-offline-node\\nmgmtHostPort = 127.0.0.1:${Number(ports.rest)||8090}\\npass4SymmKey = ${pass4SymmKey}\\nactive_group = Enterprise\\n\\n[kvstore]\\nport = ${Number(ports.kvstore)||8192}\\n`);
+    fs.writeFileSync(path.join(local,'inputs.conf'),
+      `[splunktcp://${Number(ports.splunkTcp)||9998}]\\ndisabled = 0\\n`);
+    fs.writeFileSync(path.join(local,'user-seed.conf'),`[user_info]\\nUSERNAME = admin\\nPASSWORD = ${adminPassword}\\n`,{mode:0o600});
+
+    if (licenseMode === 'custom_license' && licenseFileContent) {
+      const licDir=path.join(targetDir,'etc/licenses/enterprise');
+      fs.mkdirSync(licDir,{recursive:true});
+      fs.writeFileSync(path.join(licDir,licenseFileName||'splunk.lic'),String(licenseFileContent));
+    } else if (licenseMode === 'shared_license_master' && licenseMasterUri) {
+      fs.appendFileSync(path.join(local,'server.conf'),`\\n[license]\\nmanager_uri = ${licenseMasterUri}\\n`);
     }
 
-    // 4. Writing non-colliding base configuration files
-    log.push(`[4/6] Generating isolated configuration stanzas...`);
-    const webConf = `[settings]\nhttpport = ${ports.web}\nserver.socket_host = 0.0.0.0\nenableSplunkWebSSL = false\nstartwebserver = 1\nappServerPorts = 8066\nmgmtHostPort = 127.0.0.1:${ports.rest}\n`;
-    const serverConf = `[general]\nserverName = splunk-parallel-staging\nmgmtHostPort = 127.0.0.1:${ports.rest}\npass4SymmKey = changeme-parallel-key\nactive_group = Free\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${ports.rest}\n\n[kvstore]\nport = ${ports.kvstore}\n`;
-    const inputsConf = `[splunktcp://${ports.splunkTcp}]\ndisabled = 0\nqueueSize = 10MB\n`;
+    const splunk=path.join(targetDir,'bin/splunk');
+    const start=await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${splunk}" start --accept-license --answer-yes --no-prompt --run-as-root`,{cwd:targetDir,timeout:180000});
+    logs.push(start.stdout||'',start.stderr||'');
+    if(start.code!==0) return res.status(500).json({success:false,exitCode:start.code,logs});
 
-    try {
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/web.conf'), webConf, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/server.conf'), serverConf, 'utf8');
-      fs.writeFileSync(path.join(targetDir, 'etc/system/local/inputs.conf'), inputsConf, 'utf8');
-      log.push(`[SUCCESS] Wrote sanitized web.conf, server.conf, inputs.conf.`);
-    } catch (_) {}
+    const status=await runCommand(`SPLUNK_HOME="${targetDir}" "${splunk}" status`,{cwd:targetDir,timeout:15000});
+    logs.push(status.stdout||'',status.stderr||'');
+    const statusText=(status.stdout||status.stderr||'').toString();
+    const running=status.code===0 && /splunkd is running|splunkweb is running/i.test(statusText);
+    if(!running) return res.status(500).json({success:false,error:'Splunk started command but post-start verification failed.',logs});
 
-    // 5. Handling License Assignment
-    log.push(`[5/6] Configuring license allocation (${licenseMode})...`);
-    if (licenseMode === 'free_developer') {
-      log.push(`[LICENSE] Active License: Free / Developer Tier (500MB/day quota active, no expiration).`);
-      try {
-        const licConf = `[general]\nactive_group = Free\n`;
-        fs.writeFileSync(path.join(targetDir, 'etc/system/local/server.conf'), serverConf + `\n${licConf}`, 'utf8');
-      } catch (_) {}
-    } else if (licenseMode === 'custom_license' && licenseFileContent) {
-      log.push(`[LICENSE] Custom enterprise license (${licenseFileName || 'enterprise.lic'}) installed.`);
-      try {
-        fs.writeFileSync(path.join(targetDir, 'etc/licenses/enterprise/splunk.lic'), licenseFileContent, 'utf8');
-      } catch (_) {}
-    } else if (licenseMode === 'shared_license_master') {
-      const lmUri = licenseMasterUri || 'https://127.0.0.1:8089';
-      log.push(`[LICENSE] Configured as License Slave pooling from License Master at ${lmUri}.`);
-      try {
-        const licConf = `[license]\nmaster_uri = ${lmUri}\n`;
-        fs.appendFileSync(path.join(targetDir, 'etc/system/local/server.conf'), `\n${licConf}`, 'utf8');
-      } catch (_) {}
-    }
-
-    // 6. Executing Official Splunk Enterprise Daemon on Port 8001
-    log.push(`[6/6] Launching Official Splunk Enterprise daemon on Port ${ports.web}...`);
-    try {
-      // Free port 8001 from any stale process
-      await runCommand(`fuser -k ${ports.web}/tcp ${ports.rest}/tcp 2>/dev/null || true`);
-      
-      const scriptPath = path.join(process.cwd(), 'scripts/install-real-parallel-splunk.sh');
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const runRes = await runCommand(`bash "${scriptPath}" /opt/splunk "${targetDir}" ${ports.web} ${ports.rest} ${ports.splunkTcp} ${ports.kvstore}`);
-        if (runRes.stdout) {
-          log.push(runRes.stdout);
-        }
-      } else {
-        const parallelBin = path.join(targetDir, 'bin/splunk');
-        if (fs.existsSync(parallelBin)) {
-          await runCommand(`chmod +x "${parallelBin}"`);
-          const startRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${parallelBin}" start --accept-license --answer-yes --no-prompt 2>&1 || true`);
-          if (startRes.stdout) log.push(startRes.stdout);
-        }
-      }
-    } catch (e: any) {
-      log.push(`[SPLUNK EXECUTION] ${e.message}`);
-    }
-
-    log.push(`[READY] Genuine Splunk Enterprise Web UI is ACTIVE on Port ${ports.web}!`);
-    log.push(`[LOGIN URL] http://<SERVER-IP>:${ports.web}/en-US/account/login (Username: admin | Password: changeme)`);
-
-    res.json({
-      success: true,
-      targetDir,
-      ports,
-      licenseMode,
-      log,
-      officialWebUrl: `http://localhost:${ports.web}/en-US/account/login`,
-      credentialsConfigured: false,
-      installedAt: new Date().toISOString()
-    });
+    parallelActivePorts={...parallelActivePorts,...ports};
+    return res.json({success:true,targetDir,ports,licenseMode,logs,officialWebUrl:`http://${req.hostname}:${Number(ports.web)||8001}/en-US/account/login`});
   });
 
   // API: Install all offline tools & scripts on the host system
   app.post('/api/tools/offline-install-all', async (req, res) => {
-    const logs: string[] = [];
-    logs.push('[1/4] Preparing offline tools and scripts...');
-
-    try {
-      const scriptPath = path.join(process.cwd(), 'scripts/install-offline-tools.sh');
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const result = await runCommand(`bash "${scriptPath}"`);
-        logs.push(result.stdout || '[SUCCESS] Executed install-offline-tools.sh');
-      }
-
-      // Also ensure symlinks in /usr/local/bin if possible
-      const binTarget = '/usr/local/bin';
-      const pyDiag = path.join(process.cwd(), 'scripts/traffic-tools.py');
-      if (fs.existsSync(pyDiag)) {
-        await runCommand(`chmod +x "${pyDiag}"`);
-        await runCommand(`ln -sf "${pyDiag}" "${binTarget}/splunk-doctor-diag" 2>/dev/null || true`);
-        await runCommand(`ln -sf "${pyDiag}" "${binTarget}/traffic-tools" 2>/dev/null || true`);
-      }
-
-      logs.push('[SUCCESS] All offline diagnostics tools, port inspectors, and repair scripts are installed and configured for air-gapped execution.');
-
-      res.json({
-        success: true,
-        logs
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message, logs });
-    }
+    const scriptPath=path.join(process.cwd(),'scripts/install-offline-tools.sh');
+    if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'Offline tools installer not found.'});
+    const result=await runCommand(`bash "${scriptPath}"`,{timeout:180000});
+    const success=result.code===0;
+    return res.status(success?200:500).json({success,exitCode:result.code,logs:(result.stdout||result.stderr||'').split('\\n')});
   });
 
   // API: Download complete offline toolkit (.tar.gz) for air-gapped transfer
