@@ -371,11 +371,15 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
       if (selected.has('firewall-3000')) {
         const r=await command('firewall-cmd',['--permanent','--add-port=3000/tcp'],{timeoutMs:8000});
         logs.push(r.stdout+r.stderr);
-        if(r.code===0){ const rr=await command('firewall-cmd',['--reload'],{timeoutMs:8000}); logs.push(rr.stdout+rr.stderr); }
+        if(r.code!==0) throw new Error('firewall-cmd failed: ' + (r.stderr || r.stdout));
+        const rr=await command('firewall-cmd',['--reload'],{timeoutMs:8000});
+        logs.push(rr.stdout+rr.stderr);
+        if(rr.code!==0) throw new Error('firewall-cmd reload failed: ' + (rr.stderr || rr.stdout));
       }
       if (selected.has('chrony')) {
         const r=await command('systemctl',['enable','--now','chronyd'],{timeoutMs:12000});
         logs.push(r.stdout+r.stderr);
+        if(r.code!==0) throw new Error('chronyd enable/start failed: ' + (r.stderr || r.stdout));
       }
       ok(res,{controls:[...selected],backupRoot,logs,verified:healthFindings()});
     } catch(e:any){ fail(res,500,e.message,{backupRoot,logs}); }
@@ -414,7 +418,7 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     try{
       const osr=readOsRelease();
       const isRpm=/rhel|rocky|almalinux|centos/i.test(osr.ID||'');
-      const r=await command(isRpm?'dnf':'rpm',isRpm?['-y','install',artifact]:['-Uvh',artifact],{timeoutMs:180000});
+      const r=await command(isRpm?'dnf':'rpm',isRpm?['--disablerepo=*','-y','install',artifact]:['-Uvh',artifact],{timeoutMs:180000});
       logs.push(r.stdout,r.stderr);
       if(r.code!==0) throw new Error('Local Splunk package installation failed');
       const home=findSplunkHome();
@@ -424,7 +428,12 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
       const start=await command(path.join(home,'bin','splunk'),['start','--accept-license','--answer-yes','--no-prompt'],{timeoutMs:180000,cwd:home});
       logs.push(start.stdout,start.stderr);
       if(start.code!==0) throw new Error('Splunk start failed after package installation');
-      ok(res,{artifact,home,logs});
+      const verify=await command(path.join(home,'bin','splunk'),['status'],{timeoutMs:15000,cwd:home});
+      const verifyText=(verify.stdout||verify.stderr||'').toString();
+      if(verify.code!==0 || !/splunkd is running|splunkweb is running/i.test(verifyText)){
+        throw new Error('Splunk installation finished but runtime verification failed.');
+      }
+      ok(res,{artifact,home,logs,verification:verifyText});
     }catch(e:any){fail(res,500,e.message,logs);}
   });
 
@@ -432,18 +441,49 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     if(!isRoot()) return fail(res,403,'Container deployment requires root.');
     const runtime=String(req.body?.runtime||'podman');
     if(!['podman','docker'].includes(runtime)) return fail(res,400,'runtime must be podman or docker');
-    const image=String(req.body?.image||'');
-    const images=artifactSearch(/splunk.*\.(tar|tar\.gz|oci)$/i);
-    if(!image || !images.includes(image)) return fail(res,404,'A local Splunk container image archive must be staged.');
-    const load=await command(runtime,['load','-i',image],{timeoutMs:180000});
-    if(load.code!==0) return fail(res,500,'Container image load failed',load);
-    const imageRef=String(req.body?.imageRef||'splunk/splunk:latest').replace(/[^a-zA-Z0-9._:/@-]/g,'');
-    await command(runtime,['rm','-f','splunk-managed'],{timeoutMs:15000});
+    const imageArchive=String(req.body?.image||'');
+    const imageRef=String(req.body?.imageRef||'').trim();
     const password=String(req.body?.adminPassword||'');
+    if(!imageRef) return fail(res,400,'Explicit local imageRef with tag or digest is required.');
     if(password.length<12) return fail(res,400,'Provide an admin password of at least 12 characters.');
-    const run=await command(runtime,['run','-d','--name','splunk-managed','--restart=unless-stopped','-p','8000:8000','-p','8089:8089','-p','9997:9997','-p','8088:8088','-e','SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt','-e','SPLUNK_PASSWORD='+password,imageRef],{timeoutMs:60000});
-    if(run.code!==0) return fail(res,500,'Container start failed',run);
-    ok(res,{runtime,image,imageRef,container:'splunk-managed',runId:run.stdout.trim()});
+    const images=artifactSearch(/splunk.*\.(tar|tar\.gz|oci)$/i);
+    if(!imageArchive || !images.includes(imageArchive)) return fail(res,404,'A local Splunk container image archive must be staged.');
+
+    const load=await command(runtime,['load','-i',imageArchive],{timeoutMs:180000});
+    if(load.code!==0) return fail(res,500,'Container image load failed',load);
+
+    const inspect=runtime==='podman'
+      ? await command(runtime,['image','exists',imageRef],{timeoutMs:15000})
+      : await command(runtime,['image','inspect',imageRef],{timeoutMs:15000});
+    if(inspect.code!==0) return fail(res,404,'Loaded imageRef was not found locally.',{imageRef,inspect});
+
+    const envFile='/var/lib/splunk-doctor/.splunk-container.env';
+    try{
+      fs.mkdirSync(path.dirname(envFile),{recursive:true,mode:0o700});
+      fs.writeFileSync(envFile,
+        'SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt\\n' +
+        'SPLUNK_PASSWORD='+password+'\\n' +
+        'SPLUNK_RUN_AS_ROOT=1\\n',
+        {mode:0o600}
+      );
+
+      await command(runtime,['rm','-f','splunk-managed'],{timeoutMs:15000});
+      const run=await command(runtime,[
+        'run','-d','--name','splunk-managed','--restart=unless-stopped',
+        '--env-file',envFile,
+        '-p','8000:8000','-p','8089:8089','-p','9997:9997','-p','8088:8088',
+        imageRef
+      ],{timeoutMs:60000});
+      if(run.code!==0) return fail(res,500,'Container start failed',run);
+
+      const inspectRunning=await command(runtime,['inspect','-f','{{.State.Running}}','splunk-managed'],{timeoutMs:15000});
+      const running=/true/i.test((inspectRunning.stdout||'').trim());
+      if(inspectRunning.code!==0 || !running) return fail(res,500,'Container started but is not running.',{run,inspectRunning});
+
+      ok(res,{success:true,runtime,imageArchive,imageRef,container:'splunk-managed',runId:run.stdout.trim(),verified:running});
+    }finally{
+      try{fs.unlinkSync(envFile);}catch{}
+    }
   });
 
   app.post('/api/real/deploy/kubernetes', auth, async (req,res) => {
@@ -451,30 +491,48 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     const kubectl=(fs.existsSync('/usr/local/bin/kubectl')?'/usr/local/bin/kubectl':'kubectl');
     const probe=await command(kubectl,['version','--client=true','--output=json'],{timeoutMs:10000});
     if(probe.code!==0) return fail(res,503,'kubectl is not available.');
-    const imageRef=String(req.body?.imageRef||'splunk/splunk:latest').replace(/[^a-zA-Z0-9._:/@-]/g,'');
+    const cluster=await command(kubectl,['get','nodes','-o','name'],{timeoutMs:15000});
+    if(cluster.code!==0) return fail(res,503,'Kubernetes API is not reachable.',cluster);
+
+    const imageRef=String(req.body?.imageRef||'').trim();
+    const adminPassword=String(req.body?.adminPassword||'');
     const namespace=String(req.body?.namespace||'splunk-managed').replace(/[^a-z0-9-]/g,'').slice(0,40)||'splunk-managed';
+    if(!imageRef) return fail(res,400,'Explicit local imageRef with tag or digest is required.');
+    if(adminPassword.length<12) return fail(res,400,'Provide an admin password of at least 12 characters.');
+
     const manifest=[
       'apiVersion: v1','kind: Namespace','metadata:','  name: '+namespace,'---',
+      'apiVersion: v1','kind: Secret','metadata:','  name: splunk-admin','  namespace: '+namespace,
+      'type: Opaque','stringData:','  password: '+JSON.stringify(adminPassword),'---',
       'apiVersion: apps/v1','kind: Deployment','metadata:','  name: splunk','  namespace: '+namespace,
       'spec:','  replicas: 1','  selector:','    matchLabels: { app: splunk }','  template:',
       '    metadata:','      labels: { app: splunk }','    spec:','      containers:',
       '      - name: splunk','        image: '+imageRef,'        imagePullPolicy: IfNotPresent',
       '        env:','        - name: SPLUNK_START_ARGS','          value: "--accept-license --answer-yes --no-prompt"',
-      '        - name: SPLUNK_PASSWORD','          value: "'+String(req.body?.adminPassword||'').replace(/"/g,'')+'"',
+      '        - name: SPLUNK_PASSWORD','          valueFrom:','            secretKeyRef:','              name: splunk-admin','              key: password',
+      '        - name: SPLUNK_RUN_AS_ROOT','          value: "1"',
       '        ports:','        - { containerPort: 8000 }','        - { containerPort: 8089 }','        - { containerPort: 9997 }','        - { containerPort: 8088 }',
       '---','apiVersion: v1','kind: Service','metadata:','  name: splunk-web','  namespace: '+namespace,
       'spec:','  type: NodePort','  selector:','    app: splunk','  ports:',
       '  - { name: web, port: 8000, targetPort: 8000, nodePort: 30080 }',
       '  - { name: mgmt, port: 8089, targetPort: 8089, nodePort: 30089 }'
     ].join('\n')+'\n';
+
     const workdir='/var/lib/splunk-doctor/k8s';
-    fs.mkdirSync(workdir,{recursive:true});
+    fs.mkdirSync(workdir,{recursive:true,mode:0o700});
     const file=path.join(workdir,'splunk-managed.yaml');
-    fs.writeFileSync(file,manifest);
-    const applied=await command(kubectl,['apply','-f',file],{timeoutMs:60000});
-    if(applied.code!==0) return fail(res,500,'Kubernetes manifest apply failed',applied);
-    const rollout=await command(kubectl,['-n',namespace,'rollout','status','deployment/splunk','--timeout=180s'],{timeoutMs:190000});
-    ok(res,{namespace,manifestPath:file,image:imageRef,apply:applied,rollout});
+    fs.writeFileSync(file,manifest,{mode:0o600});
+    try{
+      const applied=await command(kubectl,['apply','-f',file],{timeoutMs:60000});
+      if(applied.code!==0) return fail(res,500,'Kubernetes manifest apply failed',applied);
+      const rollout=await command(kubectl,['-n',namespace,'rollout','status','deployment/splunk','--timeout=300s'],{timeoutMs:310000});
+      if(rollout.code!==0) return fail(res,500,'Kubernetes deployment rollout failed',rollout);
+      const pods=await command(kubectl,['-n',namespace,'get','pods','-l','app=splunk','-o','wide'],{timeoutMs:15000});
+      if(pods.code!==0) return fail(res,500,'Kubernetes pod verification failed',pods);
+      ok(res,{success:true,namespace,imageRef,apply:applied,rollout,pods});
+    }finally{
+      try{fs.unlinkSync(file);}catch{}
+    }
   });
 
   app.post('/api/real/deploy/remote-hardening', auth, async (req,res) => {
