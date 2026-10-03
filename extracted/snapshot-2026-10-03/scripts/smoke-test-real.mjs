@@ -21,7 +21,8 @@ function req(path,{method='GET',headers={},body}={}){return new Promise((resolve
 function assert(ok,msg){if(!ok)throw new Error(msg);}
 async function waitReady(child){for(let i=0;i<50;i++){if(child.exitCode!==null)throw new Error('server exited early');try{const r=await req('/');if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,200));}throw new Error('server did not become ready');}
 
-const child=spawn(process.execPath,['dist/server.cjs'],{cwd:'/tmp/pilot-test-home',env:{...process.env,NODE_ENV:'production',PORT:String(PORT),SPLUNK_DOCTOR_DATA_DIR:dataDir,SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD:password,SPLUNK_HOME:splunkHome},stdio:['ignore','pipe','pipe']});
+const serverEntry = new URL('../dist/server.cjs', import.meta.url);
+const child=spawn(process.execPath,[serverEntry.pathname],{cwd:'/tmp/pilot-test-home',env:{...process.env,NODE_ENV:'production',PORT:String(PORT),SPLUNK_DOCTOR_DATA_DIR:dataDir,SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD:password,SPLUNK_HOME:splunkHome},stdio:['ignore','pipe','pipe']});
 let stdout='',stderr=''; child.stdout.on('data',d=>stdout+=d); child.stderr.on('data',d=>stderr+=d);
 try{
  await waitReady(child);
