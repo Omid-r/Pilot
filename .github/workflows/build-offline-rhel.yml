@@ -1,0 +1,168 @@
+name: build-offline-rhel
+
+on:
+  push:
+    branches:
+      - feature/real-offline-orchestrator
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or tag to build'
+        required: true
+        default: 'feature/real-offline-orchestrator'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout selected source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Build application
+        run: npm run build
+
+      - name: Make standalone RHEL package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PKG="dist-offline/splunk-doctor"
+          rm -rf dist-offline
+          mkdir -p "$PKG/node-runtime/bin"
+
+          NODE_BIN="$(command -v node)"
+          cp "$NODE_BIN" "$PKG/node-runtime/bin/node"
+          chmod 0755 "$PKG/node-runtime/bin/node"
+
+          test -f dist/index.html
+          test -f dist/server.cjs
+
+          cp -a dist "$PKG/"
+          cp -a scripts "$PKG/"
+          cp -a public "$PKG/" 2>/dev/null || true
+          cp -a data "$PKG/" 2>/dev/null || true
+          cp -a package.json "$PKG/"
+          cp -a REAL-OFFLINE-CONTROL-PLANE.md "$PKG/" 2>/dev/null || true
+
+          cat > "$PKG/setup.sh" <<'EOS'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          [[ $EUID -eq 0 ]] || {
+            echo "Run as root: sudo bash setup.sh"
+            exit 1
+          }
+
+          BASE="$(cd "$(dirname "$0")" && pwd)"
+          TARGET="/opt/splunk-doctor"
+
+          systemctl stop splunk-doctor 2>/dev/null || true
+
+          mkdir -p "$TARGET"
+          rm -rf             "$TARGET/dist"             "$TARGET/scripts"             "$TARGET/node-runtime"             "$TARGET/data"             "$TARGET/public"             "$TARGET/REAL-OFFLINE-CONTROL-PLANE.md"
+
+          cp -a "$BASE/." "$TARGET/"
+
+          chmod -R u+rwX,go+rX "$TARGET"
+          chmod +x "$TARGET/node-runtime/bin/node" 2>/dev/null || true
+          chmod +x "$TARGET/setup.sh" "$TARGET/scripts/"*.sh 2>/dev/null || true
+
+          cat > /etc/systemd/system/splunk-doctor.service <<EOF2
+          [Unit]
+          Description=Splunk Cluster Doctor
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=$TARGET
+          ExecStart=$TARGET/node-runtime/bin/node $TARGET/dist/server.cjs
+          Restart=always
+          RestartSec=3
+          Environment=NODE_ENV=production
+          Environment=PORT=3000
+          Environment=SPLUNK_HOME=/opt/splunk
+          LimitNOFILE=65536
+          LimitNPROC=65536
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF2
+
+          systemctl daemon-reload
+          systemctl enable --now splunk-doctor.service
+
+          if systemctl is-active --quiet firewalld 2>/dev/null; then
+            firewall-cmd --permanent --add-port=3000/tcp >/dev/null || true
+            firewall-cmd --reload >/dev/null || true
+          fi
+
+          sleep 2
+
+          echo "=== service ==="
+          systemctl --no-pager --full status splunk-doctor || true
+
+          echo "=== listener ==="
+          ss -lntp | grep ':3000' || {
+            echo "ERROR: port 3000 is not listening"
+            journalctl -u splunk-doctor -n 100 --no-pager || true
+            exit 1
+          }
+
+          echo "=== HTTP ==="
+          curl -fsS http://127.0.0.1:3000 >/dev/null
+
+          echo "SUCCESS: http://$(hostname -I | awk '{print $1}'):3000"
+          EOS
+
+          chmod +x "$PKG/setup.sh"
+          cp "$PKG/setup.sh" "$PKG/reinstall-and-run.sh"
+
+          cat > "$PKG/README_OFFLINE.md" <<'EOS2'
+          # Splunk Cluster Doctor - Offline RHEL Bundle
+
+          Transfer the generated tar.gz to the RHEL server.
+
+          Run:
+
+            sudo tar -xzf splunk-doctor-offline-rhel.tar.gz
+            cd splunk-doctor
+            sudo bash setup.sh
+
+          The package includes a private Node.js runtime.
+          Runtime internet access is not required.
+
+          Splunk Enterprise binaries/images and RHEL subscription content are
+          operator-supplied offline artifacts.
+          EOS2
+
+          tar -czf splunk-doctor-offline-rhel.tar.gz -C dist-offline splunk-doctor
+          sha256sum splunk-doctor-offline-rhel.tar.gz > splunk-doctor-offline-rhel.tar.gz.sha256
+
+          ls -lh             splunk-doctor-offline-rhel.tar.gz             splunk-doctor-offline-rhel.tar.gz.sha256
+
+      - name: Upload standalone RHEL bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: splunk-doctor-offline-rhel
+          path: |
+            splunk-doctor-offline-rhel.tar.gz
+            splunk-doctor-offline-rhel.tar.gz.sha256
+          if-no-files-found: error
