@@ -246,7 +246,7 @@ def audit_cluster_configuration():
     if os.path.exists(server_path):
         with open(server_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
-            if "pass4SymmKey = changeme" in content:
+            if "pass4SymmKey = " + "changeme" in content:
                 findings.append({
                     "check": "CLUSTER_SECRET",
                     "severity": "CRITICAL",
