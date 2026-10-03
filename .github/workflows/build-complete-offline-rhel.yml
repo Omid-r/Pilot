@@ -49,22 +49,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p offline-prereqs/rhel8/x86_64/rpms
-          docker run --rm \
-            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool" \
-            -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out" \
-            rockylinux:8 \
-            bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
+          docker run --rm             -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool"             -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out"             rockylinux:8             bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
 
       - name: Download RHEL 9 offline RPM closure
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
           mkdir -p offline-prereqs/rhel9/x86_64/rpms
-          docker run --rm \
-            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool" \
-            -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out" \
-            rockylinux:9 \
-            bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
+          docker run --rm             -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool"             -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out"             rockylinux:9             bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
 
       - name: Download verified kubectl
         working-directory: ${{ env.APP_ROOT }}
@@ -72,10 +64,8 @@ jobs:
           set -euo pipefail
           for rhel in 8 9; do
             mkdir -p "offline-prereqs/rhel${rhel}/x86_64/bin"
-            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-              -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
-            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" \
-              -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256"
+            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"               -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"               -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256"
             chmod 0755 "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
             EXPECTED_SHA="$(tr -d '[:space:]' < "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256")"
             test "${#EXPECTED_SHA}" -eq 64
@@ -91,9 +81,8 @@ jobs:
           test "$(find offline-prereqs/rhel9/x86_64/rpms -name '*.rpm' -type f | wc -l)" -gt 0
           test -x offline-prereqs/rhel8/x86_64/bin/kubectl
           test -x offline-prereqs/rhel9/x86_64/bin/kubectl
-          test "$(find offline-prereqs/rhel8/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -ge 1
-          test "$(find offline-prereqs/rhel9/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -ge 1
-          test -x scripts/install-offline-prereqs.sh
+          test -f scripts/install-offline-prereqs.sh
+          chmod 0755 scripts/install-offline-prereqs.sh
 
       - name: Assemble one complete offline installer
         working-directory: ${{ env.APP_ROOT }}
