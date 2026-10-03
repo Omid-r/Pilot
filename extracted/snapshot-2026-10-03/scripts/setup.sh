@@ -1,97 +1,80 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# setup.sh — MASTER ALL-IN-ONE DEPLOYER & SELF-HEALER
-# نسخه نصب و راه‌اندازی ۱۰۰٪ خودکار بدون نیاز به حذف دستی و تغییر مجوزها
-# ==============================================================================
-
-set -e
+set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 TARGET_DIR="/opt/splunk-doctor"
+DATA_DIR="/var/lib/splunk-doctor/data"
+SERVICE_FILE="/etc/systemd/system/splunk-doctor.service"
 
-echo "======================================================================"
-echo "  🚀 [SPLUNK CLUSTER DOCTOR] ALL-IN-ONE AUTOMATED DEPLOYER"
-echo "  اسکریپت جامع خودکار: حذف نسخه قبلی + تنظیم دسترسی‌ها + نصب و راه‌اندازی"
-echo "======================================================================"
+log(){ printf "%s\n" "$*"; }
+die(){ log "[-] $*"; exit 1; }
 
-# 1. Root privilege check
-if [ "$EUID" -ne 0 ]; then
-  echo "[-] خطا: این اسکریپت برای مدیریت سرویس و فایروال به دسترسی root نیاز دارد."
-  echo "[!] لطفاً دستور زیر را اجرا کنید: sudo bash setup.sh"
-  exit 1
+[[ $EUID -eq 0 ]] || die "Run as root: sudo bash setup.sh"
+command -v systemctl >/dev/null 2>&1 || die "systemd is required."
+command -v curl >/dev/null 2>&1 || die "curl is required for the health check."
+
+log "======================================================================"
+log "  Splunk Cluster Doctor - Offline RHEL Installer"
+log "======================================================================"
+
+log "[1/7] Stopping previous service safely..."
+systemctl stop splunk-doctor.service 2>/dev/null || true
+systemctl disable splunk-doctor.service 2>/dev/null || true
+
+log "[2/7] Preparing target directories..."
+install -d -m 0755 "$TARGET_DIR"
+install -d -m 0700 "$DATA_DIR"
+rm -rf "$TARGET_DIR/dist" "$TARGET_DIR/scripts" "$TARGET_DIR/systemd" "$TARGET_DIR/node-runtime" "$TARGET_DIR/public"
+
+log "[3/7] Installing application payload..."
+cp -a "$SOURCE_DIR/dist" "$TARGET_DIR/"
+cp -a "$SOURCE_DIR/scripts" "$TARGET_DIR/"
+cp -a "$SOURCE_DIR/package.json" "$TARGET_DIR/" 2>/dev/null || true
+cp -a "$SOURCE_DIR/README_OFFLINE.md" "$TARGET_DIR/" 2>/dev/null || true
+
+if [[ -d "$SOURCE_DIR/node-runtime" && -x "$SOURCE_DIR/node-runtime/bin/node" ]]; then
+  cp -a "$SOURCE_DIR/node-runtime" "$TARGET_DIR/"
+else
+  NODE_SYSTEM="$(command -v node 2>/dev/null || true)"
+  [[ -n "$NODE_SYSTEM" ]] || die "No bundled Node.js runtime and no system Node.js found."
+  install -d -m 0755 "$TARGET_DIR/node-runtime/bin"
+  install -m 0755 "$NODE_SYSTEM" "$TARGET_DIR/node-runtime/bin/node"
 fi
 
-# 2. Stop and uninstall any previous running service or orphaned node process
-echo "==> [۱/۶] متوقف‌سازی و پاکسازی کامل نسخه‌های قبلی (Clean Uninstall)..."
-if systemctl is-active --quiet splunk-doctor 2>/dev/null; then
-  echo "  -> در حال توقف سرویس قبلی splunk-doctor..."
-  systemctl stop splunk-doctor 2>/dev/null || true
+log "[4/7] Applying safe permissions..."
+find "$TARGET_DIR" -type d -exec chmod 0755 {} +
+find "$TARGET_DIR" -type f -exec chmod 0644 {} +
+chmod 0755 "$TARGET_DIR/node-runtime/bin/node"
+chmod 0755 "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
+
+log "[5/7] Applying SELinux execution context..."
+if command -v semanage >/dev/null 2>&1; then
+  semanage fcontext -a -t bin_t "$TARGET_DIR/node-runtime/bin/node" 2>/dev/null || semanage fcontext -m -t bin_t "$TARGET_DIR/node-runtime/bin/node"
+  restorecon -v "$TARGET_DIR/node-runtime/bin/node"
+else
+  chcon -t bin_t "$TARGET_DIR/node-runtime/bin/node" 2>/dev/null || true
 fi
 
-if systemctl is-enabled --quiet splunk-doctor 2>/dev/null; then
-  systemctl disable splunk-doctor 2>/dev/null || true
-fi
-
-# Kill any stale node or orphaned process holding port 3000
-fuser -k 3000/tcp 2>/dev/null || true
-
-# 3. Clean target directory while preserving backups if needed
-echo "==> [۲/۶] آماده‌سازی دایرکتوری هدف (${TARGET_DIR})..."
-mkdir -p "${TARGET_DIR}"
-rm -rf "${TARGET_DIR}/dist" "${TARGET_DIR}/scripts" "${TARGET_DIR}/systemd" 2>/dev/null || true
-
-# 4. Copy current package files
-echo "==> [۳/۶] کپی و استقرار فایل‌های بسته جدید..."
-cp -rf "${SOURCE_DIR}"/* "${TARGET_DIR}/"
-
-# 5. Fix ALL permissions automatically (No manual chmod required!)
-echo "==> [۴/۶] اعمال و تثبیت دسترسی‌های اجرایی کامل روی تمامی فایل‌ها و اسکریپت‌ها..."
-chmod -R 755 "${TARGET_DIR}"
-chmod +x "${TARGET_DIR}"/*.sh 2>/dev/null || true
-chmod +x "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
-chmod +x "${TARGET_DIR}"/dist/server.cjs 2>/dev/null || true
-
-# Check / find Node.js binary path
-NODE_BIN="$(command -v node 2>/dev/null || which node 2>/dev/null || echo "")"
-if [ -z "$NODE_BIN" ]; then
-  if [ -f "/usr/bin/node" ]; then NODE_BIN="/usr/bin/node";
-  elif [ -f "/usr/local/bin/node" ]; then NODE_BIN="/usr/local/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs18/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs18/root/usr/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs16/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs16/root/usr/bin/node";
-  elif [ -f "/opt/splunk/bin/node" ]; then NODE_BIN="/opt/splunk/bin/node";
-  fi
-fi
-
-if [ -z "$NODE_BIN" ]; then
-  echo "[-] اخطار: نود جی‌اس (Node.js) یافت نشد."
-  echo "[!] لطفاً با یکی از دستورات زیر Node.js را نصب کنید و مجدداً setup.sh را اجرا نمایید:"
-  echo "    sudo dnf install -y nodejs   (RHEL 8 / RHEL 9 / Rocky Linux)"
-  echo "    sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
-  exit 1
-fi
-echo "  -> مسیر شناسایی‌شده Node.js: $NODE_BIN"
-
-# 6. Configure Systemd Service dynamically
-echo "==> [۵/۶] پیکربندی و فعال‌سازی سرویس دائمی Systemd (splunk-doctor.service)..."
-cat << EOF > /etc/systemd/system/splunk-doctor.service
+log "[6/7] Installing systemd service..."
+cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Splunk Cluster Doctor & Architecture Studio
-Documentation=https://github.com/splunk/splunk-cluster-doctor
-After=network.target network-online.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=${TARGET_DIR}
-ExecStart=${NODE_BIN} ${TARGET_DIR}/dist/server.cjs
-Restart=always
+WorkingDirectory=/opt/splunk-doctor
+ExecStart=/opt/splunk-doctor/node-runtime/bin/node /opt/splunk-doctor/dist/server.cjs
+Restart=on-failure
 RestartSec=3
-KillMode=process
+KillMode=mixed
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=SPLUNK_HOME=/opt/splunk
-
+Environment=SPLUNK_DOCTOR_DATA_DIR=/var/lib/splunk-doctor/data
+UMask=0077
 LimitNOFILE=65536
 LimitNPROC=65536
 
@@ -101,44 +84,33 @@ EOF
 
 systemctl daemon-reload
 systemctl enable splunk-doctor.service
+
+log "[7/7] Starting and verifying service..."
 systemctl restart splunk-doctor.service
 
-# 7. Configure Firewall rules
-echo "==> [۶/۶] تنظیم قوانین فایروال لینوکس برای پورت ۳۰۰۰ و پورت‌های موازی..."
+for _ in {1..20}; do
+  systemctl is-active --quiet splunk-doctor.service && break
+  sleep 1
+done
+
+if ! systemctl is-active --quiet splunk-doctor.service; then
+  systemctl --no-pager -l status splunk-doctor.service || true
+  journalctl -u splunk-doctor.service -n 80 --no-pager || true
+  die "splunk-doctor.service did not start."
+fi
+
 if systemctl is-active --quiet firewalld 2>/dev/null; then
-  firewall-cmd --permanent --zone=public --add-port=3000/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=trusted --add-port=3000/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=8001/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=8090/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=9998/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=8193/tcp 2>/dev/null || true
-  firewall-cmd --reload 2>/dev/null || true
-  echo "  [✓] رول‌های Firewalld با موفقیت اعمال شدند."
+  firewall-cmd --permanent --zone=public --add-port=3000/tcp
+  firewall-cmd --reload
 fi
 
-if command -v iptables >/dev/null 2>&1; then
-  iptables -I INPUT -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-fi
+HTTP_CODE="$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 3 http://127.0.0.1:3000 || true)"
+[[ "$HTTP_CODE" == "200" ]] || { journalctl -u splunk-doctor.service -n 80 --no-pager || true; die "Application health check failed. HTTP=$HTTP_CODE"; }
 
-# 8. Health Check Verification Probe
-sleep 2
-SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || ip route get 1 2>/dev/null | awk '{print $7}' || echo '127.0.0.1')"
-HTTP_CODE="$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:3000" 2>/dev/null || echo "000")"
-
-echo "======================================================================"
-if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "304" ]; then
-  echo "  🎉 [موفقیت‌آمیز] برنامه با موفقیت نصب، دسترسی‌دهی و راه‌اندازی شد!"
-else
-  echo "  ⚡ [وضعیت سرویس] سرویس استارت شد (پاسخ اولیه: $HTTP_CODE)."
-fi
-echo "----------------------------------------------------------------------"
-echo "  🌐 آدرس دسترسی به سامانه در مرورگر:"
-echo "     http://${SERVER_IP}:3000"
-echo "     http://localhost:3000"
-echo ""
-echo "  📌 دستورات مفید مدیریت سرویس:"
-echo "     sudo systemctl status splunk-doctor    # مشاهده وضعیت"
-echo "     sudo systemctl restart splunk-doctor   # راه‌اندازی مجدد"
-echo "     sudo journalctl -u splunk-doctor -f    # مشاهده لاگ‌های زنده"
-echo "     sudo bash ${TARGET_DIR}/uninstall.sh   # حذف کامل برنامه"
-echo "======================================================================"
+SERVER_IP="$(hostname -I 2>/dev/null | awk "{print $1}")"
+log "======================================================================"
+log "  [SUCCESS] Splunk Cluster Doctor is running."
+log "  Web UI: http://${SERVER_IP:-127.0.0.1}:3000"
+log "  Service: systemctl status splunk-doctor"
+log "  Logs:    journalctl -u splunk-doctor -f"
+log "======================================================================"
