@@ -85,38 +85,15 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         const data = await res.json();
         setSingleResult(data);
       }
-    } catch (_) {
-      // Fallback client-side simulated validation if offline
+    } catch (e: any) {
       setSingleResult({
         toolId: tId,
-        status: 'healthy',
-        score: 100,
-        latencyMs: 12,
-        checks: [
-          {
-            nameFa: 'پاسخ‌دهی وب‌سرویس و درگاه محلی',
-            nameEn: 'Web Service Endpoint Readiness',
-            status: 'pass',
-            detailFa: 'پردازش‌های مربوط به ابزار به درستی بارگذاری شده و به درخواست‌ها پاسخ می‌دهند.',
-            detailEn: 'Tool backend handlers operational and responding.'
-          },
-          {
-            nameFa: 'سینتکس و ساختار فایل‌های کانفیگ',
-            nameEn: 'Config Stanza Integrity & Syntax',
-            status: 'pass',
-            detailFa: 'فایل‌های استنزا فاقد هرگونه خطای ساختاری و مغایرت پارامتر هستند.',
-            detailEn: 'No stanza syntax collisions detected.'
-          },
-          {
-            nameFa: 'سطح دسترسی سیستم‌عامل و هسته لینوکس',
-            nameEn: 'OS & Linux Runtime Permissions',
-            status: 'pass',
-            detailFa: 'مجوزهای خواندن و نوشتن دایرکتوری‌های ایزوله تایید شد.',
-            detailEn: 'Read/write rights verified across runtime directories.'
-          }
-        ],
-        summaryFa: 'ابزار کاملاً سالم است و به صورت فعال در حال کار می‌باشد.',
-        summaryEn: 'Tool is operating at 100% health in runtime.'
+        status: 'warning',
+        score: 0,
+        latencyMs: 0,
+        checks: [],
+        summaryFa: `اعتبارسنجی واقعی انجام نشد: ${e?.message || 'خطای ارتباط با backend'}`,
+        summaryEn: `Real validation did not complete: ${e?.message || 'backend communication error'}`
       });
     } finally {
       setIsValidating(false);
@@ -135,30 +112,9 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
         setAllResults(data.results || {});
         setTotalTested(data.totalTools || allModules.length);
       }
-    } catch (_) {
-      // fallback
-      const simulated: Record<string, ToolValidationResult> = {};
-      allModules.forEach(m => {
-        simulated[m.id] = {
-          toolId: m.id,
-          status: 'healthy',
-          score: 100,
-          latencyMs: Math.floor(Math.random() * 10) + 5,
-          checks: [
-            {
-              nameFa: 'پاسخ‌دهی وب‌سرویس و API',
-              nameEn: 'API Health',
-              status: 'pass',
-              detailFa: 'نودها و ابزار متصل است.',
-              detailEn: 'Tool endpoints connected.'
-            }
-          ],
-          summaryFa: 'ابزار سالم است و کار می‌کند.',
-          summaryEn: 'Tool verified and active.'
-        };
-      });
-      setAllResults(simulated);
-      setTotalTested(allModules.length);
+    } catch (e: any) {
+      setAllResults({});
+      setTotalTested(0);
     } finally {
       setIsValidating(false);
     }
