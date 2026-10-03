@@ -793,7 +793,7 @@ export interface DispatchedAlertLog {
   targetRecipient: string;
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
   messagePreview: string;
-  deliveryStatus: 'DELIVERED_SUCCESS' | 'FAILED_RETRYING' | 'QUEUED';
+  deliveryStatus: 'DELIVERED_SUCCESS' | 'FAILED_RETRYING' | 'FAILED' | 'QUEUED';
   latencyMs: number;
 }
 
