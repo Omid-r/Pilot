@@ -77,6 +77,81 @@ async function startServer() {
     }
   } catch (_) {}
 
+  // Real notification test endpoint. No synthetic delivery is reported.
+  app.post('/api/alerts/test', requireAuth, requireRoles('super_admin', 'cluster_admin', 'operator'), async (req, res) => {
+    const channelType = String(req.body?.channelType || '');
+    const endpoint = String(req.body?.endpoint || '').trim();
+    const secret = String(req.body?.secret || '');
+    if (!endpoint) return res.status(400).json({ success: false, error: 'Notification endpoint is required.' });
+
+    let target: URL;
+    try {
+      target = new URL(endpoint);
+    } catch {
+      return res.status(400).json({ success: false, error: 'Notification endpoint must be a valid URL.' });
+    }
+
+    if (!['http:', 'https:'].includes(target.protocol)) {
+      return res.status(400).json({ success: false, error: 'Notification endpoint must use HTTP or HTTPS.' });
+    }
+
+    if (!['TEAMS_SLACK', 'WEBHOOK', 'SLACK', 'TEAMS'].includes(channelType)) {
+      return res.status(501).json({
+        success: false,
+        error: 'Only webhook-based notifications are implemented in the offline core. Configure a provider adapter for SMTP/SMS.'
+      });
+    }
+
+    const started = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const payload = {
+        text: `[Splunk Cluster Doctor] Real notification test from ${os.hostname()} at ${new Date().toISOString()}`,
+        source: 'splunk-cluster-doctor',
+        severity: 'INFO'
+      };
+      const response = await fetch(target, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(secret ? { Authorization: `Bearer ${secret}` } : {})
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      const responseBody = await response.text().catch(() => '');
+      const success = response.ok;
+      logAuditEvent(
+        'NETWORK',
+        success ? 'NOTIFICATION_TEST_DELIVERED' : 'NOTIFICATION_TEST_FAILED',
+        success ? 'SUCCESS' : 'FAILED',
+        ((req as any).user as UserAccount)?.username || 'ANONYMOUS',
+        req.ip || 'unknown',
+        `Real webhook test to ${target.origin}: HTTP ${response.status}, ${Date.now() - started}ms`
+      );
+
+      return res.status(success ? 200 : 502).json({
+        success,
+        statusCode: response.status,
+        latencyMs: Date.now() - started,
+        deliveryStatus: success ? 'DELIVERED_SUCCESS' : 'DELIVERY_FAILED',
+        responsePreview: responseBody.slice(0, 500)
+      });
+    } catch (err: any) {
+      return res.status(502).json({
+        success: false,
+        latencyMs: Date.now() - started,
+        deliveryStatus: 'DELIVERY_FAILED',
+        error: err?.name === 'AbortError' ? 'Notification request timed out.' : (err?.message || 'Notification delivery failed.')
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
   // =========================================================================
   // CENTRAL SERVER COMMAND BUS & EXECUTION LOGGER (PuTTY / SSH Live Stream)
   // =========================================================================
