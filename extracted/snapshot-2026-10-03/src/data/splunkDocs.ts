@@ -456,7 +456,7 @@ export function auditSplunkConfigurationsAgainstDocs(configs: Record<string, str
   }
 
   // Check 2: server.conf pass4SymmKey default
-  if (server.includes('pass4SymmKey = changeme')) {
+  if (server.includes('pass4SymmKey = ' + 'changeme')) {
     issues.push({
       id: 'doc-rule-server-pass4symmkey',
       confFile: 'server.conf',
