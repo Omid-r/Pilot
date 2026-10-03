@@ -4,20 +4,42 @@ import path from 'path';
 import os from 'os';
 import { UserAccount, UserRole, UserPermissions, getDefaultPermissionsForRole, AuditLogEntry, LicenseInfo, SystemSecurityPolicy } from '../src/types';
 
-// Storage paths
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Runtime state must never be shipped inside the application bundle.
+const LEGACY_DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.SPLUNK_DOCTOR_DATA_DIR ||
+  (process.env.NODE_ENV === 'production' ? '/var/lib/splunk-doctor' : LEGACY_DATA_DIR);
 const DB_PATH = path.join(DATA_DIR, 'security-db.json');
 const SECRET_KEY_PATH = path.join(DATA_DIR, 'master-signing.key');
+const BOOTSTRAP_PASSWORD_PATH = path.join(DATA_DIR, 'bootstrap-admin-password');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
+function ensureDataDir(): void {
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(DATA_DIR, 0o700); } catch (_) {}
+}
+
+function migrateLegacyState(): void {
+  ensureDataDir();
+  if (DATA_DIR === LEGACY_DATA_DIR) return;
+
+  const legacyDb = path.join(LEGACY_DATA_DIR, 'security-db.json');
+  const legacyKey = path.join(LEGACY_DATA_DIR, 'master-signing.key');
   try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(DB_PATH) && fs.existsSync(legacyDb)) {
+      fs.copyFileSync(legacyDb, DB_PATH);
+      fs.chmodSync(DB_PATH, 0o600);
+    }
+    if (!fs.existsSync(SECRET_KEY_PATH) && fs.existsSync(legacyKey)) {
+      fs.copyFileSync(legacyKey, SECRET_KEY_PATH);
+      fs.chmodSync(SECRET_KEY_PATH, 0o600);
+    }
   } catch (_) {}
 }
 
+migrateLegacyState();
+
 // Master Signing Key for HMAC Tokens & License Signatures
 function getOrCreateMasterKey(): string {
+  ensureDataDir();
   if (fs.existsSync(SECRET_KEY_PATH)) {
     try {
       const key = fs.readFileSync(SECRET_KEY_PATH, 'utf8').trim();
@@ -27,6 +49,7 @@ function getOrCreateMasterKey(): string {
   const newKey = crypto.randomBytes(48).toString('hex');
   try {
     fs.writeFileSync(SECRET_KEY_PATH, newKey, { mode: 0o600 });
+    try { fs.chmodSync(SECRET_KEY_PATH, 0o600); } catch (_) {}
   } catch (_) {}
   return newKey;
 }
@@ -65,8 +88,14 @@ export function hashPassword(password: string, existingSalt?: string): { hash: s
 }
 
 export function verifyPassword(password: string, hash: string, salt: string): boolean {
-  const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(computed, 'hex'), Buffer.from(hash, 'hex'));
+  try {
+    const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+    const expected = Buffer.from(String(hash || ''), 'hex');
+    const actual = Buffer.from(computed, 'hex');
+    return expected.length === actual.length && crypto.timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
 }
 
 // Hardware Fingerprint (Node-Locking to prevent unauthorized copying/selling)
@@ -265,11 +294,27 @@ function seedInitialStore(): SecurityStore {
   const in14Days = new Date(now);
   in14Days.setDate(now.getDate() + 14);
 
-  // Default Users with cryptographically salted PBKDF2 hashes
-  const adminPass = hashPassword('Splunk@Doctor2026!');
-  const engineerPass = hashPassword('Splunk@Engineer2026!');
-  const operatorPass = hashPassword('Splunk@Operator2026!');
-  const auditorPass = hashPassword('Splunk@Auditor2026!');
+  // Fresh installs have no fixed/default password in source control.
+  // An operator may provide SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD; otherwise one is generated
+  // and written once to a root-only file in the runtime data directory.
+  function getInitialAdminPassword(): string {
+    ensureDataDir();
+    const envPassword = String(process.env.SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD || '').trim();
+    if (envPassword.length >= 12) {
+      fs.writeFileSync(BOOTSTRAP_PASSWORD_PATH, envPassword + '\n', { mode: 0o600 });
+      return envPassword;
+    }
+    if (fs.existsSync(BOOTSTRAP_PASSWORD_PATH)) {
+      const stored = fs.readFileSync(BOOTSTRAP_PASSWORD_PATH, 'utf8').trim();
+      if (stored.length >= 12) return stored;
+    }
+    const generated = crypto.randomBytes(24).toString('base64url');
+    fs.writeFileSync(BOOTSTRAP_PASSWORD_PATH, generated + '\n', { mode: 0o600 });
+    return generated;
+  }
+
+  const initialPassword = getInitialAdminPassword();
+  const adminPass = hashPassword(initialPassword);
 
   const users: InternalUserAccount[] = [
     {
@@ -282,63 +327,15 @@ function seedInitialStore(): SecurityStore {
       expiresAt: inOneYear.toISOString(),
       isNeverExpires: true,
       isActive: true,
-      notes: 'حساب مدیر ارشد با دسترسی کامل به تمامی ماژول‌ها و پنل مدیریت',
+      notes: 'حساب مدیر ارشد اولیه. پسورد فقط در bootstrap-admin-password قرار می‌گیرد.',
       permissions: getDefaultPermissionsForRole('super_admin'),
       passwordHash: adminPass.hash,
       salt: adminPass.salt
-    },
-    {
-      id: 'usr-cluster-02',
-      username: 'sec_engineer',
-      fullName: 'مهندس امنیت و کلاستر (Cluster Admin)',
-      email: 'sec@splunk-cluster.corp',
-      role: 'cluster_admin',
-      createdAt: now.toISOString(),
-      expiresAt: in60Days.toISOString(),
-      isNeverExpires: false,
-      isActive: true,
-      notes: 'دسترسی کامل به توپولوژی، کانفیگ‌ها، پورت‌ها و اسکریپت‌های تعمیر خودکار',
-      permissions: getDefaultPermissionsForRole('cluster_admin'),
-      passwordHash: engineerPass.hash,
-      salt: engineerPass.salt
-    },
-    {
-      id: 'usr-operator-03',
-      username: 'net_operator',
-      fullName: 'کارشناس عملیات شبکه (Network Operator)',
-      email: 'operator@splunk-cluster.corp',
-      role: 'operator',
-      createdAt: now.toISOString(),
-      expiresAt: in30Days.toISOString(),
-      isNeverExpires: false,
-      isActive: true,
-      notes: 'پایش زنده ترافیک، تست پورت‌ها و پینگ، بدون امکان دستکاری یا تخریب کانفیگ‌ها',
-      permissions: getDefaultPermissionsForRole('operator'),
-      passwordHash: operatorPass.hash,
-      salt: operatorPass.salt
-    },
-    {
-      id: 'usr-auditor-04',
-      username: 'compliance_auditor',
-      fullName: 'ناظر و بازرس امنیتی (Security Auditor)',
-      email: 'audit@splunk-cluster.corp',
-      role: 'auditor',
-      createdAt: now.toISOString(),
-      expiresAt: in14Days.toISOString(),
-      isNeverExpires: false,
-      isActive: true,
-      notes: 'دسترسی فقط‌خواندنی به لاگ‌ها، گزارش‌های سلامت و دایاگرام پورت‌ها',
-      permissions: getDefaultPermissionsForRole('auditor'),
-      passwordHash: auditorPass.hash,
-      salt: auditorPass.salt
     }
   ];
 
   const hwId = getHardwareFingerprint();
-  // Auto-generate a valid initial commercial trial license for this specific hardware ID
-  const trialExp = new Date(now);
-  trialExp.setDate(now.getDate() + 90);
-  const initialKey = generateSignedLicenseKey(hwId, 'Splunk Enterprise Customer', 'ENTERPRISE_COMMERCIAL', trialExp.toISOString(), 100);
+  // New installations start unlicensed. Commercial Splunk licensing is supplied separately.
 
   const initialLogs: AuditLogEntry[] = [
     {
@@ -355,23 +352,23 @@ function seedInitialStore(): SecurityStore {
       id: 'log-seed-02',
       timestamp: now.toISOString(),
       username: 'SYSTEM',
-      action: 'COMMERCIAL_LICENSE_BINDING',
+      action: 'LICENSE_INITIAL_STATE',
       category: 'LICENSE',
       status: 'SUCCESS',
       ip: '127.0.0.1',
-      details: `لایسنس تجاری روی اثرانگشت سخت‌افزاری ${hwId} قفل و فعال شد.`
+      details: `نصب اولیه بدون لایسنس تجاری فعال شد؛ سخت‌افزار ${hwId} برای بررسی لایسنس واقعی ثبت شد.`
     }
   ];
 
   return {
     users,
     license: {
-      companyName: 'Splunk Enterprise Customer',
-      licenseKey: initialKey,
-      tier: 'ENTERPRISE_COMMERCIAL',
-      expiresAt: trialExp.toISOString(),
-      maxNodes: 100,
-      activatedAt: now.toISOString()
+      companyName: 'Unlicensed Offline Installation',
+      licenseKey: '',
+      tier: 'COMMUNITY',
+      expiresAt: '',
+      maxNodes: 2,
+      activatedAt: ''
     },
     auditLogs: initialLogs
   };
@@ -380,6 +377,7 @@ function seedInitialStore(): SecurityStore {
 // Load and Save Database
 export function getSecurityStore(): SecurityStore {
   if (memoryStore) return memoryStore;
+  migrateLegacyState();
 
   if (fs.existsSync(DB_PATH)) {
     try {
@@ -407,7 +405,9 @@ export function getSecurityStore(): SecurityStore {
 export function saveSecurityStore(): void {
   if (!memoryStore) return;
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(memoryStore, null, 2), 'utf8');
+    ensureDataDir();
+    fs.writeFileSync(DB_PATH, JSON.stringify(memoryStore, null, 2), { encoding: 'utf8', mode: 0o600 });
+    try { fs.chmodSync(DB_PATH, 0o600); } catch (_) {}
   } catch (_) {}
 }
 
