@@ -458,8 +458,7 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     if(!home) return fail(res,404,'Splunk binary not found.');
     const r=await command(path.join(home,'bin','splunk'),['btool','check'],{timeoutMs:30000,cwd:home});
     const text=(r.stdout||r.stderr||'').toString();
-    const errors=text.split('
-').filter((line:string)=>/error|invalid|failed/i.test(line)).map((message:string)=>({message}));
+    const errors=text.split("\n").filter((line:string)=>/error|invalid|failed/i.test(line)).map((message:string)=>({message}));
     return res.status(r.code===0?200:500).json({success:r.code===0,errors,raw:text,exitCode:r.code,targetDir:home});
   });
 
