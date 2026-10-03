@@ -198,315 +198,58 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
     }
   };
 
-  // Run Deep Diagnostics Probe
+  // Run Deep Diagnostics Probe - real backend only.
   const runDeepDiagnostics = async (overrideType?: 'parallel' | 'real' | 'virtual' | 'custom') => {
     setIsScanning(true);
     const targetType = overrideType || selectedServerType;
-    const isReal = targetType === 'real';
-    const isVirtual = targetType === 'virtual';
-    const currentResolvedIds = isReal 
-      ? resolvedRealIssueIds 
-      : isVirtual 
-      ? resolvedVirtualIssueIds 
-      : (targetType === 'parallel' ? resolvedParallelIssueIds : []);
-
-    const targetPort = isReal 
-      ? 8000 
-      : isVirtual 
-      ? 8080 
-      : (targetType === 'parallel' ? 8001 : webPortInfo.port);
-
-    const targetRest = isReal 
-      ? 8089 
-      : isVirtual 
-      ? 8091 
-      : (targetType === 'parallel' ? 8090 : webPortInfo.restPort);
-
-    const targetTcp = isReal 
-      ? 9997 
-      : isVirtual 
-      ? 9999 
-      : (targetType === 'parallel' ? 9998 : webPortInfo.tcpPort);
-
-    const targetKv = isReal 
-      ? 8192 
-      : isVirtual 
-      ? 8194 
-      : (targetType === 'parallel' ? 8193 : webPortInfo.kvPort);
-
-    const resolvedDir = isReal 
-      ? '/opt/splunk' 
-      : isVirtual 
-      ? '/opt/splunk_virtual' 
-      : (targetType === 'parallel' ? '/opt/splunk_parallel' : customTargetDir);
-
-    try {
-      const res = await fetch('/api/parallel-cluster/deep-diagnostics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serverType: targetType,
-          targetDir: resolvedDir,
-          webPort: targetPort,
-          restPort: targetRest,
-          tcpPort: targetTcp,
-          kvPort: targetKv
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const rawIssues = data.issues || [];
-        const processedIssues = rawIssues.map((issue: any) => {
-          if (currentResolvedIds.includes(issue.id)) {
-            return { ...issue, status: 'PASS' as const, severity: 'INFO' as const };
-          }
-          return issue;
-        });
-        setDiagnosticIssues(processedIssues);
-        const hasFails = processedIssues.some((i: any) => i.status === 'FAIL');
-        setOverallHealthScore(hasFails ? 35 : 100);
-        setHttpStatusResult(hasFails ? '000' : '200');
-        setAiAnalysisSummary(data.aiAnalysis || null);
-        setLastScanTime(new Date().toLocaleTimeString());
-      } else {
-        throw new Error('Fallback to local analyzer');
-      }
-    } catch (err) {
-      // High-fidelity fallback diagnostic evaluation based on symptoms
-      const mockIssues: DiagnosticIssue[] = isReal ? [
-        {
-          id: 'diag-real-tcpout-ssl',
-          category: 'config',
-          titleFa: 'انتقال متن‌باز لاگ‌های امنیتی به ایندکسرها بدون رمزنگاری TLS در outputs.conf',
-          titleEn: 'Cleartext S2S Log Transmission in outputs.conf (useSSL = false)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'ترافیک ورودی و بسته‌های لاگ بدون فعال بودن TLS و روی پورت ۹۹۹۷ به صورت رمزنشده منتقل می‌شوند که امکان استراق‌سمع (Sniffing) در شبکه را ایجاد می‌کند.',
-          descriptionEn: 'Forwarder is dispatching unencrypted telemetry to indexers on port 9997.',
-          rootCauseFa: 'مقدار useSSL = false در stanza مربوط به [tcpout] در فایل /opt/splunk/etc/system/local/outputs.conf.',
-          solutionFa: 'تنظیم useSSL = true و تعیین مسیر سرتیفیکت‌های معتبر در outputs.conf.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/outputs.conf'
-        },
-        {
-          id: 'diag-real-pass4symmkey',
-          category: 'permissions',
-          titleFa: 'استفاده از کلید احراز هویت پیش‌فرض کارخانه‌ای (pass4SymmKey = changeme)',
-          titleEn: 'Factory Default Shared Secret (pass4SymmKey = changeme)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'کلید اشتراکی میان نودهای کلاستر و سرچ‌هدها برابر با مقدار پیش‌فرض changeme قرار دارد و اتصال هر نود نامعتبر به کلاستر ممکن است.',
-          descriptionEn: 'Cluster authentication secret is set to default factory string changeme in server.conf.',
-          rootCauseFa: 'عدم تغییر pass4SymmKey در [general] فایل server.conf.',
-          solutionFa: 'تولید خودکار کلید هش‌شده رمزنگاری و جایگزینی در server.conf.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/server.conf'
-        },
-        {
-          id: 'diag-real-disk-threshold',
-          category: 'config',
-          titleFa: 'آستانه توقف اضطراری دیسک ایندکس بسیار پایین است (minFreeSpaceMB = 1000)',
-          titleEn: 'Low Free Disk Space Protection Threshold (minFreeSpaceMB = 1000)',
-          severity: 'HIGH',
-          status: 'FAIL',
-          descriptionFa: 'حداقل فضای آزاد دیسک برای توقف ذخیره‌سازی تنها ۱ گیگابایت تنظیم شده که در حجم بالای لاگ روزانه باعث پر شدن ناگهانی پارتیشن /opt می‌شود.',
-          descriptionEn: 'Disk safety margin of 1000MB is inadequate for enterprise ingest rates.',
-          rootCauseFa: 'مقدار minFreeSpaceMB = 1000 در [diskUsage] فایل server.conf.',
-          solutionFa: 'افزایش آستانه به minFreeSpaceMB = 5000 جهت ایمنی پایپ‌لاین لاگ‌ها.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/server.conf'
-        },
-        {
-          id: 'diag-real-tls-versions',
-          category: 'config',
-          titleFa: 'پشتیبانی از پروتکل‌های منسوخ و ناامن SSLv3 و TLS 1.0 در splunkd',
-          titleEn: 'Deprecated SSLv3 & TLS 1.0 Protocol Support Active',
-          severity: 'HIGH',
-          status: 'FAIL',
-          descriptionFa: 'پیکربندی سرور اجازه برقراری اتصال با الگوریتم‌های آسیب‌پذیر POODLE و BEAST را به کلاینت‌ها می‌دهد.',
-          descriptionEn: 'Insecure cipher suites and deprecated TLS 1.0 protocols enabled in server.conf.',
-          rootCauseFa: 'تنظیم sslVersionsToSupport = ssl3, tls1.0 در [sslConfig].',
-          solutionFa: 'محدودسازی به TLS 1.2 و TLS 1.3 و غیرفعال‌سازی sslCompression.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk/etc/system/local/server.conf'
-        }
-      ] : isVirtual ? [
-        {
-          id: 'virt-docker-perm',
-          category: 'permissions',
-          titleFa: 'تداخل سطح دسترسی داکر به Volume لینوکس',
-          titleEn: 'Docker Volume Linux permissions check (Permission Denied)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'کانتینر داکر اسپلانک مجازی به دلیل عدم امکان نوشتن در دایرکتوری /var/lib/splunk_virtual با خطای Permission Denied در حلقه لود نامحدود متوقف شده است.',
-          descriptionEn: 'Docker Splunk container cannot write to the persistent mount /var/lib/splunk_virtual, leading to loop crash.',
-          rootCauseFa: 'کاربر داکر (uid: 4181) دسترسی مالکیتی روی پوشه سوار شده لینوکس ندارد.',
-          solutionFa: 'تغییر مالکیت پوشه با chown -R splunk:splunk /var/lib/splunk_virtual در سرور.',
-          autoFixAvailable: true,
-          affectedTarget: '/var/lib/splunk_virtual'
-        },
-        {
-          id: 'virt-heartbeat-out',
-          category: 'http',
-          titleFa: 'قطع هارت‌بیت زنده کانتینر سرور مجازی اسپلانک',
-          titleEn: 'Virtual Container Heartbeat Telemetry Outage',
-          severity: 'HIGH',
-          status: 'FAIL',
-          descriptionFa: 'درگاه پاسخ‌گویی وب کانتینر اسپلانک روی پورت ۸۰۸۰ سیگنال هارت‌بیت ارسال نمی‌کند و لایو پایش به عنوان قطع کامل لاگ نمایش داده می‌شود.',
-          descriptionEn: 'The virtual container daemon is unhealthy and is not returning response headers on port 8080.',
-          rootCauseFa: 'متوقف بودن کانتینر به دلیل ارورهای دسترسی دایرکتوری.',
-          solutionFa: 'رفع دسترسی پوشه‌ها و ری‌استارت و بووت مجدد کانتینر.',
-          autoFixAvailable: true,
-          affectedTarget: 'Docker Daemon (port 8080)'
-        }
-      ] : [
-        {
-          id: 'diag-web-conf-mgmt',
-          category: 'config',
-          titleFa: 'عدم تطابق mgmtHostPort در فایل web.conf با پورت 8090',
-          titleEn: 'mgmtHostPort mismatch in web.conf (HTTP Status 000000 freeze)',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'سرویس وب پایتون اسپلانک برای استارت کامل باید به پورت مدیریتی splunkd متصل شود. عدم تعریف mgmtHostPort = 127.0.0.1:8090 باعث تلاش وب برای اتصال به ۸۰۸۹ و قطع شدن با وضعیت 000000 می‌شود.',
-          descriptionEn: 'Splunk Web python daemon requires explicit mgmtHostPort = 127.0.0.1:8090 to bind and bootstrap properly.',
-          rootCauseFa: 'فایل /opt/splunk_parallel/etc/system/local/web.conf فاقد mgmtHostPort = 127.0.0.1:8090 است یا httpport با پروسه دیگر تداخل دارد.',
-          solutionFa: 'تنظیم خودکار stanza تحت [settings] با مقادیر httpport=8001 و mgmtHostPort=127.0.0.1:8090.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk_parallel/etc/system/local/web.conf'
-        },
-        {
-          id: 'diag-kvstore-collision',
-          category: 'port',
-          titleFa: 'تداخل پورت 8192 دیتابیس KVStore با نمونه اصلی اسپلانک',
-          titleEn: 'KVStore port 8192 conflict with primary Splunk',
-          severity: 'CRITICAL',
-          status: 'FAIL',
-          descriptionFa: 'پورت ۸۱۹۲ توسط نمونه اول اسپلانک اشغال است و تلاش نسخه موازی برای اشغال مجدد آن باعث ارور "kvstore port [8192] is already bound" و توقف بوت می‌شود.',
-          descriptionEn: 'KVStore port collision blocks daemon bootstrap.',
-          rootCauseFa: 'عدم تعیین پورت مجزای 8193 در server.conf.',
-          solutionFa: 'تنظیم خودکار [kvstore] port = 8193 در server.conf.',
-          autoFixAvailable: true,
-          affectedTarget: '/opt/splunk_parallel/etc/system/local/server.conf'
-        }
-      ];
-
-      const processedIssues = mockIssues.map(issue => {
-        if (currentResolvedIds.includes(issue.id)) {
-          return { ...issue, status: 'PASS' as const, severity: 'INFO' as const };
-        }
-        return issue;
-      });
-
-      setDiagnosticIssues(processedIssues);
-      const hasFails = processedIssues.some(i => i.status === 'FAIL');
-      setOverallHealthScore(isReal ? 95 : (hasFails ? 35 : 100));
-      setHttpStatusResult(isReal ? '200' : (hasFails ? '000' : '200'));
-      setLastScanTime(new Date().toLocaleTimeString());
-      setAiAnalysisSummary(
-        isFa
-          ? `اسکن هوش مصنوعی لوکال روی ${targetType === 'real' ? 'سرور اصلی عملیاتی (/opt/splunk)' : targetType === 'virtual' ? 'سرور مجازی داکر (/opt/splunk_virtual)' : 'سرور موازی استیجینگ (/opt/splunk_parallel)'} با موفقیت انجام شد.`
-          : `AI scan completed on ${targetType === 'real' ? 'Primary Host Instance' : targetType === 'virtual' ? 'Virtual Docker Container Instance' : 'Parallel Staging Instance'}.`
-      );
-    } finally {
-      setIsScanning(false);
+    if (targetType === 'virtual') {
+      setDiagnosticIssues([]);
+      setAiAnalysisSummary(isFa ? 'حالت Virtual در نسخه واقعی غیرفعال است و بدون runtime واقعی شبیه‌سازی نمی‌شود.' : 'Virtual mode is disabled in real execution; no synthetic runtime is used.');
+      setOverallHealthScore(0); setHttpStatusResult('N/A'); setIsScanning(false);
+      return;
     }
+    const targetPort = targetType === 'real' ? 8000 : (targetType === 'parallel' ? 8001 : webPortInfo.port);
+    const targetRest = targetType === 'real' ? 8089 : (targetType === 'parallel' ? 8090 : webPortInfo.restPort);
+    const targetTcp = targetType === 'real' ? 9997 : (targetType === 'parallel' ? 9998 : webPortInfo.tcpPort);
+    const targetKv = targetType === 'real' ? 8192 : (targetType === 'parallel' ? 8193 : webPortInfo.kvPort);
+    const resolvedDir = targetType === 'real' ? '/opt/splunk' : (targetType === 'parallel' ? '/opt/splunk_parallel' : customTargetDir);
+    try {
+      const res = await fetch('/api/parallel-cluster/deep-diagnostics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serverType:targetType,targetDir:resolvedDir,webPort:targetPort,restPort:targetRest,tcpPort:targetTcp,kvPort:targetKv})});
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok || data.success===false) throw new Error(data.error || ('HTTP '+res.status));
+      const rawIssues=data.issues||[];
+      setDiagnosticIssues(rawIssues);
+      setOverallHealthScore(Number(data.healthScore)||0);
+      setHttpStatusResult(data.httpStatus||'000');
+      setAiAnalysisSummary(data.aiAnalysis||null);
+      setLastScanTime(new Date().toLocaleTimeString());
+    } catch(err:any) {
+      setDiagnosticIssues([{id:'backend-unavailable',category:'http',titleFa:'موتور عیب‌یابی واقعی در دسترس نیست',titleEn:'Real diagnostic backend unavailable',severity:'CRITICAL',status:'FAIL',descriptionFa:err?.message||'خطای ارتباط با backend',descriptionEn:err?.message||'Backend error',rootCauseFa:'ارتباط با endpoint واقعی برقرار نشد.',solutionFa:'لاگ backend را بررسی کنید و دوباره اسکن کنید.',autoFixAvailable:false,affectedTarget:resolvedDir}]);
+      setOverallHealthScore(0); setHttpStatusResult('000'); setAiAnalysisSummary(err?.message||null);
+    } finally { setIsScanning(false); }
   };
 
-  // Run AI Autonomous Auto-Heal
+  // Run AI Autonomous Auto-Heal - real backend only.
   const runAiAutoHeal = async () => {
-    setIsAiHealerRunning(true);
-    setAutoHealCompleted(false);
-    const targetType = selectedServerType;
-    const isReal = targetType === 'real';
-    const isVirtual = targetType === 'virtual';
-
-    setAiLogs([
-      `[${new Date().toLocaleTimeString()}] [AI_HEALER] آغاز پروسه خودترمیمی روی ${isReal ? 'سرور اصلی عملیاتی (:8000)' : isVirtual ? 'سرور مجازی داکر کانتینر (:8080)' : 'سرور موازی استیجینگ (:8001)'}...`,
-      `[${new Date().toLocaleTimeString()}] [1/6] آزادسازی سوکت‌های معلق و بررسی پروسه‌های قفل شده...`
-    ]);
-
+    setIsAiHealerRunning(true); setAutoHealCompleted(false);
+    const targetType=selectedServerType;
+    if(targetType==='virtual'){ setAiLogs([isFa?'[ERROR] حالت Virtual برای اجرا واقعی غیرفعال است.':'[ERROR] Virtual mode is disabled for real execution.']); setIsAiHealerRunning(false); return; }
+    const targetDir=targetType==='real'?'/opt/splunk':(targetType==='parallel'?'/opt/splunk_parallel':customTargetDir);
+    setAiLogs([`[${new Date().toISOString()}] [AI_HEALER] Starting real remediation for ${targetDir}`]);
     try {
-      const res = await fetch('/api/parallel-cluster/ai-auto-heal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serverType: selectedServerType,
-          targetDir: isReal ? '/opt/splunk' : (selectedServerType === 'virtual' ? '/opt/splunk_virtual' : (selectedServerType === 'parallel' ? '/opt/splunk_parallel' : customTargetDir)),
-          webPort: webPortInfo.port,
-          restPort: webPortInfo.restPort,
-          tcpPort: webPortInfo.tcpPort,
-          kvPort: webPortInfo.kvPort,
-          adminPassword: 'changeme'
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAiLogs(data.logs || []);
-        setAutoHealCompleted(true);
-        setHttpStatusResult(data.httpStatus || '200');
-        setOverallHealthScore(100);
-        setAutoHealStats({ fixedCount: data.fixedCount || 6, remainingCount: 0 });
-        showToast(isFa ? 'هوش مصنوعی تمام خطاها را با موفقیت برطرف کرد ✓' : 'AI Auto-Heal completed successfully ✓');
-        
-        // Save current issues as fixed for the target server type
-        if (isReal) {
-          setResolvedRealIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else if (isVirtual) {
-          setResolvedVirtualIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else {
-          setResolvedParallelIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        }
-
-        // Re-run diagnostics automatically to verify the healed state
-        setTimeout(() => runDeepDiagnostics(), 1000);
-      } else {
-        throw new Error('Fallback AI Simulation');
-      }
-    } catch (_) {
-      // Fallback simulation with realistic step progression
-      setTimeout(() => {
-        if (isVirtual) {
-          setAiLogs(prev => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] [2/6] تصحیح مجوزهای سیستم فایل لینوکس با مالکیت کاربر اسپلانک (chown 4181:4181)...`,
-            `[${new Date().toLocaleTimeString()}] [3/6] ایجاد لینک‌های نمادین معتبر و رفع ارورهای Permission Denied پوشه /var/lib/splunk_virtual...`,
-            `[${new Date().toLocaleTimeString()}] [4/6] ری‌استارت داکر دیمن و پاکسازی باگ‌های کش موقت کانتینر...`,
-            `[${new Date().toLocaleTimeString()}] [5/6] راه‌اندازی و بووت استارت کانتینر در پورت ۸۰۸۰ و برقراری هارت‌بیت...`,
-            `[${new Date().toLocaleTimeString()}] [6/6] پروب وضعیت پورت وب ۸۰۸۰... کد پاسخ: HTTP 200 OK (کانتینر مجازی پایدار است)!`
-          ]);
-        } else {
-          setAiLogs(prev => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] [2/6] بازنویسی کانفیگ‌ها با لایسنس active_group=Enterprise و پورت KVStore 8193...`,
-            `[${new Date().toLocaleTimeString()}] [3/6] ایجاد فایل user-seed.conf با admin/changeme و پاکسازی هش‌های قدیمی etc/passwd...`,
-            `[${new Date().toLocaleTimeString()}] [4/6] اعمال دسترسی‌های اجرایی (chmod 755) و باز کردن پورت‌های فایروال...`,
-            `[${new Date().toLocaleTimeString()}] [5/6] راه‌اندازی دیمن با فلگ‌های صریح --accept-license --answer-yes --no-prompt --run-as-root...`,
-            `[${new Date().toLocaleTimeString()}] [6/6] پروب وضعیت سرویس وب... کد پاسخ: HTTP 200 OK (آماده و در دسترس)!`
-          ]);
-        }
-        setAutoHealCompleted(true);
-        setIsAiHealerRunning(false);
-        setHttpStatusResult('200');
-        setOverallHealthScore(100);
-        setAutoHealStats({ fixedCount: 6, remainingCount: 0 });
-        
-        // Save current issues as fixed for the target server type
-        if (isReal) {
-          setResolvedRealIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else if (isVirtual) {
-          setResolvedVirtualIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        } else {
-          setResolvedParallelIssueIds(prev => [...prev, ...diagnosticIssues.map(i => i.id)]);
-        }
-
-        setDiagnosticIssues(prev => prev.map(issue => ({ ...issue, status: 'PASS', severity: 'INFO' })));
-        showToast(isFa ? 'هوش مصنوعی تمام مشکلات را شناسایی و رفع کرد ✓' : 'AI Auto-Heal resolved all issues ✓');
-      }, 2000);
-    } finally {
-      setIsAiHealerRunning(false);
-    }
+      const res=await fetch('/api/parallel-cluster/ai-auto-heal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serverType:targetType,targetDir,webPort:webPortInfo.port,restPort:webPortInfo.restPort,tcpPort:webPortInfo.tcpPort,kvPort:webPortInfo.kvPort})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok || data.success!==true) throw new Error(data.error || ('HTTP '+res.status));
+      setAiLogs(data.logs||[]); setAutoHealCompleted(true);
+      setHttpStatusResult(data.httpStatus||'000');
+      setOverallHealthScore(100); setAutoHealStats({fixedCount:Number(data.fixedCount)||0,remainingCount:Number(data.remainingCount)||0});
+      showToast(isFa?'خودترمیمی واقعی انجام و راستی‌آزمایی شد.':'Real auto-heal completed and verified.');
+      await runDeepDiagnostics(targetType);
+    } catch(err:any) {
+      setAiLogs(prev=>[...prev,`[ERROR] ${err?.message||'Real auto-heal failed. No simulated success is reported.'}`]);
+      setAutoHealCompleted(false); setAutoHealStats({fixedCount:0,remainingCount:diagnosticIssues.length});
+      showToast(isFa?'خودترمیمی واقعی انجام نشد.':'Real auto-heal did not complete.');
+    } finally { setIsAiHealerRunning(false); }
   };
 
   // Initial Scan on Mount
