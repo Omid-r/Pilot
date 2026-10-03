@@ -5,9 +5,10 @@ import os from 'os';
 import { UserAccount, UserRole, UserPermissions, getDefaultPermissionsForRole, AuditLogEntry, LicenseInfo, SystemSecurityPolicy } from '../src/types';
 
 // Storage paths
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.SPLUNK_DOCTOR_DATA_DIR || '/var/lib/splunk-doctor';
 const DB_PATH = path.join(DATA_DIR, 'security-db.json');
 const SECRET_KEY_PATH = path.join(DATA_DIR, 'master-signing.key');
+const BOOTSTRAP_PASSWORD_PATH = path.join(DATA_DIR, 'bootstrap-admin-password');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -27,6 +28,7 @@ function getOrCreateMasterKey(): string {
   const newKey = crypto.randomBytes(48).toString('hex');
   try {
     fs.writeFileSync(SECRET_KEY_PATH, newKey, { mode: 0o600 });
+  try { fs.chmodSync(DATA_DIR, 0o700); } catch (_) {}
   } catch (_) {}
   return newKey;
 }
@@ -123,24 +125,20 @@ export function generateSignedLicenseKey(
 
 export function verifySignedLicenseKey(licenseKey: string, currentHwId: string): LicenseInfo {
   const hwId = currentHwId.toUpperCase();
-  const fallbackDate = new Date();
-  fallbackDate.setDate(fallbackDate.getDate() + 30); // 30-day default evaluation
-
   if (!licenseKey || !licenseKey.startsWith('LIC-')) {
-    const daysRemaining = 30;
     return {
       hardwareId: hwId,
-      companyName: 'Evaluation Customer',
-      licenseKey: 'NONE (Evaluation Mode)',
-      status: 'TRIAL',
-      tier: 'TRIAL',
-      maxNodes: 10,
+      companyName: 'Unlicensed Offline Installation',
+      licenseKey: '',
+      status: 'UNLICENSED',
+      tier: 'COMMUNITY',
+      maxNodes: 2,
       issuedAt: new Date().toISOString(),
-      expiresAt: fallbackDate.toISOString(),
-      daysRemaining,
-      features: ['Full Topology', 'Port Probes', 'Config Editor', 'Diagnostic Tools'],
+      expiresAt: '',
+      daysRemaining: 0,
+      features: ['Host Discovery', 'Port Probes', 'Configuration Audit'],
       isTampered: false,
-      watermarkNote: 'TRIAL EVALUATION MODE (Active on Node: ' + hwId + ')'
+      watermarkNote: 'NO COMMERCIAL LICENSE ACTIVE'
     };
   }
 
@@ -265,81 +263,34 @@ function seedInitialStore(): SecurityStore {
   const in14Days = new Date(now);
   in14Days.setDate(now.getDate() + 14);
 
-  // Default Users with cryptographically salted PBKDF2 hashes
-  const adminPass = hashPassword('Splunk@Doctor2026!');
-  const engineerPass = hashPassword('Splunk@Engineer2026!');
-  const operatorPass = hashPassword('Splunk@Operator2026!');
-  const auditorPass = hashPassword('Splunk@Auditor2026!');
-
-  const users: InternalUserAccount[] = [
-    {
-      id: 'usr-admin-01',
-      username: 'admin',
-      fullName: 'مدیر ارشد سیستم (Super Admin)',
-      email: 'admin@splunk-cluster.corp',
-      role: 'super_admin',
-      createdAt: now.toISOString(),
-      expiresAt: inOneYear.toISOString(),
-      isNeverExpires: true,
-      isActive: true,
-      notes: 'حساب مدیر ارشد با دسترسی کامل به تمامی ماژول‌ها و پنل مدیریت',
-      permissions: getDefaultPermissionsForRole('super_admin'),
-      passwordHash: adminPass.hash,
-      salt: adminPass.salt
-    },
-    {
-      id: 'usr-cluster-02',
-      username: 'sec_engineer',
-      fullName: 'مهندس امنیت و کلاستر (Cluster Admin)',
-      email: 'sec@splunk-cluster.corp',
-      role: 'cluster_admin',
-      createdAt: now.toISOString(),
-      expiresAt: in60Days.toISOString(),
-      isNeverExpires: false,
-      isActive: true,
-      notes: 'دسترسی کامل به توپولوژی، کانفیگ‌ها، پورت‌ها و اسکریپت‌های تعمیر خودکار',
-      permissions: getDefaultPermissionsForRole('cluster_admin'),
-      passwordHash: engineerPass.hash,
-      salt: engineerPass.salt
-    },
-    {
-      id: 'usr-operator-03',
-      username: 'net_operator',
-      fullName: 'کارشناس عملیات شبکه (Network Operator)',
-      email: 'operator@splunk-cluster.corp',
-      role: 'operator',
-      createdAt: now.toISOString(),
-      expiresAt: in30Days.toISOString(),
-      isNeverExpires: false,
-      isActive: true,
-      notes: 'پایش زنده ترافیک، تست پورت‌ها و پینگ، بدون امکان دستکاری یا تخریب کانفیگ‌ها',
-      permissions: getDefaultPermissionsForRole('operator'),
-      passwordHash: operatorPass.hash,
-      salt: operatorPass.salt
-    },
-    {
-      id: 'usr-auditor-04',
-      username: 'compliance_auditor',
-      fullName: 'ناظر و بازرس امنیتی (Security Auditor)',
-      email: 'audit@splunk-cluster.corp',
-      role: 'auditor',
-      createdAt: now.toISOString(),
-      expiresAt: in14Days.toISOString(),
-      isNeverExpires: false,
-      isActive: true,
-      notes: 'دسترسی فقط‌خواندنی به لاگ‌ها، گزارش‌های سلامت و دایاگرام پورت‌ها',
-      permissions: getDefaultPermissionsForRole('auditor'),
-      passwordHash: auditorPass.hash,
-      salt: auditorPass.salt
+  // Fresh installs never ship fixed credentials.
+  function getBootstrapPassword(): string {
+    const envPassword = String(process.env.SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD || '').trim();
+    if (envPassword.length >= 12) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(BOOTSTRAP_PASSWORD_PATH, envPassword + '\n', { mode: 0o600 });
+      return envPassword;
     }
-  ];
+    try {
+      if (fs.existsSync(BOOTSTRAP_PASSWORD_PATH)) {
+        const stored = fs.readFileSync(BOOTSTRAP_PASSWORD_PATH, 'utf8').trim();
+        if (stored.length >= 12) return stored;
+      }
+    } catch (_) {}
+    const generated = crypto.randomBytes(24).toString('base64url');
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(BOOTSTRAP_PASSWORD_PATH, generated + '\n', { mode: 0o600 });
+    return generated;
+  }
+
+  const initialPassword = getBootstrapPassword();
+  const adminPass = hashPassword(initialPassword);
+  const engineerPass = hashPassword(initialPassword + '-engineer');
+  const operatorPass = hashPassword(initialPassword + '-operator');
+  const auditorPass = hashPassword(initialPassword + '-auditor');
 
   const hwId = getHardwareFingerprint();
-  // Auto-generate a valid initial commercial trial license for this specific hardware ID
-  const trialExp = new Date(now);
-  trialExp.setDate(now.getDate() + 90);
-  const initialKey = generateSignedLicenseKey(hwId, 'Splunk Enterprise Customer', 'ENTERPRISE_COMMERCIAL', trialExp.toISOString(), 100);
-
+  // New installations start unlicensed. Real commercial licenses are operator-supplied.
   const initialLogs: AuditLogEntry[] = [
     {
       id: 'log-seed-01',
@@ -355,22 +306,22 @@ function seedInitialStore(): SecurityStore {
       id: 'log-seed-02',
       timestamp: now.toISOString(),
       username: 'SYSTEM',
-      action: 'COMMERCIAL_LICENSE_BINDING',
+      action: 'LICENSE_INITIAL_STATE',
       category: 'LICENSE',
       status: 'SUCCESS',
       ip: '127.0.0.1',
-      details: `لایسنس تجاری روی اثرانگشت سخت‌افزاری ${hwId} قفل و فعال شد.`
+      details: `نصب اولیه بدون لایسنس تجاری فعال شد؛ اثرانگشت سخت‌افزاری ${hwId} ثبت شد.`
     }
   ];
 
   return {
     users,
     license: {
-      companyName: 'Splunk Enterprise Customer',
-      licenseKey: initialKey,
-      tier: 'ENTERPRISE_COMMERCIAL',
-      expiresAt: trialExp.toISOString(),
-      maxNodes: 100,
+      companyName: 'Unlicensed Offline Installation',
+      licenseKey: '',
+      tier: 'COMMUNITY',
+      expiresAt: '',
+      maxNodes: 2,
       activatedAt: now.toISOString()
     },
     auditLogs: initialLogs
