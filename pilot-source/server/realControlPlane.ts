@@ -381,7 +381,22 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
         logs.push(r.stdout+r.stderr);
         if(r.code!==0) throw new Error('chronyd enable/start failed: ' + (r.stderr || r.stdout));
       }
-      ok(res,{controls:[...selected],backupRoot,logs,verified:healthFindings()});
+      const after=healthFindings();
+      const reportDir='/var/lib/splunk-doctor/reports';
+      fs.mkdirSync(reportDir,{recursive:true,mode:0o700});
+      const report={
+        reportType:'rhel-host-hardening',
+        generatedAt:new Date().toISOString(),
+        controls:[...selected],
+        backupRoot,
+        commands:logs,
+        findingsBefore:null,
+        findingsAfter:after,
+        result:'SUCCESS'
+      };
+      const reportPath=path.join(reportDir,`hardening-${Date.now()}.json`);
+      fs.writeFileSync(reportPath,JSON.stringify(report,null,2),{encoding:'utf8',mode:0o600});
+      ok(res,{controls:[...selected],backupRoot,logs,verified:after,reportPath,report});
     } catch(e:any){ fail(res,500,e.message,{backupRoot,logs}); }
   });
 
@@ -405,15 +420,21 @@ export function registerRealControlPlane(app: express.Express, deps: Registratio
     if(!home) return fail(res,404,'Splunk binary not found on the target host.');
     const r=await command(path.join(home,'bin','splunk'),[action],{timeoutMs:30000,cwd:home});
     const verified=await command(path.join(home,'bin','splunk'),['status'],{timeoutMs:10000,cwd:home});
-    ok(res,{action,exitCode:r.code,stdout:r.stdout,stderr:r.stderr,verified:verified.stdout||verified.stderr});
+    const statusText=(verified.stdout||verified.stderr||'').toString();
+    const running=/splunkd is running|splunkweb is running/i.test(statusText);
+    const stopped=/splunkd is not running|splunkweb is not running/i.test(statusText);
+    const stateMatches=action==='stop'?stopped:running;
+    const success=r.code===0 && verified.code===0 && stateMatches;
+    res.status(success?200:500).json({success,action,exitCode:r.code,stdout:r.stdout,stderr:r.stderr,verified:statusText,verification:{code:verified.code,running,stopped,stateMatches}});
   });
 
   app.post('/api/real/deploy/direct', auth, async (req,res) => {
     if(!isRoot()) return fail(res,403,'Direct deployment requires root.');
-    const candidate=String(req.body?.artifact||'');
+    const candidate=String(req.body?.artifact||'').trim();
     const allowed=artifactSearch(/splunk.*\.(rpm|tgz|tar\.gz)$/i);
-    const artifact=allowed.find(x=>x===candidate)||allowed[0];
-    if(!artifact) return fail(res,404,'No licensed Splunk artifact is staged in the offline artifact store.');
+    if(!candidate) return fail(res,400,'artifact is required; choose an offline Splunk package explicitly.');
+    if(!allowed.includes(candidate)) return fail(res,404,'Selected Splunk artifact is not present in the offline artifact store.');
+    const artifact=candidate;
     const logs:string[]=['Using artifact: '+artifact];
     try{
       const osr=readOsRelease();
