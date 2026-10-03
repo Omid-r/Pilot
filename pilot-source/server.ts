@@ -223,6 +223,16 @@ async function startServer() {
     });
   }
 
+  function redactCommandForLog(command: string): string {
+    return String(command)
+      .replace(/(SPLUNK_ADMIN_PASSWORD=)([^\s]+)/gi, '$1[REDACTED]')
+      .replace(/(SPLUNK_PASSWORD=)([^\s]+)/gi, '$1[REDACTED]')
+      .replace(/(SPLUNK_PASS4SYMMKEY=)([^\s]+)/gi, '$1[REDACTED]')
+      .replace(/(pass4SymmKey\s*=\s*)([^\s]+)/gi, '$1[REDACTED]')
+      .replace(/(PASSWORD\s*=\s*)([^\s]+)/gi, '$1[REDACTED]')
+      .replace(/(--password\s+)([^\s]+)/gi, '$1[REDACTED]');
+  }
+
   // Enhanced Helper to run shell commands safely with automatic logging and real-time broadcasting & PuTTY SSH streaming
   function runCommand(
     cmd: string,
@@ -250,7 +260,7 @@ async function startServer() {
       toolId: options?.toolId || 'server_system',
       toolNameFa: options?.toolNameFa || 'سرویس سیستم سرور',
       toolNameEn: options?.toolNameEn || 'System Background Process',
-      command: cmd,
+      command: redactCommandForLog(cmd),
       workingDir,
       user: logUser,
       status: 'running',
@@ -271,10 +281,10 @@ async function startServer() {
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}🕒 TIME       :${ANSI.reset} ${ANSI.white}${dateFormatted} ${timeFormatted}${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}🎯 ACTION/TOOL:${ANSI.reset} ${ANSI.brightYellow}${options?.toolNameFa || 'سرویس سیستم'} (${options?.toolNameEn || 'System Process'})${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.cyan}👤 USER & DIR :${ANSI.reset} ${ANSI.yellow}${logUser}${ANSI.dim}@${ANSI.reset}${ANSI.yellow}${workingDir}${ANSI.reset}`);
-    console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.brightCyan}💻 COMMAND    :${ANSI.reset} ${ANSI.brightGreen}${ANSI.bold}${cmd}${ANSI.reset}`);
+    console.log(`${ANSI.brightMagenta}║${ANSI.reset} ${ANSI.brightCyan}💻 COMMAND    :${ANSI.reset} ${ANSI.brightGreen}${ANSI.bold}${redactCommandForLog(cmd)}${ANSI.reset}`);
     console.log(`${ANSI.brightMagenta}╚══════════════════════════════════════════════════════════════════════════════╝${ANSI.reset}`);
 
-    writeToPuTTYLogFile(`[START] [${dateFormatted} ${timeFormatted}] [USER:${logUser}] [TOOL:${options?.toolNameEn || 'System'}] [DIR:${workingDir}] CMD: ${cmd}`);
+    writeToPuTTYLogFile(`[START] [${dateFormatted} ${timeFormatted}] [USER:${logUser}] [TOOL:${options?.toolNameEn || 'System'}] [DIR:${workingDir}] CMD: ${redactCommandForLog(cmd)}`);
 
     return new Promise((resolve) => {
       exec(
@@ -1851,51 +1861,28 @@ async function startServer() {
     }
   });
 
-  // API: Service Control endpoint (Start / Stop / Restart) - Executes with Root permissions!
+  // API: Service Control endpoint (Start / Stop / Restart) - real binary only
   app.post('/api/splunk/control', async (req, res) => {
     const user = (req as any).user as UserAccount | undefined;
     if (user && user.role !== 'super_admin' && !user.permissions?.features?.restart_splunk) {
-      logAuditEvent(
-        'SECURITY',
-        'UNAUTHORIZED_SERVICE_CONTROL',
-        'DENIED',
-        user.username,
-        req.ip || 'unknown',
-        `تلاش غیرمجاز کاربر بدون مجوز restart_splunk برای کنترل سرویس اسپلانک (${req.body?.action}).`
-      );
-      return res.status(403).json({
-        error: 'حساب کاربری شما دارای مجوز لازم برای کنترل و راه‌اندازی مجدد سرویس اسپلانک (restart_splunk) نمی‌باشد.'
-      });
+      return res.status(403).json({ success:false, error:'restart_splunk permission is required.' });
     }
-
-    const { action } = req.body;
-    if (!['start', 'stop', 'restart'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid service control action.' });
-    }
-
+    const action = String(req.body?.action || '');
+    if (!['start','stop','restart'].includes(action)) return res.status(400).json({success:false,error:'Invalid service control action.'});
     const splunkHome = resolveSplunkDirectory(req);
-    const binaryPath = path.join(splunkHome, 'bin/splunk');
-
-    if (!fs.existsSync(binaryPath)) {
-      return res.status(404).json({
-        success:false, sandboxed:false, targetDir:splunkHome,
-        stdout:'', stderr:'', message:`Splunk binary is not installed at ${binaryPath}.`
-      });
-    }
-
+    const binaryPath = path.join(splunkHome,'bin/splunk');
+    if (!fs.existsSync(binaryPath)) return res.status(404).json({success:false,targetDir:splunkHome,error:'Real Splunk binary is not installed.'});
     try {
-      // Run the control command with SPLUNK_HOME and root execution flags
-      const result = await runCommand(`SPLUNK_HOME="${splunkHome}" SPLUNK_RUN_AS_ROOT=1 "${binaryPath}" ${action} --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`);
-      res.json({
-        success: result.code === 0 || (result.stdout && !result.stdout.toLowerCase().includes('error')),
-        sandboxed: false,
-        targetDir: splunkHome,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        code: result.code
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message, targetDir: splunkHome });
+      const result = await runCommand(`SPLUNK_HOME="${splunkHome}" SPLUNK_RUN_AS_ROOT=1 "${binaryPath}" ${action} --accept-license --answer-yes --no-prompt --run-as-root`,{toolId:'splunk_control',toolNameEn:'Real Splunk service control',category:'splunk',timeout:120000});
+      const status = await runCommand(`SPLUNK_HOME="${splunkHome}" "${binaryPath}" status`,{toolId:'splunk_control',toolNameEn:'Verify Splunk service state',category:'splunk',timeout:15000});
+      const statusText=(status.stdout||status.stderr||'').toString();
+      const running=/splunkd is running|splunkweb is running/i.test(statusText);
+      const stopped=/splunkd is not running|splunkweb is not running/i.test(statusText);
+      const matches=action==='stop'?stopped:running;
+      const success=result.code===0 && status.code===0 && matches;
+      return res.status(success?200:500).json({success,targetDir:splunkHome,action,stdout:result.stdout,stderr:result.stderr,exitCode:result.code,verification:statusText});
+    } catch(err:any) {
+      return res.status(500).json({success:false,error:err.message,targetDir:splunkHome});
     }
   });
 
@@ -2023,40 +2010,26 @@ async function startServer() {
   });
 
   // API: Start Real Splunk Parallel Instance
-  app.post('/api/parallel-cluster/start', async (req, res) => {
-    const targetDir = '/opt/splunk_parallel';
-    const binary = path.join(targetDir, 'bin/splunk');
-    try {
-      if (fs.existsSync(binary)) {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binary}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1`);
-        return res.json({ success: true, output: cmdRes.stdout || cmdRes.stderr });
-      }
-      const scriptPath = getScriptPath('install-real-parallel-splunk.sh');
-      if (fs.existsSync(scriptPath)) {
-        await runCommand(`chmod +x "${scriptPath}"`);
-        const result = await runCommand(`bash "${scriptPath}" /opt/splunk "${targetDir}" ${parallelActivePorts.web} ${parallelActivePorts.rest} ${parallelActivePorts.splunkTcp} ${parallelActivePorts.kvstore}`);
-        return res.json({ success: true, output: result.stdout });
-      }
-      res.json({ success: true, message: 'Parallel Splunk initialized' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+  app.post('/api/parallel-cluster/start', async (req,res) => {
+    const targetDir='/opt/splunk_parallel';
+    const password=String(req.body?.adminPassword||req.body?.password||'');
+    const pass4=String(req.body?.pass4SymmKey||'');
+    if(password.length<12 || pass4.length<12) return res.status(400).json({success:false,error:'A real admin password and pass4SymmKey are required.'});
+    const scriptPath=getScriptPath('fix-parallel-web.sh');
+    if(!fs.existsSync(scriptPath)) return res.status(404).json({success:false,error:'Real parallel repair script not found.'});
+    const q=(v:string)=>"'" + v.replace(/'/g,"'\\''") + "'";
+    const cmd='SPLUNK_ADMIN_PASSWORD='+q(password)+' SPLUNK_PASS4SYMMKEY='+q(pass4)+' bash '+q(scriptPath)+' '+Number(parallelActivePorts.web)+' '+Number(parallelActivePorts.rest)+' '+Number(parallelActivePorts.splunkTcp)+' '+Number(parallelActivePorts.kvstore);
+    const r=await runCommand(cmd,{toolId:'parallel_start',toolNameEn:'Real Splunk parallel start',category:'splunk',timeout:300000});
+    return res.status(r.code===0?200:500).json({success:r.code===0,output:r.stdout,error:r.stderr||undefined,exitCode:r.code});
   });
 
   // API: Stop Real Splunk Parallel Instance
-  app.post('/api/parallel-cluster/stop', async (req, res) => {
-    const targetDir = '/opt/splunk_parallel';
-    const binary = path.join(targetDir, 'bin/splunk');
-    try {
-      if (fs.existsSync(binary)) {
-        const cmdRes = await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" stop 2>&1 || true`);
-        return res.json({ success: true, output: cmdRes.stdout });
-      }
-      await runCommand(`fuser -k ${parallelActivePorts.web}/tcp ${parallelActivePorts.rest}/tcp 2>/dev/null || true`);
-      res.json({ success: true, message: 'Parallel processes stopped' });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+  app.post('/api/parallel-cluster/stop', async (_req,res) => {
+    const targetDir='/opt/splunk_parallel';
+    const binary=path.join(targetDir,'bin/splunk');
+    if(!fs.existsSync(binary)) return res.status(404).json({success:false,error:'Real Splunk binary is not installed.'});
+    const r=await runCommand(`SPLUNK_HOME="${targetDir}" "${binary}" stop --run-as-root`,{toolId:'parallel_stop',toolNameEn:'Real Splunk parallel stop',category:'splunk',timeout:60000});
+    return res.status(r.code===0?200:500).json({success:r.code===0,output:r.stdout,error:r.stderr||undefined,exitCode:r.code});
   });
 
   // API: Deep Diagnostics Scanner for Splunk Parallel & Container Environment
@@ -3694,63 +3667,55 @@ PASSWORD = ${password}
 
   // Legacy synthetic tool validation handlers removed. The real validator is registered later in this file.
 
-  // API: Start / Restart Isolated Splunk Daemon
-  app.post('/api/parallel-cluster/start-daemon', async (req, res) => {
-    const parallelDir = '/opt/splunk_parallel';
-    const binPath = path.join(parallelDir, 'bin/splunk');
-    try {
-      if (fs.existsSync(binPath)) {
-        await runCommand(`chmod -R +x "${parallelDir}/bin" 2>/dev/null || true`);
-        const runRes = await runCommand(`SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`);
-        return res.json({
-          success: true,
-          output: runRes.stdout || runRes.stderr
-        });
-      }
-      return res.status(404).json({
-        success: false,
-        error: 'Splunk standalone binary is not installed in /opt/splunk_parallel.'
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+  // API: Start / Restart Real Splunk Daemon
+  app.post('/api/parallel-cluster/start-daemon', async (_req,res) => {
+    const targetDir='/opt/splunk_parallel';
+    const binPath=path.join(targetDir,'bin/splunk');
+    if(!fs.existsSync(binPath)) return res.status(404).json({success:false,error:'Real Splunk binary is not installed.'});
+    const runRes=await runCommand(`SPLUNK_HOME="${targetDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root`,{toolId:'parallel_start',toolNameEn:'Start real Splunk daemon',category:'splunk',timeout:180000});
+    const status=await runCommand(`SPLUNK_HOME="${targetDir}" "${binPath}" status`,{toolId:'parallel_start',toolNameEn:'Verify real Splunk daemon',category:'splunk',timeout:15000});
+    const text=(status.stdout||status.stderr||'').toString();
+    const healthy=status.code===0 && /splunkd is running|splunkweb is running/i.test(text);
+    const success=runRes.code===0 && healthy;
+    return res.status(success?200:500).json({success,output:runRes.stdout||runRes.stderr,verification:text});
   });
 
-  // API: Autonomous workflow step executor
+  // API: Autonomous workflow step executor — only real operations, no synthetic success.
   app.post('/api/autonomous/execute-step', async (req, res) => {
-    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password } = req.body;
-    const logs: string[] = [];
+    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password, pass4SymmKey } = req.body;
+    if (!stepId) return res.status(400).json({success:false,error:'stepId is required.'});
+    const logs:string[]=[`[AI_AGENT] Executing real step: ${stepId}`];
 
-    logs.push(`[AI_AGENT] Executing Step: ${stepId}`);
-
-    if (stepId === 'step-discovery') {
-      const audit = getSystemAudit();
-      const netInfo = getSystemNetworkInfo();
-      logs.push(`[+] Host: ${netInfo.hostname} (${netInfo.primaryIp})`);
-      logs.push(`[+] Listening Ports: ${audit.listeningPorts.map(p => p.port).join(', ')}`);
-      logs.push(`[+] Splunk Detected: ${audit.splunkHome.detected ? audit.splunkHome.path : 'None'}`);
-      logs.push(`[SUCCESS] Discovery audit complete.`);
-    } else if (stepId === 'step-container-k8s') {
-      const script = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
-      if (fs.existsSync(script)) {
-        await runCommand(`chmod +x "${script}"`);
-        const run = await runCommand(`bash "${script}" ${ports.web} ${ports.rest} ${ports.splunkTcp} "${password}"`);
-        logs.push(run.stdout);
-      }
-    } else if (stepId === 'step-deploy-splunk' || stepId === 'step-auto-healing') {
-      const fixScript = path.join(process.cwd(), 'scripts/fix-parallel-web.sh');
-      if (fs.existsSync(fixScript)) {
-        await runCommand(`chmod +x "${fixScript}"`);
-        const run = await runCommand(`bash "${fixScript}" /opt/splunk_parallel ${ports.web} ${ports.rest} ${ports.splunkTcp} ${ports.kvstore || 8193}`);
-        logs.push(run.stdout);
-      }
+    if(stepId==='step-discovery'){
+      const audit=getSystemAudit();
+      logs.push(`Host: ${getSystemNetworkInfo().hostname}`);
+      logs.push(`Listening ports: ${audit.listeningPorts.map(p=>p.port).join(', ')}`);
+      logs.push(`Splunk: ${audit.splunkHome.detected ? audit.splunkHome.path : 'not installed'}`);
+      return res.json({success:true,stepId,logs});
     }
 
-    res.json({
-      success: true,
-      stepId,
-      logs
-    });
+    if(!['step-container-k8s','step-deploy-splunk','step-auto-healing'].includes(stepId)){
+      return res.status(400).json({success:false,error:'Unknown autonomous step.'});
+    }
+    if(typeof password!=='string'||password.length<12||typeof pass4SymmKey!=='string'||pass4SymmKey.length<12){
+      return res.status(400).json({success:false,error:'A real admin password and pass4SymmKey are required.'});
+    }
+
+    const script=stepId==='step-container-k8s'
+      ? path.join(process.cwd(),'scripts/deploy-splunk-k8s-offline.sh')
+      : path.join(process.cwd(),'scripts/fix-parallel-web.sh');
+    if(!fs.existsSync(script)) return res.status(404).json({success:false,error:'Required real deployment script is missing.'});
+    const q=(v:string)=>"'" + v.replace(/'/g,"'\\''") + "'";
+    const extra=stepId==='step-container-k8s'
+      ? ' SPLUNK_ADMIN_PASSWORD='+q(password)+' SPLUNK_PASS4SYMMKEY='+q(pass4SymmKey)
+      : ' SPLUNK_ADMIN_PASSWORD='+q(password)+' SPLUNK_PASS4SYMMKEY='+q(pass4SymmKey);
+    const args=stepId==='step-container-k8s'
+      ? ' '+Number(ports.web)+' '+Number(ports.rest)+' '+Number(ports.splunkTcp)
+      : ' /opt/splunk_parallel '+Number(ports.web)+' '+Number(ports.rest)+' '+Number(ports.splunkTcp)+' '+Number(ports.kvstore||8193);
+    const r=await runCommand(extra+' bash '+q(script)+args,{toolId:'autonomous_agent',toolNameEn:'Real autonomous deployment step',category:'splunk',timeout:360000});
+    logs.push(r.stdout||r.stderr);
+    if(r.code!==0) return res.status(500).json({success:false,stepId,exitCode:r.code,logs});
+    return res.json({success:true,stepId,logs});
   });
 
   // API: Probe a single remote host and port
