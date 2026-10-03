@@ -1,0 +1,85 @@
+name: pilot-real-production-audit
+
+on:
+  push:
+    branches:
+      - fix/pilot-real-production-20261003
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        working-directory: pilot-source
+        run: npm install --legacy-peer-deps --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript check
+        working-directory: pilot-source
+        run: npm run lint
+
+      - name: Shell and Python syntax
+        working-directory: pilot-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            bash -n "$f"
+          done < <(find scripts -type f -name '*.sh' -print0)
+          if command -v python3 >/dev/null 2>&1; then
+            python3 -m py_compile scripts/*.py
+          fi
+
+      - name: Static truthfulness and secret scan
+        working-directory: pilot-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== forbidden fixed credentials / URLs ==='
+          if grep -RInE "changeme|Splunk@Doctor2026|Splunk@Engineer2026|Splunk@Operator2026|Splunk@Auditor2026|hooks[.]slack[.]com/services/|AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,}"             server scripts src --exclude-dir=node_modules --exclude='*.map'; then
+            echo 'Forbidden fixed credential or embedded secret-like material found.'
+            exit 1
+          fi
+          echo '=== fake runtime indicators ==='
+          if grep -RInE "Offline Enterprise Edition|Standalone embedded engine|internal Node.js Parallel Staging Web Engine|splunk/splunk:latest|CONTAINER_SUCCESS="yes"|healthScore *= *100|let httpCode *= *['"]200['"]"             server scripts --exclude-dir=node_modules --exclude='*.map'; then
+            echo 'Potential synthetic runtime path found.'
+            exit 1
+          fi
+
+      - name: Production build
+        working-directory: pilot-source
+        run: npm run build
+
+      - name: Real smoke test
+        working-directory: pilot-source
+        run: node scripts/smoke-test-pilot.mjs
+
+      - name: Verify package
+        working-directory: pilot-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          test -f dist/server.cjs
+          test -f public/splunk_cluster_doctor_rhel_v1.4.0.tar.gz
+          tar -tzf public/splunk_cluster_doctor_rhel_v1.4.0.tar.gz >/tmp/pilot-tar-list.txt
+          grep -qx 'splunk-doctor/node-runtime/bin/node' /tmp/pilot-tar-list.txt
+          grep -qx 'splunk-doctor/dist/server.cjs' /tmp/pilot-tar-list.txt
+          grep -qx 'splunk-doctor/setup.sh' /tmp/pilot-tar-list.txt
+          if grep -qE 'security-db.json|master-signing.key' /tmp/pilot-tar-list.txt; then
+            echo 'Runtime credential/state file was included in package.'
+            exit 1
+          fi
+          echo '[PACKAGE] PASS'
