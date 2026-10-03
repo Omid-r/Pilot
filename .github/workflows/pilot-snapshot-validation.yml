@@ -24,6 +24,22 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Stage portable Node 24 runtime for RHEL bundle
+        env:
+          NODE_VERSION: '24.21.0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          NAME="node-v${NODE_VERSION}-linux-x64"
+          BASE="https://nodejs.org/dist/v${NODE_VERSION}"
+          curl -fsSL "${BASE}/${NAME}.tar.xz" -o "${RUNNER_TEMP}/node.tar.xz"
+          curl -fsSL "${BASE}/SHASUMS256.txt" -o "${RUNNER_TEMP}/SHASUMS256.txt"
+          grep " ${NAME}.tar.xz$" "${RUNNER_TEMP}/SHASUMS256.txt" | sha256sum -c -
+          tar -xJf "${RUNNER_TEMP}/node.tar.xz" -C "${RUNNER_TEMP}"
+          test -x "${RUNNER_TEMP}/${NAME}/bin/node"
+          echo "BUNDLED_NODE_BIN=${RUNNER_TEMP}/${NAME}/bin/node" >> "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/${NAME}/bin/node" -v
+
       - name: Install dependencies
         working-directory: extracted/snapshot-2026-10-03
         run: npm install --no-audit --no-fund --no-package-lock
@@ -51,6 +67,8 @@ jobs:
           test -f splunk-doctor-offline-rhel.tar.gz
           test -f splunk-doctor-offline-rhel.tar.gz.sha256
           sha256sum -c splunk-doctor-offline-rhel.tar.gz.sha256
-          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)node-runtime/bin/node$'
-          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)dist/server.cjs$'
-          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)setup.sh$'
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)node-runtime/bin/node
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)dist/server.cjs
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)setup.sh
+          tar -xOzf splunk-doctor-offline-rhel.tar.gz splunk-doctor/systemd/splunk-doctor.service | grep -F 'ExecStart=/opt/splunk-doctor/node-runtime/bin/node /opt/splunk-doctor/dist/server.cjs'
+          test "$(tar -xOf splunk-doctor-offline-rhel.tar.gz splunk-doctor/node-runtime/bin/node | wc -c)" -gt 1000000
