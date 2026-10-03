@@ -35,6 +35,7 @@ jobs:
           test -f package.json
           test -f server.ts
           test -f index.html
+          test -f offline-prereqs/README.md
           node -e "console.log(require('./package.json').name, require('./package.json').version)"
 
       - name: Install dependencies
@@ -76,26 +77,6 @@ jobs:
             chmod 0755 "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
           done
 
-          cat > offline-prereqs/README.md <<'EOF'
-# Offline RHEL prerequisite media
-
-This directory is populated during the release build with all user-space RPM dependencies required by Splunk Cluster Doctor on RHEL-compatible 8 and 9 x86_64 systems.
-
-Included command families:
-- networking and sockets: iproute, iputils, nmap-ncat, lsof
-- shell/file tools: bash, coreutils, findutils, gawk, sed, grep, tar, gzip, util-linux
-- security/SELinux: openssl, policycoreutils, policycoreutils-python-utils, ca-certificates
-- remote/admin: openssh-clients, rsync, curl
-- firewall: firewalld, iptables
-- scripting: python3
-- container runtime: Podman and its resolved RPM dependencies
-- Kubernetes client: kubectl v1.37.1
-
-Runtime installation is local-only: dnf is invoked with --disablerepo='*'.
-The RHEL kernel and systemd remain host OS components and are not replaced by the application.
-Splunk Enterprise itself is not redistributed; its licensed installer/package remains operator-supplied.
-EOF
-
       - name: TypeScript check
         working-directory: ${{ env.APP_ROOT }}
         run: npm run lint
@@ -114,7 +95,6 @@ EOF
           set -euo pipefail
           test -f dist/index.html
           test -f dist/server.cjs
-          test -x node-runtime/bin/node || true
           test -d offline-prereqs/rhel8/x86_64/rpms
           test -d offline-prereqs/rhel9/x86_64/rpms
           test "$(find offline-prereqs/rhel8/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -gt 0
