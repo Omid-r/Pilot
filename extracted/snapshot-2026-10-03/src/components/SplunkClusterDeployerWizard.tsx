@@ -108,6 +108,8 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
 
   // Selected Target OS
   const [selectedOS, setSelectedOS] = useState<string>('rhel_9_4');
+  const [newNodeIp, setNewNodeIp] = useState<string>('');
+  const [newNodeLomIp, setNewNodeLomIp] = useState<string>('');
 
   // Deployment Target Engine (Bare-Metal Native OS vs Docker Compose vs K8s Operator)
   const [deploymentEngine, setDeploymentEngine] = useState<DeploymentTargetEngine>('baremetal_native');
@@ -178,9 +180,9 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
     const newNode: ServerAssetNode = {
       id: `node-${prefix}-0${roleCount}-${Date.now().toString().slice(-4)}`,
       hostname: `splunk-${prefix}-0${roleCount}.soc.local`,
-      ip: `192.168.10.${50 + roleCount + Math.floor(Math.random() * 20)}`,
-      lomIp: `192.168.100.${50 + roleCount + Math.floor(Math.random() * 20)}`,
-      lomType: 'idrac',
+      ip: newNodeIp.trim(),
+      lomIp: newNodeLomIp.trim() || undefined,
+      lomType: newNodeLomIp.trim() ? 'idrac' : undefined,
       sshPort: 22,
       sshUser: 'root',
       role,
@@ -203,8 +205,18 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
       }
     };
 
-    setAssets([...assets, newNode]);
+    if (!newNode.ip) {
+      alert(isFa ? 'برای افزودن نود، IP واقعی را وارد کنید.' : 'Enter a real node IP before adding the node.');
+      return;
+    }
+    if (assets.some(a => a.ip === newNode.ip)) {
+      alert(isFa ? 'این IP قبلاً در نقشه وجود دارد.' : 'This IP already exists in the topology.');
+      return;
+    }
+    setAssets(prev => [...prev, newNode]);
     setSelectedNodeId(newNode.id);
+    setNewNodeIp('');
+    setNewNodeLomIp('');
   };
 
   // Helper to remove node
@@ -223,71 +235,64 @@ export const SplunkClusterDeployerWizard: React.FC<SplunkClusterDeployerWizardPr
     setAssets(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
 
-  // Automated Deployment Simulator & Script Runner
-  const handleStartFullClusterDeploy = () => {
+  // Real full-cluster orchestration — delegates to authenticated backend and reports actual results.
+  const handleStartFullClusterDeploy = async () => {
+    if (!assets.length) {
+      alert(isFa ? 'ابتدا حداقل یک نود واقعی به نقشه اضافه یا از Discovery انتخاب کنید.' : 'Add or discover at least one real node before deployment.');
+      return;
+    }
+    const invalid=assets.find(a=>!a.ip || !a.sshUser);
+    if(invalid){
+      alert(isFa ? `اطلاعات اتصال نود ${invalid.hostname} کامل نیست.` : `Connection details are incomplete for ${invalid.hostname}.`);
+      return;
+    }
+
     setIsDeploying(true);
-    setDeploymentProgress(5);
+    setDeploymentProgress(1);
     setDeployStepIndex(0);
-    setDeployLogs([
-      `[${new Date().toLocaleTimeString()}] [PROVISION] Initializing Bare-Metal / LOM Redfish API & SSH Master Handshake...`,
-      `[${new Date().toLocaleTimeString()}] [AUTH] Verifying Root SSH keys across ${assets.length} targeted nodes...`,
-    ]);
+    setDeployLogs([`[${new Date().toLocaleTimeString()}] [REAL_ORCHESTRATOR] Starting ${deploymentEngine} deployment for ${assets.length} real nodes.`]);
 
-    const deploySteps = deploymentEngine === 'baremetal_native' ? [
-      { progress: 18, log: `[OS_VERIFY] Validating Native Linux OS (${selectedOS}) & storage partitions on ${assets.length} Bare-Metal/VM nodes...` },
-      { progress: 32, log: `[HARDENING] Applying Kernel sysctl (swappiness=1, max_map_count=262144) & THP disabled in GRUB/tuned...` },
-      { progress: 48, log: `[STORAGE_XFS] Aligning NVMe SSD storage with XFS (noatime,nodiratime,logbufs=8) mounted at /opt/splunk...` },
-      { progress: 65, log: `[NATIVE_INSTALL] Installing official Splunk Enterprise 9.4 RPM/DEB into /opt/splunk with user splunk:splunk...` },
-      { progress: 78, log: `[SYSTEMD_BOOT] Registering /etc/systemd/system/Splunkd.service daemon with auto-start on boot & systemd cgroup limits...` },
-      { progress: 90, log: `[SPLUNK_CLUSTER] Bootstrapping Native Multi-Site Indexer Cluster (RF=${sizingInputs.replicationFactor}, SF=${sizingInputs.searchFactor}), Search Head Cluster & Deployer via CLI...` },
-      { progress: 100, log: `[READY] Bare-Metal Native Cluster online! Splunkd systemd services active across all nodes (TCP 9997/8089 sockets active, no containers required).` }
-    ] : deploymentEngine === 'docker_standalone' ? [
-      { progress: 18, log: `[OS_INSTALL] Checking host Linux prerequisites & volume mount points for ${assets.length} nodes...` },
-      { progress: 35, log: `[HARDENING] Applying Linux Kernel Limits & non-root container user namespace mappings...` },
-      { progress: 52, log: `[DOCKER] Installing Docker Engine 26.1 and loading air-gapped splunk/splunk:9.4.0 images...` },
-      { progress: 70, log: `[COMPOSE] Deploying docker-compose.yml clusters with persistent volume binding to /opt/splunk/etc...` },
-      { progress: 85, log: `[CLUSTER_INIT] Executing splunk edit cluster-config & clustering handshake...` },
-      { progress: 100, log: `[READY] Dockerized Splunk cluster online! Containers active and healthy.` }
-    ] : [
-      { progress: 18, log: `[OS_INSTALL] Triggering Kickstart PXE Boot for ${selectedOS} on all bare-metal nodes...` },
-      { progress: 35, log: `[HARDENING] Applying Linux Kernel Tuning: Transparent Huge Pages (THP) disabled via tuned-adm & systemd...` },
-      { progress: 48, log: `[SECURITY] Enforcing /etc/security/limits.conf (nofile=65535, nproc=20480), sysctl vm.max_map_count=262144...` },
-      { progress: 62, log: `[CONTAINER] Installing Docker Engine 26.1 & Air-gapped K3s/RKE2 Kubernetes Cluster...` },
-      { progress: 75, log: `[OPERATOR] Deploying Splunk Operator for Kubernetes (SOK v2.5.0) & mTLS Certificate Mesh...` },
-      { progress: 88, log: `[SPLUNK_CLUSTER] Bootstrapping Multi-Site Indexer Cluster (RF=${sizingInputs.replicationFactor}, SF=${sizingInputs.searchFactor}), Search Head Cluster & Deployer...` },
-      { progress: 100, log: `[READY] Kubernetes Splunk Cluster online! SOK CRDs active and auto-failover enabled.` }
-    ];
+    try {
+      const res=await fetch('/api/real/cluster/deploy',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          deploymentEngine,
+          selectedOS,
+          sizingInputs,
+          nodes:assets.map(a=>({
+            id:a.id,hostname:a.hostname,ip:a.ip,sshUser:a.sshUser,sshPort:a.sshPort,
+            lomIp:a.lomIp,lomType:a.lomType,role:a.role,site:a.site,
+            cpuCores:a.cpuCores,ramGB:a.ramGB,storageNVMeGB:a.storageNVMeGB,
+            osType:a.osType,osInstallConfig:a.osInstallConfig,
+            containerEngineConfig:a.containerEngineConfig,
+            splunkVersion:(a as any).splunkVersion
+          }))
+        })
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok || !data.success) throw new Error(data.error || 'Real cluster deployment failed');
 
-    deploySteps.forEach((step, idx) => {
-      setTimeout(() => {
-        setDeploymentProgress(step.progress);
-        setDeployStepIndex(idx + 1);
-        setDeployLogs(prev => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] ${step.log}`
-        ]);
+      const results=Array.isArray(data.nodes)?data.nodes:[];
+      setDeploymentProgress(100);
+      setDeployStepIndex(results.length);
+      setDeployLogs(prev=>[...prev,...(data.logs||[]),`[${new Date().toLocaleTimeString()}] [REAL_COMPLETE] Cluster deployment verified by backend.`]);
 
-        if (idx === deploySteps.length - 1) {
-          setIsDeploying(false);
-          setAssets(prev => prev.map(a => ({
-            ...a,
-            status: 'splunk_running',
-            installProgress: 100,
-            hardeningReport: {
-              thpDisabled: true,
-              sysctlTuned: true,
-              limitsConfigured: true,
-              nonRootUserCreated: true,
-              firewallConfigured: true,
-              selinuxEnforced: true,
-              mtlsCertGenerated: true
-            }
-          })));
-          if (onDeployComplete) onDeployComplete(assets);
-        }
-      }, (idx + 1) * 1200);
-    });
+      setAssets(prev=>prev.map(a=>{
+        const r=results.find((x:any)=>x.id===a.id);
+        return r ? {...a,status:r.status||a.status,installProgress:r.installProgress??100,hardeningReport:r.hardeningReport,isConfigured:r.isConfigured??a.isConfigured} : a;
+      }));
+      if(onDeployComplete) onDeployComplete(
+        results.length ? assets.map(a=>results.find((x:any)=>x.id===a.id)?{...a,...results.find((x:any)=>x.id===a.id)}:a) : assets
+      );
+    } catch(e:any) {
+      setDeployLogs(prev=>[...prev,`[${new Date().toLocaleTimeString()}] [FAILED] ${e.message}`]);
+      setDeploymentProgress(0);
+    } finally {
+      setIsDeploying(false);
+    }
   };
+
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
