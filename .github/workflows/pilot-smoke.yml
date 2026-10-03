@@ -38,6 +38,15 @@ jobs:
         working-directory: extracted/snapshot-2026-10-03
         run: npm run build
 
+      - name: Upload offline RHEL package
+        uses: actions/upload-artifact@v6
+        with:
+          name: splunk-doctor-rhel-package
+          path: |
+            extracted/snapshot-2026-10-03/public/*.tar.gz
+            extracted/snapshot-2026-10-03/public/*.sha256
+          if-no-files-found: error
+
       - name: Start real server and run smoke
         working-directory: extracted/snapshot-2026-10-03
         shell: bash
