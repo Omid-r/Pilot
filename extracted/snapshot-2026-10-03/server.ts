@@ -2673,64 +2673,33 @@ PASSWORD = ${password}
       splunkHome,
       isRealBinary,
       edition: 'Splunk Enterprise Server',
-      defaultPackage: `splunk-${version}-enterprise-linux-x86_64.tgz`,
+      defaultPackage: version !== 'unknown' ? `splunk-${version}-enterprise-linux-x86_64.tgz` : null,
       rawOutput
     });
   });
 
-  // API: List local available packages for parallel installation
-  app.get('/api/parallel-cluster/packages', (req, res) => {
-    const searchDirs = ['/opt/splunk_packages', '/tmp', '/opt', process.cwd()];
-    const foundPackages: Array<{ name: string; path: string; sizeMb: number; type: string }> = [
-      {
-        name: 'splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.1-enterprise-linux-x86_64.tgz',
-        sizeMb: 482,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        path: '/opt/splunk_packages/splunk-9.2.0-enterprise-linux-x86_64.tgz',
-        sizeMb: 476,
-        type: 'Official TGZ Archive'
-      },
-      {
-        name: 'splunk-9.1.4-linux-2.6-x86_64.rpm',
-        path: '/opt/splunk_packages/splunk-9.1.4-linux-2.6-x86_64.rpm',
-        sizeMb: 468,
-        type: 'RHEL / CentOS RPM Package'
-      }
-    ];
-
-    searchDirs.forEach(dir => {
-      try {
-        if (fs.existsSync(dir)) {
-          const files = fs.readdirSync(dir);
-          files.forEach(f => {
-            if (/splunk.*(\.tgz|\.tar\.gz|\.rpm|\.deb)$/i.test(f)) {
-              const fullPath = path.join(dir, f);
-              if (!foundPackages.some(p => p.path === fullPath)) {
-                let sizeMb = 480;
-                try {
-                  const stat = fs.statSync(fullPath);
-                  sizeMb = Math.round(stat.size / (1024 * 1024));
-                } catch (_) {}
-                foundPackages.push({
-                  name: f,
-                  path: fullPath,
-                  sizeMb,
-                  type: f.endsWith('.rpm') ? 'RPM Package' : 'TGZ Archive'
-                });
-              }
-            }
-          });
+  // API: List local available Splunk packages from the offline store only.
+  app.get('/api/parallel-cluster/packages', (_req,res) => {
+    const roots=['/opt/splunk_packages','/opt/splunk-doctor/artifacts','/var/lib/splunk-doctor/artifacts'];
+    const found:any[]=[];
+    const seen=new Set<string>();
+    for(const root of roots){
+      if(!fs.existsSync(root)) continue;
+      const walk=(dir:string)=>{
+        let entries:fs.Dirent[]=[]; try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch{return;}
+        for(const e of entries){
+          const full=path.join(dir,e.name);
+          if(e.isDirectory()) walk(full);
+          else if(/splunk.*\\.(tgz|tar\\.gz|rpm)$/i.test(e.name) && !seen.has(full)){
+            seen.add(full);
+            const st=fs.statSync(full);
+            found.push({name:e.name,path:full,sizeMb:Math.round(st.size/1048576),type:/\\.rpm$/i.test(e.name)?'RPM Package':'TGZ Archive'});
+          }
         }
-      } catch (_) {}
-    });
-
-    res.json({
-      packages: foundPackages
-    });
+      };
+      walk(root);
+    }
+    res.json({success:true,packages:found.sort((a,b)=>a.name.localeCompare(b.name))});
   });
 
   // API: Real installation & provisioning execution for Parallel Splunk instance.
