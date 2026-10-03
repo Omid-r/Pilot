@@ -3514,7 +3514,7 @@ async function startServer() {
     let routeRows:any[]=[];
     let neighRows:any[]=[];
     try{routeRows=routesRaw.code===0?JSON.parse(routesRaw.stdout||'[]'):[];}catch{}
-    try{neighRows=neighRaw.code===0?JSON.parse(neighRaw.stdout||'[]'):[];}
+    try{neighRows=neighRaw.code===0?JSON.parse(neighRaw.stdout||'[]'):[];}catch{}
     const nodes:any[]=[];
 
     for(const iface of netInfo.ipv4List||[]){
