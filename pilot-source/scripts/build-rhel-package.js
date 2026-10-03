@@ -93,12 +93,12 @@ fs.writeFileSync(path.join(stagingDir, 'package.json'), JSON.stringify(packageJs
 
 const startSh = `#!/usr/bin/env bash
 set -Eeuo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 NODE="$DIR/node-runtime/bin/node"
 [[ -x "$NODE" ]] || { echo "ERROR: bundled Node runtime missing"; exit 1; }
 export NODE_ENV=production
-export PORT="${PORT:-3000}"
-export SPLUNK_HOME="${SPLUNK_HOME:-/opt/splunk}"
+export PORT="\${PORT:-3000}"
+export SPLUNK_HOME="\${SPLUNK_HOME:-/opt/splunk}"
 exec "$NODE" "$DIR/dist/server.cjs"
 `;
 fs.writeFileSync(path.join(stagingDir, 'start.sh'), startSh, { encoding: 'utf8', mode: 0o755 });
@@ -106,7 +106,7 @@ fs.writeFileSync(path.join(stagingDir, 'start.sh'), startSh, { encoding: 'utf8',
 const installServiceSh = `#!/usr/bin/env bash
 set -Eeuo pipefail
 [[ $EUID -eq 0 ]] || { echo "Run as root: sudo bash install-service.sh"; exit 1; }
-BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 exec "$BASE/setup.sh"
 `;
 fs.writeFileSync(path.join(stagingDir, 'install-service.sh'), installServiceSh, { encoding: 'utf8', mode: 0o755 });
