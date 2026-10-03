@@ -24,6 +24,11 @@ jobs:
           ZIP="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
           test -n "$ZIP" || { echo "No ZIP found in repository root"; exit 1; }
 
+          # Discard any unpushed/generated commit from a previous attempt.
+          # This keeps a secret-containing failed local commit out of the next push.
+          git fetch origin "$GITHUB_REF_NAME"
+          git reset --hard "origin/$GITHUB_REF_NAME"
+
           rm -rf /tmp/pilot-unpack pilot-source
           mkdir -p /tmp/pilot-unpack pilot-source
           unzip -q "$ZIP" -d /tmp/pilot-unpack
@@ -70,6 +75,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pilot-source PILOT_SOURCE_MANIFEST.md
-          git commit -m "[bot] extract Pilot source for audit" || exit 0
-          git pull --rebase origin "$GITHUB_REF_NAME"
+          git commit -m "[bot] extract Pilot source for audit"
           git push origin "HEAD:$GITHUB_REF_NAME"
