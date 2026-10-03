@@ -1,14 +1,15 @@
 {
   "name": "splunk-cluster-doctor",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.0-pilot-20261003",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --external:vite --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --external:vite --sourcemap --outfile=dist/server.cjs && node scripts/build-offline-rhel.mjs",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "smoke": "node scripts/smoke-test-real-control-plane.mjs"
+    "smoke": "node scripts/smoke-test-real-control-plane.mjs",
+    "package:rhel": "node scripts/build-offline-rhel.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
