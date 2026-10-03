@@ -113,9 +113,15 @@ echo "=========================================================="
 echo " Starting Splunk Cluster Doctor (RHEL Standalone v${PACKAGE_VERSION})"
 echo "=========================================================="
 
-# Prefer bundled Node.js so the target host needs no internet package repository.
+# Install the bundled runtime into /usr/local/bin so standard RHEL SELinux policy permits execution.
 if [ -x "$DIR/node-runtime/bin/node" ]; then
-    NODE_BIN="$DIR/node-runtime/bin/node"
+    install -d -m 0755 /usr/local/bin
+    install -m 0755 "$DIR/node-runtime/bin/node" /usr/local/bin/splunk-doctor-node
+    if command -v semanage >/dev/null 2>&1; then
+      semanage fcontext -a -t bin_t /usr/local/bin/splunk-doctor-node 2>/dev/null || semanage fcontext -m -t bin_t /usr/local/bin/splunk-doctor-node 2>/dev/null || true
+    fi
+    if command -v restorecon >/dev/null 2>&1; then restorecon -v /usr/local/bin/splunk-doctor-node || true; fi
+    NODE_BIN="/usr/local/bin/splunk-doctor-node"
 else
     NODE_BIN="$(command -v node 2>/dev/null || true)"
 fi
@@ -180,7 +186,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/splunk-doctor
-ExecStart=/opt/splunk-doctor/node-runtime/bin/node /opt/splunk-doctor/dist/server.cjs
+ExecStart=/usr/local/bin/splunk-doctor-node /opt/splunk-doctor/dist/server.cjs
 UMask=0077
 Restart=always
 RestartSec=5
@@ -188,6 +194,8 @@ KillMode=process
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=SPLUNK_HOME=/opt/splunk
+Environment=SPLUNK_DOCTOR_DATA_DIR=/var/lib/splunk-doctor
+UMask=0077
 
 # Security limits
 LimitNOFILE=65536
