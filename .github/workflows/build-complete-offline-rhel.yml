@@ -1,0 +1,135 @@
+name: Build Complete Offline RHEL Installer
+
+on:
+  push:
+    branches:
+      - pilot-production-rebuild-20261003
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    env:
+      APP_ROOT: extracted/snapshot-2026-10-03
+      KUBECTL_VERSION: v1.37.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install application dependencies
+        working-directory: ${{ env.APP_ROOT }}
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: Check source and smoke test
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run build
+          npm run smoke
+
+      - name: Download RHEL 8 offline RPM closure
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          mkdir -p offline-prereqs/rhel8/x86_64/rpms
+          docker run --rm \
+            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman" \
+            -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out" \
+            rockylinux:8 \
+            bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
+
+      - name: Download RHEL 9 offline RPM closure
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          mkdir -p offline-prereqs/rhel9/x86_64/rpms
+          docker run --rm \
+            -e "PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman" \
+            -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out" \
+            rockylinux:9 \
+            bash -lc 'dnf -y install dnf-plugins-core && dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
+
+      - name: Download verified kubectl
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          for rhel in 8 9; do
+            mkdir -p "offline-prereqs/rhel${rhel}/x86_64/bin"
+            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+              -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" \
+              -o "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl.sha256"
+            chmod 0755 "offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+            (
+              cd "offline-prereqs/rhel${rhel}/x86_64/bin"
+              sha256sum -c kubectl.sha256
+            )
+          done
+
+      - name: Verify offline media
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          test "$(find offline-prereqs/rhel8/x86_64/rpms -name '*.rpm' -type f | wc -l)" -gt 0
+          test "$(find offline-prereqs/rhel9/x86_64/rpms -name '*.rpm' -type f | wc -l)" -gt 0
+          test -x offline-prereqs/rhel8/x86_64/bin/kubectl
+          test -x offline-prereqs/rhel9/x86_64/bin/kubectl
+          test -x scripts/install-offline-prereqs.sh
+
+      - name: Assemble one complete offline installer
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          rm -rf release
+          mkdir -p release/splunk-doctor/node-runtime/bin
+          cp -a dist scripts package.json README.md metadata.json offline-prereqs release/splunk-doctor/
+          cp -a node_modules release/splunk-doctor/
+          cp "$(command -v node)" release/splunk-doctor/node-runtime/bin/node
+          chmod 0755 release/splunk-doctor/node-runtime/bin/node
+          rm -f release/splunk-doctor/data/security-db.json
+          rm -f release/splunk-doctor/data/master-signing.key
+          rm -f release/splunk-doctor/data/bootstrap-admin-password
+          chmod -R u=rwX,go=rX release/splunk-doctor
+          tar -czf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz -C release splunk-doctor
+          sha256sum release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz > release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+
+      - name: Verify final archive
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          sha256sum -c release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/dist/server.cjs'
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/node-runtime/bin/node'
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/node_modules/express/'
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/.*\.rpm'
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/.*\.rpm'
+          tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -q 'splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl$'
+          if tar -tzf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz | grep -Eq '(security-db\.json|master-signing\.key|bootstrap-admin-password)$'; then
+            exit 1
+          fi
+
+      - name: Upload complete offline installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0-complete
+          path: |
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+          if-no-files-found: error
