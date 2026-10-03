@@ -631,48 +631,14 @@ export default function App() {
     showToast(isFa ? 'هشدار تایید شد.' : 'Alert acknowledged.');
   };
 
-  const handleSimulateDisconnect = (nodeId: string) => {
-    setHeartbeatNodes(prev => prev.map(n => {
-      if (n.id === nodeId) {
-        return {
-          ...n,
-          status: 'DISCONNECTED_SILENT',
-          eventsPerSec: 0,
-          bandwidthKbps: 0,
-          secondsSinceLastBeat: 45,
-          sslHandshakeStatus: 'FAILED_HANDSHAKE',
-          queueUtilizationPct: 100
-        };
-      }
-      return n;
-    }));
-    const node = heartbeatNodes.find(n => n.id === nodeId);
-    if (node) {
-      const newAlert: HeartbeatDropAlert = {
-        id: `alert-${Date.now()}`,
-        nodeId: node.id,
-        hostname: node.hostname,
-        componentRole: node.componentRole,
-        timestamp: new Date().toLocaleTimeString(),
-        alertType: 'LOG_STREAM_HALTED',
-        severity: 'CRITICAL',
-        messageFa: `قطع ناگهانی جریان لاگ و توقف ضربان قلب روی نود ${node.hostname}`,
-        messageEn: `Sudden log stream halt & heartbeat timeout on ${node.hostname}`,
-        impactFa: 'احتمال توقف ایندکس‌گذاری لاگ‌های امنیتی این نود در SOC',
-        impactEn: 'Risk of security event blind spot in SOC ingestion pipeline',
-        recommendedActionFa: 'اتصال ریموت برقرار کرده و دستور splunk status / restart را اجرا نمایید.',
-        recommendedActionEn: 'Connect via remote gateway and execute diagnostic commands.',
-        isAcknowledged: false
-      };
-      setDropAlerts(prev => [newAlert, ...prev]);
-      showToast(isFa ? `هشدار: لاگ‌های ${node.hostname} قطع شدند!` : `Warning: Log stream halted on ${node.hostname}!`);
-    }
+  const handleSimulateDisconnect = (_nodeId: string) => {
+    showToast(isFa ? 'حالت شبیه‌سازی در نسخه عملیاتی غیرفعال است.' : 'Simulation mode is disabled in the operational build.');
   };
 
   const handleRecoverAllNodes = () => {
-    setHeartbeatNodes(INITIAL_HEARTBEAT_NODES);
-    setDropAlerts(prev => prev.map(a => ({ ...a, isAcknowledged: true })));
-    showToast(isFa ? 'تمام نودها به وضعیت آنلاین و پایدار بازیابی شدند.' : 'All nodes restored to healthy status.');
+    showToast(isFa
+      ? 'بازیابی جمعی ساختگی غیرفعال است؛ فقط عملیات واقعی روی نود هدف اجرا می‌شود.'
+      : 'Synthetic fleet recovery is disabled; only real operations against a target node are executed.');
   };
 
   const handleOpenRemoteTerminalFromNode = (node: HeartbeatNode) => {
@@ -695,6 +661,66 @@ export default function App() {
     return null;
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  useEffect(() => {
+    if (!authToken) {
+      setHeartbeatNodes([]);
+      setDropAlerts([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshLiveHeartbeat = async () => {
+      try {
+        const response = await fetch('/api/real/network/scan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({})
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+
+        const now = new Date();
+        const liveNodes: HeartbeatNode[] = (Array.isArray(data.nodes) ? data.nodes : []).map((node: any) => {
+          const openPorts = Array.isArray(node.openPorts) ? node.openPorts : [];
+          return {
+            id: String(node.id || `live-${node.ip}`),
+            hostname: String(node.hostname || node.ip || 'unknown'),
+            ip: String(node.ip || ''),
+            componentRole: 'unknown',
+            status: 'ONLINE_ACTIVE',
+            lastHeartbeatTime: now.toLocaleTimeString(),
+            secondsSinceLastBeat: 0,
+            pingMs: 0,
+            eventsPerSec: 0,
+            bandwidthKbps: 0,
+            queueUtilizationPct: 0,
+            sslHandshakeStatus: 'FAILED_HANDSHAKE',
+            activePipelines: openPorts.map((port: number) => `TCP/${port}`),
+            recentHeartbeatTrend: [],
+            unresolvedDropEvents: 0
+          };
+        }).filter((node: HeartbeatNode) => node.ip);
+
+        setHeartbeatNodes(liveNodes);
+        setDropAlerts([]);
+      } catch (error) {
+        console.warn('[REAL HEARTBEAT] refresh failed', error);
+      }
+    };
+
+    refreshLiveHeartbeat();
+    const timer = window.setInterval(refreshLiveHeartbeat, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [authToken]);
+
   // Virtual Server Wipe & Lifecycle Modal State (مدیریت و حذف سرور مجازی)
   const [isVirtualWipeModalOpen, setIsVirtualWipeModalOpen] = useState<boolean>(false);
   // Tool Validation & Diagnostic Health Modal State (اعتبار سنجی ابزارهای سامانه)
