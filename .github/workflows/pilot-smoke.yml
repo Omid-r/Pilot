@@ -1,0 +1,74 @@
+name: Pilot Real Smoke
+
+on:
+  push:
+    branches:
+      - fix/pilot-smoke-20261003
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v5
+        with:
+          ref: fix/pilot-smoke-20261003
+          fetch-depth: 1
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: Type check
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run lint
+
+      - name: Build
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run build
+
+      - name: Start real server and run smoke
+        working-directory: extracted/snapshot-2026-10-03
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() {
+            if [[ -n "${SERVER_PID:-}" ]]; then
+              kill "$SERVER_PID" 2>/dev/null || true
+              wait "$SERVER_PID" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          node dist/server.cjs > /tmp/pilot-server.log 2>&1 &
+          SERVER_PID=$!
+
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat /tmp/pilot-server.log
+              exit 1
+            fi
+            sleep 0.25
+          done
+
+          curl -fsS http://127.0.0.1:3000/ >/dev/null
+          npm run smoke
+
+      - name: Dump server log on failure
+        if: failure()
+        working-directory: extracted/snapshot-2026-10-03
+        run: cat /tmp/pilot-server.log || true
