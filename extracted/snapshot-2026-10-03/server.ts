@@ -3927,78 +3927,136 @@ PASSWORD = ${password}
     });
   });
 
-  // API: Single Tool Validation
+  // API: Real Tool Validation
+  const toolModules = [
+    'architect_overseer', 'autonomous_agent', 'ai_diagnostics', 'bento_overview',
+    'cluster_deployer', 'architecture_auditor', 'topology', 'management_nodes',
+    'docker_k8s', 'commercial_license', 'health_audit', 'live_logs', 'config_editor',
+    'doc_reference', 'heartbeat_radar', 'alert_manager', 'network_sources',
+    'component_agents', 'remote_gateway', 'package_center', 'backup_archive',
+    'network_toolbox', 'admin_security'
+  ];
+
+  function validateTool(toolId: string) {
+    const started = Date.now();
+    const checks: any[] = [];
+    const add = (nameFa: string, nameEn: string, pass: boolean, detailFa: string, detailEn: string) => {
+      checks.push({
+        nameFa,
+        nameEn,
+        status: pass ? 'pass' : 'warn',
+        detailFa,
+        detailEn
+      });
+    };
+
+    add(
+      'پردازش واقعی موتور سرور',
+      'Server Runtime',
+      Boolean(process.pid),
+      `پردازش Node.js فعال است (PID: ${process.pid}).`,
+      `Node.js process is active (PID: ${process.pid}).`
+    );
+
+    const osr = readOsRelease();
+    add(
+      'شناسایی سیستم‌عامل',
+      'Operating System Probe',
+      Boolean(osr.ID),
+      osr.ID ? `سیستم‌عامل ${osr.PRETTY_NAME || osr.ID} شناسایی شد.` : 'اطلاعات سیستم‌عامل در دسترس نیست.',
+      osr.ID ? `Detected ${osr.PRETTY_NAME || osr.ID}.` : 'OS identification is unavailable.'
+    );
+
+    const needsNetwork = ['architect_overseer','network_sources','network_toolbox','topology','heartbeat_radar'].includes(toolId);
+    if (needsNetwork) {
+      const ipCmd = commandSync('ip', ['-json', 'addr']);
+      const ssCmd = commandSync('ss', ['-H', '-tulpn']);
+      add(
+        'ابزارهای واقعی شبکه',
+        'Network Tooling',
+        Boolean(ipCmd) && ssCmd !== '',
+        Boolean(ipCmd) && ssCmd !== '' ? 'ip و ss پاسخ واقعی ارائه دادند.' : 'ip/ss در محیط اجرا در دسترس یا قابل استفاده نیستند.',
+        Boolean(ipCmd) && ssCmd !== '' ? 'ip and ss returned live host data.' : 'ip/ss are unavailable or not usable.'
+      );
+    }
+
+    const needsSplunk = ['architect_overseer','autonomous_agent','ai_diagnostics','cluster_deployer','architecture_auditor','topology','management_nodes','docker_k8s','commercial_license','health_audit','live_logs','config_editor','splunk_web','package_center'].includes(toolId);
+    if (needsSplunk) {
+      const home = findSplunkHome();
+      add(
+        'وجود باینری واقعی Splunk',
+        'Splunk Binary',
+        Boolean(home),
+        home ? `Splunk در ${home} شناسایی شد.` : 'باینری Splunk روی این host شناسایی نشد.',
+        home ? `Splunk detected at ${home}.` : 'No Splunk binary detected on this host.'
+      );
+    }
+
+    if (toolId === 'docker_k8s') {
+      const docker = commandSync('docker', ['--version']);
+      const podman = commandSync('podman', ['--version']);
+      const kubectl = commandSync('kubectl', ['version', '--client=true', '--output=json']);
+      const available = Boolean(docker || podman || kubectl);
+      add(
+        'موتور کانتینر/کلاستر',
+        'Container / Kubernetes Tooling',
+        available,
+        available ? 'حداقل یکی از docker/podman/kubectl در دسترس است.' : 'docker، podman و kubectl هیچ‌کدام در دسترس نیستند.',
+        available ? 'At least one of docker/podman/kubectl is available.' : 'docker, podman and kubectl are unavailable.'
+      );
+    }
+
+    if (toolId === 'remote_gateway') {
+      const ssh = commandSync('ssh', ['-V']);
+      add('ابزار SSH', 'SSH Client', Boolean(ssh), Boolean(ssh) ? 'کلاینت SSH در دسترس است.' : 'کلاینت SSH در دسترس نیست.', Boolean(ssh) ? 'SSH client is available.' : 'SSH client is unavailable.');
+    }
+
+    if (toolId === 'package_center' || toolId === 'backup_archive') {
+      let writable = false;
+      try { fs.accessSync(process.cwd(), fs.constants.W_OK); writable = true; } catch {}
+      const artifacts = artifactSearch(/(splunk.*\\.(rpm|tgz|tar\\.gz)|\\.(tar|tar\\.gz|oci))$/i);
+      add(
+        'مخزن واقعی فایل‌ها',
+        'Artifact Workspace',
+        writable,
+        writable ? `workspace قابل نوشتن است؛ ${artifacts.length} artifact شناسایی شد.` : 'workspace برنامه قابل نوشتن نیست.',
+        writable ? `Workspace is writable; ${artifacts.length} artifacts detected.` : 'Application workspace is not writable.'
+      );
+    }
+
+    const passed = checks.filter(c => c.status === 'pass').length;
+    const score = checks.length ? Math.round((passed / checks.length) * 100) : 0;
+    const status = score >= 80 ? 'healthy' : score >= 50 ? 'warning' : 'error';
+    return {
+      toolId,
+      status,
+      score,
+      latencyMs: Date.now() - started,
+      checks,
+      summaryFa: status === 'healthy' ? 'تمام بررسی‌های لازم برای این ابزار با داده واقعی با موفقیت انجام شد.' : status === 'warning' ? 'ابزار قابل بررسی است اما حداقل یک وابستگی یا پیش‌نیاز روی host موجود نیست.' : 'بررسی واقعی ابزار نتوانست پیش‌نیازهای اصلی را تایید کند.',
+      summaryEn: status === 'healthy' ? 'All required runtime checks passed against real host state.' : status === 'warning' ? 'The tool is probeable, but one or more dependencies or prerequisites are missing.' : 'The real probe could not verify the core prerequisites.'
+    };
+  }
+
   app.post('/api/tools/validate', (req, res) => {
-    const { toolId } = req.body;
-    const tId = toolId || 'architect_overseer';
-    res.json({
-      toolId: tId,
-      status: 'healthy',
-      score: 100,
-      latencyMs: Math.floor(Math.random() * 8) + 4,
-      checks: [
-        {
-          nameFa: 'پاسخ‌دهی وب‌سرویس و درگاه محلی API',
-          nameEn: 'Web Service Endpoint Readiness',
-          status: 'pass',
-          detailFa: 'پردازش‌های مربوط به ابزار به درستی بارگذاری شده و به درخواست‌ها پاسخ می‌دهند.',
-          detailEn: 'Tool backend handlers operational and responding.'
-        },
-        {
-          nameFa: 'سینتکس و ساختار فایل‌های کانفیگ',
-          nameEn: 'Config Stanza Integrity & Syntax',
-          status: 'pass',
-          detailFa: 'فایل‌های استنزا فاقد هرگونه خطای ساختاری و مغایرت پارامتر هستند.',
-          detailEn: 'No stanza syntax collisions detected.'
-        },
-        {
-          nameFa: 'سطح دسترسی سیستم‌عامل و هسته لینوکس',
-          nameEn: 'OS & Linux Runtime Permissions',
-          status: 'pass',
-          detailFa: 'مجوزهای خواندن و نوشتن دایرکتوری‌های ایزوله تایید شد.',
-          detailEn: 'Read/write rights verified across runtime directories.'
-        }
-      ],
-      summaryFa: 'ابزار کاملاً سالم است و به صورت فعال در حال کار می‌باشد.',
-      summaryEn: 'Tool is operating at 100% health in runtime.'
-    });
+    const toolId = String(req.body?.toolId || 'architect_overseer');
+    if (!toolModules.includes(toolId)) return res.status(400).json({ success: false, error: 'Unknown toolId.' });
+    const result = validateTool(toolId);
+    res.json({ success: true, ...result });
   });
 
-  // API: All Tools Validation
   app.post('/api/tools/validate-all', (req, res) => {
-    const modules = [
-      'architect_overseer', 'autonomous_agent', 'ai_diagnostics', 'bento_overview',
-      'cluster_deployer', 'architecture_auditor', 'topology', 'management_nodes',
-      'docker_k8s', 'commercial_license', 'health_audit', 'live_logs', 'config_editor',
-      'doc_reference', 'heartbeat_radar', 'alert_manager', 'network_sources',
-      'component_agents', 'remote_gateway', 'package_center', 'backup_archive',
-      'network_toolbox', 'admin_security'
-    ];
     const results: Record<string, any> = {};
-    modules.forEach(mId => {
-      results[mId] = {
-        toolId: mId,
-        status: 'healthy',
-        score: 100,
-        latencyMs: Math.floor(Math.random() * 10) + 3,
-        checks: [
-          {
-            nameFa: 'پاسخ‌دهی وب‌سرویس و API',
-            nameEn: 'API Health',
-            status: 'pass',
-            detailFa: 'نودها و ابزار متصل است.',
-            detailEn: 'Tool endpoints connected.'
-          }
-        ],
-        summaryFa: 'ابزار سالم است و کار می‌کند.',
-        summaryEn: 'Tool verified and active.'
-      };
-    });
-
+    for (const toolId of toolModules) {
+      results[toolId] = validateTool(toolId);
+    }
+    const values = Object.values(results) as any[];
     res.json({
       success: true,
-      totalTools: modules.length,
-      healthyCount: modules.length,
+      totalTools: toolModules.length,
+      healthyCount: values.filter(v => v.status === 'healthy').length,
+      warningCount: values.filter(v => v.status === 'warning').length,
+      errorCount: values.filter(v => v.status === 'error').length,
       results
     });
   });
@@ -4008,17 +4066,15 @@ PASSWORD = ${password}
     const parallelDir = '/opt/splunk_parallel';
     const binPath = path.join(parallelDir, 'bin/splunk');
     try {
-      if (fs.existsSync(binPath)) {
-        await runCommand(`chmod -R +x "${parallelDir}/bin" 2>/dev/null || true`);
-        const runRes = await runCommand(`SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1 || true`);
-        return res.json({
-          success: true,
-          output: runRes.stdout || runRes.stderr
-        });
+      if (!fs.existsSync(binPath)) {
+        return res.status(404).json({ success: false, error: `Splunk binary not found at ${binPath}` });
       }
-      res.json({
-        success: true,
-        output: 'Splunk standalone daemon started in isolated staging mode.'
+      await runCommand(`chmod -R +x "${parallelDir}/bin"`);
+      const runRes = await runCommand(`SPLUNK_HOME="${parallelDir}" SPLUNK_RUN_AS_ROOT=1 "${binPath}" start --accept-license --answer-yes --no-prompt --run-as-root 2>&1`);
+      return res.status(runRes.code === 0 ? 200 : 500).json({
+        success: runRes.code === 0,
+        exitCode: runRes.code,
+        output: runRes.stdout || runRes.stderr
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
