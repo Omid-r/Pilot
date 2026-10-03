@@ -2312,8 +2312,17 @@ mgmtHostPort = 127.0.0.1:${restPort}
 
   // API: Local AI Autonomous Auto-Healer Execution
   app.post('/api/parallel-cluster/ai-auto-heal', async (req, res) => {
-    const { webPort = 8001, restPort = 8090, tcpPort = 9998, password } = req.body;
+    const { webPort = 8001, restPort = 8090, tcpPort = 9998, password, pass4SymmKey } = req.body;
     const targetDir = '/opt/splunk_parallel';
+    if (typeof password !== 'string' || password.length < 12) {
+      return res.status(400).json({ success: false, error: 'A real admin password of at least 12 characters is required.' });
+    }
+    if (typeof pass4SymmKey !== 'string' || pass4SymmKey.length < 12) {
+      return res.status(400).json({ success: false, error: 'A real pass4SymmKey of at least 12 characters is required.' });
+    }
+    if (!fs.existsSync(path.join(targetDir, 'bin', 'splunk')) && !fs.existsSync('/opt/splunk/bin/splunk')) {
+      return res.status(404).json({ success: false, error: 'No real Splunk binary is available for auto-healing.' });
+    }
     const runtimeDir = '/opt/splunk_container_runtime';
     const logs: string[] = [];
     let fixedCount = 0;
@@ -2369,7 +2378,7 @@ mgmtHostPort = 127.0.0.1:${restPort}
       const serverConfContent = `[general]
 serverName = splunk-parallel-node
 mgmtHostPort = 127.0.0.1:${restPort}
-pass4SymmKey = changeme-passkey
+pass4SymmKey = ${pass4SymmKey}
 active_group = Free
 
 [sslConfig]
@@ -2425,7 +2434,7 @@ PASSWORD = ${password}
 
       // Verify HTTP Response
       logs.push(`[${new Date().toLocaleTimeString()}] در حال پروب و راستی‌آزمایی پاسخ‌دهی وب‌سرور روی پورت ${webPort}...`);
-      let finalHttpStatus = '200';
+      let finalHttpStatus = '000';
       try {
         const curlCheck = await runCommand(`curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${webPort}/en-US/account/login" 2>/dev/null || true`);
         const code = curlCheck.stdout.trim();
@@ -2433,6 +2442,10 @@ PASSWORD = ${password}
           finalHttpStatus = code;
         }
       } catch (_) {}
+
+      if (finalHttpStatus !== '200' && finalHttpStatus !== '303') {
+        throw new Error('Splunk Web verification failed with HTTP status ' + finalHttpStatus);
+      }
 
       logs.push(`[${new Date().toLocaleTimeString()}] [SUCCESS] وضعیت پاسخ HTTP وب‌سرور: ${finalHttpStatus} OK. پنل با موفقیت بالا آمد!`);
       logs.push(`[${new Date().toLocaleTimeString()}] [READY] آدرس وب‌اینترفیس: http://<SERVER-IP>:${webPort}/en-US/account/login (User: admin | Pass: ${password})`);
@@ -3489,7 +3502,7 @@ PASSWORD = ${password}
       // 3. Write clean, collision-free configuration files
       logs.push(`==> 3. Generating synchronized configuration stanzas (KVStore=${kvPort}, REST=${restPort})...`);
       const webConf = `[settings]\nhttpport = ${webPort}\nserver.socket_host = 0.0.0.0\nenableSplunkWebSSL = false\nstartwebserver = 1\nappServerPorts = 8066\nmgmtHostPort = 127.0.0.1:${restPort}\n`;
-      const serverConf = `[general]\nserverName = splunk-parallel-staging-01\nmgmtHostPort = 127.0.0.1:${restPort}\npass4SymmKey = changeme-parallel-key\nactive_group = Enterprise\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${restPort}\n\n[kvstore]\nport = ${kvPort}\n`;
+      const serverConf = `[general]\nserverName = splunk-parallel-staging-01\nmgmtHostPort = 127.0.0.1:${restPort}\npass4SymmKey = ${pass4SymmKey}\nactive_group = Enterprise\n\n[sslConfig]\nmgmtHostPort = 127.0.0.1:${restPort}\n\n[kvstore]\nport = ${kvPort}\n`;
       const inputsConf = `[default]\nhost = splunk-parallel-staging-01\n\n[splunktcp://${tcpPort}]\ndisabled = 0\nqueueSize = 10MB\n`;
       const userSeedConf = `[user_info]\nUSERNAME = admin\nPASSWORD = ${adminPassword}\n`;
       const uiTourConf = `[splunk_enterprise]\nviewed = 1\n`;
@@ -3665,6 +3678,8 @@ PASSWORD = ${password}
       toolNameEn = `Auto-Fix Issue ${issueId}`;
       commandToRun = `fuser -k 8001/tcp 8090/tcp 2>/dev/null || true && echo "[SUCCESS] Diagnostic fix command executed for ${issueId}"`;
     }
+
+    if (!commandToRun) return res.status(400).json({ success:false, issueId, error:'No real remediation command is registered for this issue.' });
 
     const result = await runCommand(commandToRun, {
       toolId: 'diagnostics_autoheal',
