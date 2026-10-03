@@ -604,61 +604,6 @@ export default function App() {
     setShowAllModulesHub(false);
   };
 
-  // Commercial Digital License State
-  const [digitalLicense, setDigitalLicense] = useState<DigitalCertificateLicense>(INITIAL_DIGITAL_LICENSE);
-
-  useEffect(() => {
-    if (!authToken) {
-      setDigitalLicense(INITIAL_DIGITAL_LICENSE);
-      return;
-    }
-    let cancelled = false;
-    const refreshLicense = async () => {
-      try {
-        const response = await fetch('/api/security/license-status', {
-          headers: { Authorization: `Bearer ${authToken}` }
-        });
-        if (!response.ok) return;
-        const data = await response.json();
-        if (cancelled) return;
-
-        const status = data.status === 'VALID' ? 'ACTIVE' : data.status === 'EXPIRED' ? 'EXPIRED' : 'UNLICENSED';
-        setDigitalLicense({
-          ...INITIAL_DIGITAL_LICENSE,
-          certificateId: '',
-          serialNumber: '',
-          subject: {
-            ...INITIAL_DIGITAL_LICENSE.subject,
-            organization: data.companyName || '',
-            subscriptionTier: status === 'ACTIVE' ? 'STANDARD_COMMERCIAL' : 'UNLICENSED',
-            nodeLimit: Number(data.maxNodes || 0),
-            licensedModules: Array.isArray(data.features) ? data.features : [],
-            status
-          },
-          validity: {
-            ...INITIAL_DIGITAL_LICENSE.validity,
-            notAfter: data.expiresAt || '',
-            daysRemaining: Number(data.daysRemaining || 0),
-            isExpired: status === 'EXPIRED'
-          },
-          privacyPolicy: {
-            ...INITIAL_DIGITAL_LICENSE.privacyPolicy,
-            dataResidencyCompliance: status === 'ACTIVE' ? 'Runtime entitlement verified locally' : 'No verified commercial entitlement'
-          }
-        });
-      } catch (error) {
-        console.warn('[REAL LICENSE] refresh failed', error);
-      }
-    };
-    refreshLicense();
-    return () => { cancelled = true; };
-  }, [authToken]);
-
-  const handleUpdateDigitalLicense = (updated: DigitalCertificateLicense) => {
-    setDigitalLicense(updated);
-    showToast(isFa ? 'وضعیت لایسنس فقط پس از تأیید backend به‌روزرسانی می‌شود.' : 'License state is updated only after backend verification.');
-  };
-
   // Heartbeat & Live Ingestion Radar State
   const [heartbeatNodes, setHeartbeatNodes] = useState<HeartbeatNode[]>(INITIAL_HEARTBEAT_NODES);
   const [dropAlerts, setDropAlerts] = useState<HeartbeatDropAlert[]>(INITIAL_DROP_ALERTS);
@@ -758,6 +703,61 @@ export default function App() {
       window.clearInterval(timer);
     };
   }, [authToken]);
+
+  // Commercial Digital License State
+  const [digitalLicense, setDigitalLicense] = useState<DigitalCertificateLicense>(INITIAL_DIGITAL_LICENSE);
+
+  useEffect(() => {
+    if (!authToken) {
+      setDigitalLicense(INITIAL_DIGITAL_LICENSE);
+      return;
+    }
+    let cancelled = false;
+    const refreshLicense = async () => {
+      try {
+        const response = await fetch('/api/security/license-status', {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+
+        const status = data.status === 'VALID' ? 'ACTIVE' : data.status === 'EXPIRED' ? 'EXPIRED' : 'UNLICENSED';
+        setDigitalLicense({
+          ...INITIAL_DIGITAL_LICENSE,
+          certificateId: '',
+          serialNumber: '',
+          subject: {
+            ...INITIAL_DIGITAL_LICENSE.subject,
+            organization: data.companyName || '',
+            subscriptionTier: status === 'ACTIVE' ? 'STANDARD_COMMERCIAL' : 'UNLICENSED',
+            nodeLimit: Number(data.maxNodes || 0),
+            licensedModules: Array.isArray(data.features) ? data.features : [],
+            status
+          },
+          validity: {
+            ...INITIAL_DIGITAL_LICENSE.validity,
+            notAfter: data.expiresAt || '',
+            daysRemaining: Number(data.daysRemaining || 0),
+            isExpired: status === 'EXPIRED'
+          },
+          privacyPolicy: {
+            ...INITIAL_DIGITAL_LICENSE.privacyPolicy,
+            dataResidencyCompliance: status === 'ACTIVE' ? 'Runtime entitlement verified locally' : 'No verified commercial entitlement'
+          }
+        });
+      } catch (error) {
+        console.warn('[REAL LICENSE] refresh failed', error);
+      }
+    };
+    refreshLicense();
+    return () => { cancelled = true; };
+  }, [authToken]);
+
+  const handleUpdateDigitalLicense = (updated: DigitalCertificateLicense) => {
+    setDigitalLicense(updated);
+    showToast(isFa ? 'وضعیت لایسنس فقط پس از تأیید backend به‌روزرسانی می‌شود.' : 'License state is updated only after backend verification.');
+  };
 
   // Virtual Server Wipe & Lifecycle Modal State (مدیریت و حذف سرور مجازی)
   const [isVirtualWipeModalOpen, setIsVirtualWipeModalOpen] = useState<boolean>(false);
