@@ -3369,41 +3369,45 @@ async function startServer() {
     }
   });
 
-  // API: Autonomous workflow step executor
+  // API: Autonomous workflow step executor - real operations only.
   app.post('/api/autonomous/execute-step', async (req, res) => {
-    const { stepId, ports = { web: 8001, rest: 8090, splunkTcp: 9998, kvstore: 8193 }, password } = req.body;
-    const logs: string[] = [];
-
-    logs.push(`[AI_AGENT] Executing Step: ${stepId}`);
-
-    if (stepId === 'step-discovery') {
-      const audit = getSystemAudit();
-      const netInfo = getSystemNetworkInfo();
-      logs.push(`[+] Host: ${netInfo.hostname} (${netInfo.primaryIp})`);
-      logs.push(`[+] Listening Ports: ${audit.listeningPorts.map(p => p.port).join(', ')}`);
-      logs.push(`[+] Splunk Detected: ${audit.splunkHome.detected ? audit.splunkHome.path : 'None'}`);
-      logs.push(`[SUCCESS] Discovery audit complete.`);
-    } else if (stepId === 'step-container-k8s') {
-      const script = path.join(process.cwd(), 'scripts/deploy-splunk-k8s-offline.sh');
-      if (fs.existsSync(script)) {
-        await runCommand(`chmod +x "${script}"`);
-        const run = await runCommand(`bash "${script}" ${ports.web} ${ports.rest} ${ports.splunkTcp} "${password}"`);
-        logs.push(run.stdout);
+    const { stepId, ports = { web:8001, rest:8090, splunkTcp:9998, kvstore:8193 }, password, imageRef, imageArchive }=req.body||{};
+    const logs:string[]=[];
+    if(!stepId) return res.status(400).json({success:false,error:'stepId is required.'});
+    try {
+      if(stepId==='step-discovery'){
+        const audit=getSystemAudit(); const netInfo=getSystemNetworkInfo();
+        logs.push(`[REAL] Host: ${netInfo.hostname} (${netInfo.primaryIp})`);
+        logs.push(`[REAL] Listening ports: ${audit.listeningPorts.map(p=>p.port).join(', ')}`);
+        logs.push(`[REAL] Splunk: ${audit.splunkHome.detected?audit.splunkHome.path:'not detected'}`);
+        return res.json({success:true,stepId,logs});
       }
-    } else if (stepId === 'step-deploy-splunk' || stepId === 'step-auto-healing') {
-      const fixScript = path.join(process.cwd(), 'scripts/fix-parallel-web.sh');
-      if (fs.existsSync(fixScript)) {
-        await runCommand(`chmod +x "${fixScript}"`);
-        const run = await runCommand(`bash "${fixScript}" /opt/splunk_parallel ${ports.web} ${ports.rest} ${ports.splunkTcp} ${ports.kvstore || 8193}`);
-        logs.push(run.stdout);
+      if(stepId==='step-container-k8s'){
+        if(typeof password!=='string'||password.length<12) return res.status(400).json({success:false,error:'A real admin password is required.'});
+        if(typeof imageRef!=='string'||!imageRef.trim()) return res.status(400).json({success:false,error:'A real offline imageRef is required.'});
+        const script=getScriptPath('deploy-splunk-k8s-offline.sh');
+        if(!fs.existsSync(script)) return res.status(404).json({success:false,error:'Offline deployment script not found.'});
+        const cmd=`bash "${script}" ${Number(ports.web)||8001} ${Number(ports.rest)||8090} ${Number(ports.splunkTcp)||9998} "${String(password).replace(/"/g,'\\"')}" "${String(imageRef).replace(/"/g,'\\"')}" splunk-parallel "${String(imageArchive||'').replace(/"/g,'\\"')}"`;
+        const run=await runCommand(cmd,{toolId:'autonomous_container_k8s',toolNameFa:'اجرای واقعی Container/Kubernetes',toolNameEn:'Real Container/Kubernetes Execution',category:'k8s',timeout:300000});
+        logs.push(run.stdout||run.stderr);
+        return res.status(run.code===0?200:500).json({success:run.code===0,stepId,exitCode:run.code,logs});
       }
-    }
-
-    res.json({
-      success: true,
-      stepId,
-      logs
-    });
+      if(stepId==='step-deploy-splunk'){
+        if(typeof password!=='string'||password.length<12) return res.status(400).json({success:false,error:'A real admin password is required.'});
+        const script=getScriptPath('install-real-parallel-splunk.sh');
+        if(!fs.existsSync(script)) return res.status(404).json({success:false,error:'Real parallel Splunk installer not found.'});
+        const key=(await runCommand('openssl rand -hex 32',{timeout:5000})).stdout.trim();
+        const run=await runCommand(`bash "${script}" /opt/splunk /opt/splunk_parallel ${Number(ports.web)||8001} ${Number(ports.rest)||8090} ${Number(ports.splunkTcp)||9998} ${Number(ports.kvstore)||8193} "${String(password).replace(/"/g,'\\"')}" "${key}"`,{toolId:'autonomous_real_splunk_deploy',toolNameFa:'استقرار واقعی اسپلانک',toolNameEn:'Real Splunk Deployment',category:'splunk',timeout:300000});
+        logs.push(run.stdout||run.stderr);
+        return res.status(run.code===0?200:500).json({success:run.code===0,stepId,exitCode:run.code,logs});
+      }
+      if(stepId==='step-auto-healing'){
+        const targetDir='/opt/splunk_parallel'; const bin=path.join(targetDir,'bin/splunk');
+        if(!fs.existsSync(bin)) return res.status(404).json({success:false,error:'Real Splunk binary not found at /opt/splunk_parallel/bin/splunk.'});
+        return res.status(307).json({success:false,stepId,redirect:'/api/parallel-cluster/ai-auto-heal',error:'Use the verified AI auto-heal engine endpoint.'});
+      }
+      return res.status(400).json({success:false,error:`Unsupported workflow step: ${stepId}`});
+    }catch(err:any){ return res.status(500).json({success:false,stepId,error:err.message,logs}); }
   });
 
   // Real remote SSH command endpoint. Uses key-based BatchMode; no simulated remote session is returned.
