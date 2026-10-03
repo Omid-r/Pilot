@@ -417,7 +417,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                     </div>
                   );
                 })}
-              </div>              </div>
+              </div>
             </div>
           )}
         </div>
