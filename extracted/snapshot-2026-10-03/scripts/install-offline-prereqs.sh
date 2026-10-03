@@ -94,7 +94,7 @@ echo "[+] Verifying required command-line tools..."
 REQUIRED_CMDS=(
   bash sh tar gzip openssl curl ip ss ssh
   awk sed grep find df uname fuser
-  hostname which nc ping lsof
+  hostname which nc ping lsof netstat conntrack chronyc ipmitool
   python3
   firewall-cmd iptables
   getenforce restorecon semanage
