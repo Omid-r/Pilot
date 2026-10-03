@@ -138,6 +138,46 @@ jobs:
             exit 1
           fi
 
+      - name: Execute complete offline media on Rocky Linux
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          archive="release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz"
+          for rhel in 8 9; do
+            docker pull "rockylinux:${rhel}"
+            docker run --rm --network none \
+              -v "${PWD}/${archive}:/media/app.tar.gz:ro" \
+              "rockylinux:${rhel}" \
+              bash -lc '
+                set -euo pipefail
+                rm -rf /work
+                mkdir -p /work
+                tar -xzf /media/app.tar.gz -C /work
+                app=/work/splunk-doctor
+                test -x "${app}/node-runtime/bin/node"
+                test -f "${app}/scripts/install-offline-prereqs.sh"
+                bash "${app}/scripts/install-offline-prereqs.sh"
+                "${app}/node-runtime/bin/node" --version
+                command -v podman >/dev/null
+                command -v kubectl >/dev/null
+                mkdir -p /tmp/pilot-data
+                NODE_ENV=production PORT=3100 SPLUNK_DOCTOR_DATA_DIR=/tmp/pilot-data SPLUNK_HOME=/opt/splunk \
+                  "${app}/node-runtime/bin/node" "${app}/dist/server.cjs" >/tmp/pilot-server.log 2>&1 &
+                pid=$!
+                trap "kill $pid 2>/dev/null || true" EXIT
+                code=000
+                for i in $(seq 1 20); do
+                  code="$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:3100 || true)"
+                  [ "${code}" = "200" ] && break
+                  sleep 1
+                done
+                test "${code}" = "200"
+                api_code="$(curl -sS -o /tmp/api-body -w "%{http_code}" http://127.0.0.1:3100/api/real/system || true)"
+                test "${api_code}" = "401"
+                echo "[PASS] Rocky Linux ${rhel}: offline media installed, bundled Node executed, server started, API auth gate responded."
+              '
+          done
+
       - name: Upload complete offline installer
         uses: actions/upload-artifact@v6
         with:
