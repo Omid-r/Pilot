@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --external:vite --sourcemap --outfile=dist/server.cjs && node scripts/build-offline-rhel.mjs",
     "start": "node dist/server.cjs",
-    "lint": "tsc --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "smoke": "node scripts/smoke-test-real-control-plane.mjs",
     "package:rhel": "node scripts/build-offline-rhel.mjs"
   },
