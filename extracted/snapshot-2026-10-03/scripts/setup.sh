@@ -39,7 +39,7 @@ fuser -k 3000/tcp 2>/dev/null || true
 # 3. Clean target directory while preserving backups if needed
 echo "==> [۲/۶] آماده‌سازی دایرکتوری هدف (${TARGET_DIR})..."
 mkdir -p "${TARGET_DIR}"
-rm -rf "${TARGET_DIR}/dist" "${TARGET_DIR}/scripts" "${TARGET_DIR}/systemd" 2>/dev/null || true
+rm -rf "${TARGET_DIR}/dist" "${TARGET_DIR}/scripts" "${TARGET_DIR}/systemd" "${TARGET_DIR}/offline-prereqs" 2>/dev/null || true
 
 # 4. Copy current package files
 echo "==> [۳/۶] کپی و استقرار فایل‌های بسته جدید..."
@@ -51,6 +51,10 @@ find "${TARGET_DIR}" -type d -exec chmod 755 {} +
 find "${TARGET_DIR}" -type f -exec chmod 644 {} +
 chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
 
+# Install every bundled user-space prerequisite from local RPMs/binaries only.
+echo "==> [۴.۵/۶] نصب تمام پیش‌نیازهای آفلاین RHEL از روی مدیا..."
+bash "${TARGET_DIR}/scripts/install-offline-prereqs.sh"
+
 # Private runtime state and secrets live outside the application tree.
 mkdir -p "${DATA_DIR}"
 chmod 700 "${DATA_DIR}"
@@ -58,10 +62,7 @@ chmod 700 "${DATA_DIR}"
 # Use the Node runtime packaged with the offline bundle.
 NODE_BIN="${TARGET_DIR}/node-runtime/bin/node"
 if [ ! -x "$NODE_BIN" ]; then
-  NODE_BIN="$(command -v node 2>/dev/null || true)"
-fi
-if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
-  echo "[-] No usable Node.js runtime found in the offline bundle or system."
+  echo "[-] Bundled Node.js runtime is missing or not executable."
   exit 1
 fi
 echo "  -> Node.js: $("$NODE_BIN" --version) ($NODE_BIN)"
@@ -136,6 +137,9 @@ echo "----------------------------------------------------------------------"
 echo "  🌐 آدرس دسترسی به سامانه در مرورگر:"
 echo "     http://${SERVER_IP}:3000"
 echo "     http://localhost:3000"
+echo ""
+echo "  ✅ تمامی وابستگی‌های user-space از همین رسانه نصب شدند؛ در زمان نصب هیچ repository خارجی استفاده نشد."
+echo "  ⚠️ خود RHEL kernel/systemd جزء سیستم‌عامل میزبان هستند و داخل این برنامه جایگزین نمی‌شوند."
 echo ""
 echo "  📌 دستورات مفید مدیریت سرویس:"
 echo "     sudo systemctl status splunk-doctor    # مشاهده وضعیت"
