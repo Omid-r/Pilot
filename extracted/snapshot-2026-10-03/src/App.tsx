@@ -824,12 +824,12 @@ export default function App() {
     return {
       isInstalled: true,
       status: 'running',
-      clusterName: 'Splunk Virtual Cloud Instance (Container Sandbox)',
-      version: '9.2.1-Enterprise-Virtual',
+      clusterName: 'Not Installed',
+      version: 'N/A',
       portOffset: 2,
-      webPort: 8080,
-      mgmtPort: 8091,
-      indexerPort: 9999
+      webPort: 0,
+      mgmtPort: 0,
+      indexerPort: 0
     };
   });
 
@@ -1010,9 +1010,9 @@ export default function App() {
       clusterName: 'Splunk Virtual Cloud Node',
       version: '9.2.1',
       portOffset: 80,
-      webPort: 8080,
-      mgmtPort: 8091,
-      indexerPort: 9999
+      webPort: 0,
+      mgmtPort: 0,
+      indexerPort: 0
     };
     setVirtualClusterState(nextVirtual);
     localStorage.setItem('splunk_virtual_cluster_state', JSON.stringify(nextVirtual));
@@ -1148,172 +1148,88 @@ export default function App() {
   const [activeConfigFile, setActiveConfigFile] = useState<string>('outputs.conf');
   const [selectedLogAnalysis, setSelectedLogAnalysis] = useState<LiveLogAnalysis | null>(null);
 
-  // Global AI Scanner and Healing Script Simulator
-  const runGlobalAiScan = () => {
+  // Global AI Scanner — real diagnostic backend only.
+  const runGlobalAiScan = async () => {
     setIsGlobalAiScanning(true);
     setGlobalAiLogs([]);
-    const logs: string[] = [];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
-
-    setTimeout(() => addLog(isFa ? "🔍 شناسایی اتصالات کلاستر و سرویس‌ها..." : "🔍 Analyzing cluster connections & active services..."), 200);
-    setTimeout(() => {
-      if (activeEnvironment === 'production') {
-        addLog(isFa ? "⚠️ ممیزی تولید: ۱ پرونده تمدید لایسنس و ۱ اخطار دیسک یافت شد." : "⚠️ Production audit: 1 certificate renewal requirement and 1 disk storage limit detected.");
-      } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "⚠️ ممیزی سرور موازی: تداخل پورت وب ۸۰۰۰ با ۸۰۰۱ و بسته‌شدن سوکت ۹۹۹۸ شناسایی شد." : "⚠️ Parallel audit: web port conflict 8000/8001 and socket 9998 connection failure detected.");
-      } else {
-        addLog(isFa ? "⚠️ ممیزی سرور مجازی: خطای دسترسی دایرکتوری داده (Permission Denied) و قطع ضربان قلب کانتینر شناسایی شد." : "⚠️ Virtual Cloud audit: Container Volume Permission Denied and missing container heartbeat detected.");
-      }
+    try {
+      const targetType = activeEnvironment === 'production' ? 'real' : activeEnvironment;
+      const res = await fetch('/api/parallel-cluster/deep-diagnostics', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({serverType:targetType})
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok || data.success===false) throw new Error(data.error || 'Global diagnostics failed');
+      const logs=[
+        `[${new Date().toLocaleTimeString()}] [REAL_SCAN] Environment: ${targetType}`,
+        `[${new Date().toLocaleTimeString()}] [REAL_SCAN] Health score: ${data.healthScore ?? 'unknown'}`,
+        `[${new Date().toLocaleTimeString()}] [REAL_SCAN] HTTP status: ${data.httpStatus ?? '000'}`,
+        `[${new Date().toLocaleTimeString()}] [REAL_SCAN] Findings: ${data.issuesCount ?? (data.issues||[]).length}`,
+        data.aiAnalysis || ''
+      ].filter(Boolean);
+      setGlobalAiLogs(logs);
       setIsGlobalAiScanning(false);
-    }, 1500);
+    } catch(e:any) {
+      setGlobalAiLogs([`[${new Date().toLocaleTimeString()}] [FAILED] ${e.message || 'Global diagnostics failed'}`]);
+      setIsGlobalAiScanning(false);
+    }
   };
 
-  const executeGlobalAiHeal = () => {
+  const executeGlobalAiHeal = async () => {
     setIsGlobalAiHealerRunning(true);
-    const logs: string[] = [...globalAiLogs];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
-
-    addLog(isFa ? "🤖 شروع خودکار رفع مشکلات با بازوی اجرایی هوش مصنوعی..." : "🤖 Initiating autonomous auto-healing process via local AI agent...");
-    
-    setTimeout(() => {
-      if (activeEnvironment === 'production') {
-        addLog(isFa ? "🛠️ در حال بازتولید سرتیفیکت‌های امنیتی منقضی شده..." : "🛠️ Regenerating expired secure TLS certificates...");
-      } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "🛠️ اصلاح پورت وب در فایل /opt/splunk_parallel/etc/system/local/web.conf..." : "🛠️ Adjusting web port in /opt/splunk_parallel/etc/system/local/web.conf...");
-      } else {
-        addLog(isFa ? "🛠️ اصلاح مالکیت مجوزهای لینوکس دیسک داکر (chown -R splunk:splunk /var/lib/splunk)..." : "🛠️ Fixing Linux directory permissions for Docker Volume (chown -R splunk:splunk /var/lib/splunk)...");
+    setGlobalAiExpanded(true);
+    try {
+      if (activeEnvironment === 'virtual') {
+        setGlobalAiLogs(prev=>[...prev,'[BLOCKED] Synthetic virtual environment healing is disabled. Deploy a real container/image first.']);
+        return;
       }
-    }, 800);
-
-    setTimeout(() => {
-      if (activeEnvironment === 'production') {
-        addLog(isFa ? "🛠️ تخلیه حجم فایل‌های بلااستفاده و افزایش ظرفیت دیسک..." : "🛠️ Flushing temporary caches & increasing index disk storage limits...");
-      } else if (activeEnvironment === 'parallel') {
-        addLog(isFa ? "🛠️ پاکسازی و بستن قفل پروسه روی سوکت ترافیک ۹۹۹۸..." : "🛠️ Killing rogue processes holding port 9998 locked...");
-      } else {
-        addLog(isFa ? "🛠️ راه‌اندازی مجدد و ریبوت کانتینر در شبکه ابر ایزوله شده..." : "🛠️ Performing clean reboot of virtual container inside sandbox network...");
+      const adminPassword = window.prompt(isFa ? 'رمز واقعی admin اسپلانک:' : 'Real Splunk admin password:') || '';
+      const pass4SymmKey = window.prompt(isFa ? 'کلید واقعی pass4SymmKey:' : 'Real pass4SymmKey:') || '';
+      if(adminPassword.length<12 || pass4SymmKey.length<12) {
+        setGlobalAiLogs(prev=>[...prev,'[BLOCKED] Real credentials are required.']);
+        return;
       }
-    }, 1600);
-
-    setTimeout(() => {
-      addLog(isFa ? "🔄 در حال بررسی وضعیت نهایی و اجرای مجدد پروب‌های شبکه..." : "🔄 Re-running diagnostic health probes and auditing status...");
-    }, 2400);
-
-    setTimeout(() => {
-      // Mark all issues of active environment as resolved
-      setResolvedGlobalIssueIds(prev => {
-        const updated = { ...prev };
-        if (activeEnvironment === 'production') {
-          updated.production = ['prod-ssl-cert', 'prod-volume-limit'];
-        } else if (activeEnvironment === 'parallel') {
-          updated.parallel = ['par-web-port', 'par-socket-lock'];
-        } else {
-          updated.virtual = ['virt-docker-perm', 'virt-heartbeat-out'];
-        }
-        return updated;
+      const res=await fetch('/api/parallel-cluster/ai-auto-heal',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({webPort:8001,restPort:8090,tcpPort:9998,kvPort:8193,adminPassword,pass4SymmKey,password:adminPassword})
       });
-      addLog(isFa ? "✅ عملیات ترمیم هوشمند با موفقیت تکمیل شد! سرور هم‌اکنون ۱۰۰٪ سبز است." : "✅ Auto-heal completed successfully! All services audited and marked as 100% green.");
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||!data.success)throw new Error(data.error||'Global auto-heal failed');
+      setGlobalAiLogs(Array.isArray(data.logs)?data.logs:['[SUCCESS] Real auto-heal completed.']);
+      setResolvedGlobalIssueIds(prev=>({...prev,[activeEnvironment]:[]})); 
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "تبریک! تمام مشکلات فعال سرور توسط هوش مصنوعی برطرف شد ✓" : "Congratulations! All active server issues have been automatically healed by AI ✓");
-    }, 3200);
+      await runGlobalAiScan();
+    } catch(e:any) {
+      setGlobalAiLogs(prev=>[...prev,`[FAILED] ${e.message||'Global auto-heal failed'}`]);
+      setIsGlobalAiHealerRunning(false);
+    }
   };
 
-  // Completely destroy virtual server in the background and clean all docker states
-  const destroyVirtualCloudServer = () => {
+  // Remove a real parallel/container deployment through the backend. No synthetic instance is created.
+  const destroyVirtualCloudServer = async () => {
     if (isGlobalAiHealerRunning) return;
     setIsGlobalAiHealerRunning(true);
     setGlobalAiExpanded(true);
-    const logs: string[] = [];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
-
-    addLog(isFa ? "🗑️ شروع فرآیند تخریب کامل سرور مجازی کانتینری اسپلانک..." : "🗑️ Starting decommissioning of virtual cloud container instance...");
-    
-    setTimeout(() => {
-      addLog(isFa ? "������ توقف کانتینرهای فعال داکر و حذف اتصالات شبکه مجاری..." : "🐳 Stopping active Docker container stack and cleaning virtual networks...");
-      addLog("🐳 Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml down --volumes --remove-orphans");
-    }, 800);
-
-    setTimeout(() => {
-      addLog(isFa ? "💥 پاکسازی کامل پوشه داده‌ها و دیسک‌های متصل (Docker Volumes)..." : "💥 Purging mount volumes and all indexed log databases...");
-      addLog("🧹 Executing: rm -rf /var/lib/splunk_virtual /etc/splunk_virtual");
-    }, 1600);
-
-    setTimeout(() => {
-      addLog(isFa ? "🔓 آزادسازی پورت‌های شبکه ۸۰۸۰ (وب)، ۸۰۹۱ (مدیریتی) و ۹۹۹۹ (گیرنده داده)..." : "🔓 Releasing local system ports 8080 (Web), 8091 (Mgmt), and 9999 (S2S)...");
-    }, 2400);
-
-    setTimeout(() => {
-      setVirtualClusterState({
-        isInstalled: false,
-        status: 'stopped',
-        clusterName: 'Virtual Instance Deleted',
-        version: 'N/A',
-        portOffset: 0,
-        webPort: 0,
-        mgmtPort: 0,
-        indexerPort: 0
-      });
-      // Switch active environment to production
-      setActiveEnvironment('production');
-      addLog(isFa ? "✅ فرآیند تخریب با موفقیت در پس‌زمینه سرور اجرا و کلاستر کاملاً پاک شد!" : "✅ Decommissioning completed. Virtual cloud instance entirely purged from server!");
+    try {
+      const res=await fetch('/api/parallel-cluster/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||!data.success) throw new Error(data.error||'Real reset failed');
+      setVirtualClusterState(prev=>({...prev,isInstalled:false,status:'stopped'}));
+      setGlobalAiLogs(Array.isArray(data.logs)?data.logs:['[REAL_RESET] Deployment reset completed.']);
       setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "سرور مجازی با موفقیت از پس‌زمینه کل سرور متوقف و کاملاً حذف شد!" : "Virtual server stopped and successfully deleted from the server background!");
-    }, 3200);
+    }catch(e:any){
+      setGlobalAiLogs(prev=>[...prev,`[FAILED] ${e.message||'Reset failed'}`]);
+      setIsGlobalAiHealerRunning(false);
+    }
   };
 
-  // Re-create/Build Virtual Cloud Server
-  const recreateVirtualCloudServer = () => {
+  const recreateVirtualCloudServer = async () => {
     if (isGlobalAiHealerRunning) return;
     setIsGlobalAiHealerRunning(true);
     setGlobalAiExpanded(true);
-    const logs: string[] = [];
-    const addLog = (msg: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      setGlobalAiLogs([...logs]);
-    };
-
-    addLog(isFa ? "🚀 فرآیند ساخت و راه‌اندازی سرور مجازی جدید در پس‌زمینه آغاز شد..." : "🚀 Starting build process for a new virtual cloud instance in background...");
-    
-    setTimeout(() => {
-      addLog(isFa ? "🐳 ساخت ایمیج کانتینر اختصاصی اسپلانک و راه‌اندازی پل شبکه مجاری..." : "🐳 Pulling and constructing custom Splunk Docker images & configuring network bridge...");
-      addLog("🐳 Executing: docker compose -f /opt/splunk_virtual/docker-compose.yml up -d --build");
-    }, 800);
-
-    setTimeout(() => {
-      addLog(isFa ? "📂 ایجاد پوشه‌های ایزوله برای ذخیره‌سازی ایندکس‌ها (/var/lib/splunk_virtual)..." : "📂 Creating sandboxed volume directories at /var/lib/splunk_virtual...");
-    }, 1600);
-
-    setTimeout(() => {
-      addLog(isFa ? "⚡ تخصیص پورت‌های ۸۰۸۰، ۸۰۹۱ و ۹۹۹۹ و تست هارت‌بیت کلاستر..." : "⚡ Binding ports 8080, 8091, 9999 and starting cluster heartbeat tests...");
-    }, 2400);
-
-    setTimeout(() => {
-      setVirtualClusterState({
-        isInstalled: true,
-        status: 'running',
-        clusterName: 'Splunk Virtual Cloud Instance (Container Sandbox)',
-        version: '9.2.1-Enterprise-Virtual',
-        portOffset: 2,
-        webPort: 8080,
-        mgmtPort: 8091,
-        indexerPort: 9999
-      });
-      // Clear resolved issues to make them scan-ready
-      setResolvedGlobalIssueIds(prev => ({ ...prev, virtual: [] }));
-      setActiveEnvironment('virtual');
-      addLog(isFa ? "✅ کانتینرهای سرور مجازی با موفقیت متولد شده و در پورت ۸۰۸۰ فعال هستند!" : "✅ New virtual cloud instance container successfully deployed and live on Port 8080!");
-      setIsGlobalAiHealerRunning(false);
-      showToast(isFa ? "سرور مجازی مجدداً با موفقیت ساخته و راه‌اندازی شد!" : "Virtual server successfully created and booted!");
-    }, 3200);
+    setGlobalAiLogs([isFa ? 'ساخت مصنوعی Virtual Cloud غیرفعال است؛ ابتدا Image واقعی را در Offline Store قرار دهید و سپس Deployment واقعی را اجرا کنید.' : 'Synthetic Virtual Cloud creation is disabled; stage a real image in the offline store and use real deployment.']);
+    setIsGlobalAiHealerRunning(false);
   };
 
   // Trigger quick scan whenever the active environment changes
@@ -1588,7 +1504,7 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.log('Running in standalone simulated sandbox mode.', err);
+        console.warn('Live backend unavailable; no simulated runtime state will be used.', err);
       }
     }
     initLiveMode();
