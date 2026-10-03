@@ -1,0 +1,52 @@
+name: pilot-snapshot-audit
+
+on:
+  push:
+    branches:
+      - audit/extract-and-verify-2026-10-03
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        working-directory: pilot-source
+        run: npm install --legacy-peer-deps --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript check
+        working-directory: pilot-source
+        run: npm run lint
+
+      - name: Production build
+        working-directory: pilot-source
+        run: npm run build
+
+      - name: Static truthfulness/security scan
+        working-directory: pilot-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== risky fixed credentials ==="
+          grep -RInE "changeme|Splunk@Doctor2026|Splunk@Engineer2026|Splunk@Operator2026|Splunk@Auditor2026|password[[:space:]]*[:=][[:space:]]*['\"][^'\"]+['\"]" .             --exclude-dir=node_modules --exclude-dir=dist || true
+          echo "=== embedded Slack/API secret patterns ==="
+          if grep -RInE "hooks[.]slack[.]com/services/|AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9_-]{20,}" .             --exclude-dir=node_modules --exclude-dir=dist; then
+            echo "Potential embedded secret-like material found"
+            exit 1
+          fi
+          echo "=== synthetic success / sandbox markers ==="
+          grep -RInE "Sandbox Mode|sandboxed[[:space:]]*:[[:space:]]*true|success[[:space:]]*:[[:space:]]*true" server src scripts             --exclude-dir=node_modules --exclude='*.map' | head -250 || true
+          echo "=== executable inventory ==="
+          find scripts -maxdepth 1 -type f -printf '%f\n' | sort
