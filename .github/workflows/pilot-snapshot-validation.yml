@@ -1,0 +1,56 @@
+name: pilot-snapshot-validation
+
+on:
+  push:
+    branches: [fix/pilot-20261003-smoke-real]
+    paths:
+      - 'extracted/snapshot-2026-10-03/**'
+      - '.github/workflows/pilot-snapshot-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript check
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run lint
+
+      - name: Real control-plane smoke
+        working-directory: extracted/snapshot-2026-10-03
+        env:
+          SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD: CI-Smoke-Only-2026!
+          SMOKE_PORT: '3100'
+        run: npm run smoke
+
+      - name: Build
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run build
+
+      - name: Verify standalone package
+        working-directory: extracted/snapshot-2026-10-03
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f splunk-doctor-offline-rhel.tar.gz
+          test -f splunk-doctor-offline-rhel.tar.gz.sha256
+          sha256sum -c splunk-doctor-offline-rhel.tar.gz.sha256
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)node-runtime/bin/node$'
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)dist/server.cjs$'
+          tar -tzf splunk-doctor-offline-rhel.tar.gz | grep -E '(^|/)setup.sh$'
