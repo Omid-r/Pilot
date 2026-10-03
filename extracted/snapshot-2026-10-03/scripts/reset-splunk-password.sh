@@ -1,70 +1,26 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# reset-splunk-password.sh
-# Instant Admin Password Reset & Web Authentication Repair for Splunk Instance
-# ==============================================================================
-
-set -e
+set -euo pipefail
 
 SPLUNK_DIR="${1:-/opt/splunk_parallel}"
 ADMIN_USER="${2:-admin}"
-NEW_PASSWORD="${3:-changeme}"
+NEW_PASSWORD="${3:-}"
 
-echo "======================================================================"
-echo "  [SPLUNK AUTH REPAIR] Resetting Admin Password for ${SPLUNK_DIR}"
-echo "======================================================================"
+[[ $EUID -eq 0 ]] || { echo "[ERROR] Run as root."; exit 1; }
+[[ -x "$SPLUNK_DIR/bin/splunk" ]] || { echo "[ERROR] Real Splunk binary not found: $SPLUNK_DIR/bin/splunk"; exit 2; }
+[[ ${#NEW_PASSWORD} -ge 12 ]] || { echo "[ERROR] Supply a new admin password of at least 12 characters as argument 3."; exit 3; }
 
-if [ ! -d "${SPLUNK_DIR}" ]; then
-  echo "[-] Directory ${SPLUNK_DIR} not found!"
-  exit 1
-fi
-
-export SPLUNK_HOME="${SPLUNK_DIR}"
+export SPLUNK_HOME="$SPLUNK_DIR"
 export SPLUNK_RUN_AS_ROOT=1
-
-# 1. Stop Splunk daemon temporarily if running to rewrite authentication table
-echo "==> 1. Stopping Splunk daemon cleanly..."
-if [ -f "${SPLUNK_DIR}/bin/splunk" ]; then
-  "${SPLUNK_DIR}/bin/splunk" stop --run-as-root 2>/dev/null || true
-fi
-fuser -k 8001/tcp 2>/dev/null || true
-fuser -k 8090/tcp 2>/dev/null || true
-
-# 2. Remove stale / inherited passwd files so user-seed.conf takes 100% priority
-echo "==> 2. Removing inherited/stale passwd hashes..."
-rm -f "${SPLUNK_DIR}/etc/passwd" 2>/dev/null || true
-rm -f "${SPLUNK_DIR}/etc/system/local/passwd" 2>/dev/null || true
-rm -f "${SPLUNK_DIR}/etc/auth/passwd" 2>/dev/null || true
-
-# 3. Write user-seed.conf with designated credentials
-echo "==> 3. Writing fresh user-seed.conf (Username: ${ADMIN_USER})..."
-mkdir -p "${SPLUNK_DIR}/etc/system/local"
-cat << EOF > "${SPLUNK_DIR}/etc/system/local/user-seed.conf"
+"$SPLUNK_DIR/bin/splunk" stop >/dev/null 2>&1 || true
+mkdir -p "$SPLUNK_DIR/etc/system/local"
+install -m 0600 /dev/null "$SPLUNK_DIR/etc/system/local/user-seed.conf"
+cat > "$SPLUNK_DIR/etc/system/local/user-seed.conf" <<EOF
 [user_info]
 USERNAME = ${ADMIN_USER}
 PASSWORD = ${NEW_PASSWORD}
 EOF
-
-# 4. Ensure Enterprise / Trial license group in server.conf (Free group disables login auth)
-if [ -f "${SPLUNK_DIR}/etc/system/local/server.conf" ]; then
-  sed -i 's/active_group\s*=\s*Free/active_group = Enterprise/g' "${SPLUNK_DIR}/etc/system/local/server.conf" 2>/dev/null || true
-fi
-
-# Disable first-time-login password change tour prompt
-cat << EOF > "${SPLUNK_DIR}/etc/system/local/ui-tour.conf"
-[splunk_enterprise]
-viewed = 1
-EOF
-
-# 5. Start Splunk to compile and hash user credentials
-echo "==> 4. Starting Splunk daemon to compile authentication hash..."
-if [ -f "${SPLUNK_DIR}/bin/splunk" ]; then
-  "${SPLUNK_DIR}/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root
-fi
-
-echo "======================================================================"
-echo "  [SUCCESS] Admin password reset completed!"
-echo "  Web URL:   http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo '192.168.232.101'):8001/en-US/account/login"
-echo "  Username:  ${ADMIN_USER}"
-echo "  Password:  ${NEW_PASSWORD}"
-echo "======================================================================"
+"$SPLUNK_DIR/bin/splunk" start --accept-license --answer-yes --no-prompt --run-as-root
+STATUS_OUT="$("$SPLUNK_DIR/bin/splunk" status 2>&1 || true)"
+echo "$STATUS_OUT"
+grep -qi "splunkd is running" <<<"$STATUS_OUT" || { echo "[ERROR] Splunk is not running after password reset."; exit 4; }
+echo "[SUCCESS] Password seed applied and Splunk daemon verified."
