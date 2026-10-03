@@ -3901,46 +3901,29 @@ PASSWORD = ${password}
   // TOOLBOX & NETWORK DIAGNOSTIC ENGINE API ROUTES
   // =========================================================================
 
-  // API: Get comprehensive Node Overview & Role Detection (Router, Switch, Firewall, Server, Forwarder, Client)
-  app.get('/api/toolbox/overview', async (req, res) => {
+  // API: Get comprehensive Node Overview & Role Detection using host state.
+  app.get('/api/toolbox/overview', async (_req, res) => {
     try {
       const scriptPath = getScriptPath('traffic-tools.py');
       if (fs.existsSync(scriptPath)) {
         const result = await runCommand(`python3 "${scriptPath}" role`);
-        if (result.stdout && result.stdout.trim().startsWith('{')) {
-          return res.json(JSON.parse(result.stdout));
-        }
+        if (result.code===0 && result.stdout.trim().startsWith('{')) return res.json(JSON.parse(result.stdout));
       }
-    } catch (e) {
-      // Fall through to native node fallback
-    }
-
-    // Native Node.js fallback
-    const netInfo = getSystemNetworkInfo();
-    const audit = getSystemAudit();
-    const isForwarder = audit.splunkHome.path.includes('forwarder');
-
-    res.json({
-      role: isForwarder ? 'forwarder' : (audit.listeningPorts.length > 2 ? 'server' : 'client'),
-      score: { server: 4, forwarder: isForwarder ? 6 : 2, firewall: 1, router: 1, switch: 0, client: 2 },
-      evidence: [
-        `Primary Host IP: ${netInfo.primaryIp}`,
-        `${audit.listeningPorts.length} listening ports detected`,
-        audit.user.isRoot ? 'Root execution privilege confirmed (UID: 0)' : `Running as user: ${audit.user.username}`,
-        audit.tools.procfs ? 'Linux kernel /proc filesystem is mounted and accessible' : 'Limited container environment'
-      ],
-      ifacesCount: netInfo.ipv4List.length,
-      interfaces: netInfo.ipv4List.map(i => ({ iface: i.iface, ip: i.ip, status: 'UP' })),
-      listenersCount: audit.listeningPorts.length,
-      establishedCount: audit.listeningPorts.length * 2,
-      routes: ['default via gateway dev eth0', '10.0.0.0/8 dev eth0 proto kernel scope link'],
-      neighbors: [
-        { ip: '10.18.32.74', dev: 'eth0', lladdr: '52:54:00:12:34:56', state: 'REACHABLE' },
-        { ip: '10.18.23.56', dev: 'eth0', lladdr: '52:54:00:ab:cd:ef', state: 'REACHABLE' }
-      ],
-      dnsServers: ['8.8.8.8', '1.1.1.1'],
-      firewallStatus: audit.tools.firewallCmd ? 'firewalld running' : 'Standard Linux iptables'
-    });
+      const interfaces = os.networkInterfaces();
+      const ipv4List:any[]=[];
+      for(const [iface,addrs] of Object.entries(interfaces)){ for(const a of addrs||[]){ if(a.family==='IPv4') ipv4List.push({iface,ip:a.address,status:a.internal?'LOOPBACK':'UP'}); } }
+      const route=await runCommand('ip',['-json','route']);
+      const neigh=await runCommand('ip',['-json','neigh']);
+      const sockets=await runCommand('ss',['-H','-lntup']);
+      const routes=parseJsonSafe(route.stdout,[]);
+      const neighbors=parseJsonSafe(neigh.stdout,[]);
+      const listeners=parseSs(sockets.stdout);
+      const splunkHome=resolveSplunkDirectory({} as any);
+      const splunkExists=fs.existsSync(path.join(splunkHome,'bin/splunk'));
+      const role=splunkExists?(splunkHome.includes('forwarder')?'forwarder':'server'):(listeners.listeners.length>2?'server':'client');
+      const firewalld=await runCommand('firewall-cmd',['--state']);
+      res.json({role,score:{[role]:1},evidence:[`${ipv4List.length} IPv4 interfaces detected`,`${listeners.listeners.length} listeners detected`,splunkExists?`Splunk detected at ${splunkHome}`:'No Splunk binary detected'],ifacesCount:ipv4List.length,interfaces:ipv4List,listenersCount:listeners.listeners.length,establishedCount:parseSs((await runCommand('ss',['-H','-tanp'])).stdout).connections.length,routes,neighbors,dnsServers:[],firewallStatus:firewalld.code===0?firewalld.stdout.trim():'firewalld unavailable',checkedAt:new Date().toISOString()});
+    } catch(err:any){ res.status(500).json({success:false,error:err.message}); }
   });
 
   // API: Get Live Connections & Peers (real socket state only)
