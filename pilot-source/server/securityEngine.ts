@@ -132,7 +132,7 @@ export function getHardwareFingerprint(): string {
     // Format as SPD-XXXX-XXXX-XXXX
     return `SPD-${hash.substring(0, 4)}-${hash.substring(4, 8)}-${hash.substring(8, 12)}`;
   } catch (_) {
-    return 'SPD-71E2-B3F9-8A10';
+    return 'SPD-UNAVAILABLE';
   }
 }
 
@@ -152,24 +152,21 @@ export function generateSignedLicenseKey(
 
 export function verifySignedLicenseKey(licenseKey: string, currentHwId: string): LicenseInfo {
   const hwId = currentHwId.toUpperCase();
-  const fallbackDate = new Date();
-  fallbackDate.setDate(fallbackDate.getDate() + 30); // 30-day default evaluation
 
   if (!licenseKey || !licenseKey.startsWith('LIC-')) {
-    const daysRemaining = 30;
     return {
       hardwareId: hwId,
-      companyName: 'Evaluation Customer',
-      licenseKey: 'NONE (Evaluation Mode)',
-      status: 'TRIAL',
-      tier: 'TRIAL',
-      maxNodes: 10,
+      companyName: 'Unlicensed Offline Installation',
+      licenseKey: '',
+      status: 'UNLICENSED',
+      tier: 'COMMUNITY',
+      maxNodes: 2,
       issuedAt: new Date().toISOString(),
-      expiresAt: fallbackDate.toISOString(),
-      daysRemaining,
-      features: ['Full Topology', 'Port Probes', 'Config Editor', 'Diagnostic Tools'],
+      expiresAt: '',
+      daysRemaining: 0,
+      features: [],
       isTampered: false,
-      watermarkNote: 'TRIAL EVALUATION MODE (Active on Node: ' + hwId + ')'
+      watermarkNote: 'No commercial license is configured.'
     };
   }
 
