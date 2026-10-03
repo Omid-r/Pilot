@@ -605,20 +605,58 @@ export default function App() {
   };
 
   // Commercial Digital License State
-  const [digitalLicense, setDigitalLicense] = useState<DigitalCertificateLicense>(() => {
-    const saved = localStorage.getItem('splunk_doctor_commercial_license');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (_) {}
+  const [digitalLicense, setDigitalLicense] = useState<DigitalCertificateLicense>(INITIAL_DIGITAL_LICENSE);
+
+  useEffect(() => {
+    if (!authToken) {
+      setDigitalLicense(INITIAL_DIGITAL_LICENSE);
+      return;
     }
-    return INITIAL_DIGITAL_LICENSE;
-  });
+    let cancelled = false;
+    const refreshLicense = async () => {
+      try {
+        const response = await fetch('/api/security/license-status', {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+
+        const status = data.status === 'VALID' ? 'ACTIVE' : data.status === 'EXPIRED' ? 'EXPIRED' : 'UNLICENSED';
+        setDigitalLicense({
+          ...INITIAL_DIGITAL_LICENSE,
+          certificateId: '',
+          serialNumber: '',
+          subject: {
+            ...INITIAL_DIGITAL_LICENSE.subject,
+            organization: data.companyName || '',
+            subscriptionTier: status === 'ACTIVE' ? 'STANDARD_COMMERCIAL' : 'UNLICENSED',
+            nodeLimit: Number(data.maxNodes || 0),
+            licensedModules: Array.isArray(data.features) ? data.features : [],
+            status
+          },
+          validity: {
+            ...INITIAL_DIGITAL_LICENSE.validity,
+            notAfter: data.expiresAt || '',
+            daysRemaining: Number(data.daysRemaining || 0),
+            isExpired: status === 'EXPIRED'
+          },
+          privacyPolicy: {
+            ...INITIAL_DIGITAL_LICENSE.privacyPolicy,
+            dataResidencyCompliance: status === 'ACTIVE' ? 'Runtime entitlement verified locally' : 'No verified commercial entitlement'
+          }
+        });
+      } catch (error) {
+        console.warn('[REAL LICENSE] refresh failed', error);
+      }
+    };
+    refreshLicense();
+    return () => { cancelled = true; };
+  }, [authToken]);
 
   const handleUpdateDigitalLicense = (updated: DigitalCertificateLicense) => {
     setDigitalLicense(updated);
-    localStorage.setItem('splunk_doctor_commercial_license', JSON.stringify(updated));
-    showToast(isFa ? 'گواهینامه تجاری سازمان با موفقیت بروزرسانی و فعال شد.' : 'Commercial certificate updated.');
+    showToast(isFa ? 'وضعیت لایسنس فقط پس از تأیید backend به‌روزرسانی می‌شود.' : 'License state is updated only after backend verification.');
   };
 
   // Heartbeat & Live Ingestion Radar State
