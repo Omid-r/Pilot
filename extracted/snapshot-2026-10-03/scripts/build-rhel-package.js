@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
-const PACKAGE_VERSION = '1.3.0';
+const PACKAGE_VERSION = '1.4.0';
 const BUILD_DATE = new Date().toISOString();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,6 +16,7 @@ console.log(`[RHEL Packager] Building Splunk Cluster Doctor Standalone RHEL Pack
 console.log(`[RHEL Packager] App Root Directory: ${rootDir}`);
 const stagingDir = path.join('/tmp', 'splunk_doctor_rhel_staging');
 const publicDir = path.join(rootDir, 'public');
+const bundledNodeBin = process.env.BUNDLED_NODE_BIN || process.execPath;
 
 if (!fs.existsSync(publicDir)) {
   fs.mkdirSync(publicDir, { recursive: true });
@@ -73,6 +74,14 @@ if (fs.existsSync(path.join(rootDir, 'scripts'))) {
   } catch (_) {}
 }
 
+// 3c. Bundle a portable Linux Node.js runtime. The workflow supplies the official x64 build.
+if (!fs.existsSync(bundledNodeBin)) {
+  throw new Error('Bundled Node.js runtime not found: ' + bundledNodeBin);
+}
+const nodeRuntimeTarget = path.join(stagingDir, 'node-runtime', 'bin');
+fs.mkdirSync(nodeRuntimeTarget, { recursive: true });
+fs.copyFileSync(bundledNodeBin, path.join(nodeRuntimeTarget, 'node'));
+fs.chmodSync(path.join(nodeRuntimeTarget, 'node'), 0o755);
 // 4. Create package.json for standalone RHEL server
 const rhelPackageJson = {
   name: "splunk-cluster-doctor-rhel",
@@ -106,16 +115,14 @@ echo "=========================================================="
 echo " Starting Splunk Cluster Doctor (RHEL Standalone v${PACKAGE_VERSION})"
 echo "=========================================================="
 
-# Check Node.js
-if ! command -v node >/dev/null 2>&1; then
-    echo "[-] Node.js is not installed."
-    echo "[!] Run: sudo dnf install -y nodejs   (RHEL 8/9, Rocky, AlmaLinux)"
-    echo "[!] Or:  sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
+NODE_BIN="$DIR/node-runtime/bin/node"
+if [ ! -x "$NODE_BIN" ]; then
+    echo "[-] Bundled Node.js runtime is missing or not executable: $NODE_BIN"
     exit 1
 fi
 
-NODE_VER=$(node -v)
-echo "[+] Detected Node.js: $NODE_VER"
+NODE_VER=$("$NODE_BIN" -v)
+echo "[+] Detected bundled Node.js: $NODE_VER"
 
 # Auto-detect Splunk Home if not set
 if [ -z "$SPLUNK_HOME" ]; then
@@ -154,7 +161,7 @@ echo " Access UI in your browser at: http://$(hostname -I 2>/dev/null | awk '{pr
 echo " Press Ctrl+C to stop."
 echo "=========================================================="
 
-exec node dist/server.cjs
+exec "$NODE_BIN" dist/server.cjs
 `;
 fs.writeFileSync(path.join(stagingDir, 'start.sh'), startSh, { encoding: 'utf8', mode: 0o755 });
 
@@ -208,9 +215,13 @@ cp -r ./* "$TARGET_DIR/"
 chmod -R 755 "$TARGET_DIR"
 chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
 
-# Dynamic Node.js path discovery
-NODE_PATH="$(command -v node 2>/dev/null || echo "/usr/bin/node")"
-sed -i "s|ExecStart=.*|ExecStart=\${NODE_PATH} /opt/splunk-doctor/dist/server.cjs|g" "$TARGET_DIR/systemd/splunk-doctor.service" 2>/dev/null || true
+# Use the bundled Node.js runtime; no system Node.js installation is required.
+NODE_PATH="$TARGET_DIR/node-runtime/bin/node"
+if [ ! -x "$NODE_PATH" ]; then
+  echo "[-] Bundled Node.js runtime is missing: $NODE_PATH"
+  exit 1
+fi
+sed -i "s|ExecStart=.*|ExecStart=${NODE_PATH} /opt/splunk-doctor/dist/server.cjs|g" "$TARGET_DIR/systemd/splunk-doctor.service"
 
 echo "[+] Installing systemd service: /etc/systemd/system/splunk-doctor.service"
 cp "$TARGET_DIR/systemd/splunk-doctor.service" /etc/systemd/system/splunk-doctor.service
@@ -487,6 +498,8 @@ fs.writeFileSync(path.join(stagingDir, 'VERSION'), versionInfo, 'utf8');
 console.log('[RHEL Packager] Archiving tar.gz...');
 const targetTar1 = path.join(publicDir, 'splunk_doctor_standalone_ui.tar.gz');
 const targetTar2 = path.join(publicDir, `splunk_cluster_doctor_rhel_v${PACKAGE_VERSION}.tar.gz`);
+const targetTarRoot = path.join(rootDir, 'splunk-doctor-offline-rhel.tar.gz');
+const targetShaRoot = path.join(rootDir, 'splunk-doctor-offline-rhel.tar.gz.sha256');
 
 // We package the contents inside a 'splunk-doctor' directory inside the tarball so it extracts neatly
 const wrappedDir = path.join('/tmp', 'splunk_doctor_wrapper');
@@ -496,9 +509,13 @@ if (fs.existsSync(wrappedDir)) {
 fs.mkdirSync(path.join(wrappedDir, 'splunk-doctor'), { recursive: true });
 execSync(`cp -r "${stagingDir}/"* "${path.join(wrappedDir, 'splunk-doctor')}/"`);
 
-execSync(`tar -czf "${targetTar1}" -C "${wrappedDir}" splunk-doctor`);
-execSync(`cp "${targetTar1}" "${targetTar2}"`);
+execSync(`tar -czf "${targetTarRoot}" -C "${wrappedDir}" splunk-doctor`);
+execSync(`cp "${targetTarRoot}" "${targetTar1}"`);
+execSync(`cp "${targetTarRoot}" "${targetTar2}"`);
+const sha256 = execSync(`sha256sum "${targetTarRoot}"`, { encoding: 'utf8' });
+fs.writeFileSync(targetShaRoot, sha256, 'utf8');
 
-console.log(`[RHEL Packager] Generated: ${targetTar1} (${fs.statSync(targetTar1).size} bytes)`);
-console.log(`[RHEL Packager] Generated: ${targetTar2} (${fs.statSync(targetTar2).size} bytes)`);
+console.log(`[RHEL Packager] Generated: ${targetTarRoot} (${fs.statSync(targetTarRoot).size} bytes)`);
+console.log(`[RHEL Packager] Generated: ${targetShaRoot}`);
+console.log(`[RHEL Packager] Public copies: ${targetTar1}, ${targetTar2}`);
 console.log('[RHEL Packager] Done successfully!');
