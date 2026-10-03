@@ -1,0 +1,71 @@
+name: Pilot Snapshot Real Build
+
+on:
+  push:
+    branches:
+      - pilot-real-20261003
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - name: TypeScript check
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run lint
+
+      - name: Build application
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run build
+
+      - name: Real smoke test
+        working-directory: extracted/snapshot-2026-10-03
+        run: npm run smoke
+
+      - name: Reject runtime credentials/state in source package
+        working-directory: extracted/snapshot-2026-10-03
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f data/security-db.json
+          test ! -f data/master-signing.key
+          if grep -R -nE "password *= ['\"]changeme['\"]|PASSWORD = changeme|pass4SymmKey = changeme" server src scripts; then
+            echo 'Found hard-coded runtime credential.'
+            exit 1
+          fi
+
+      - name: Inspect generated package
+        working-directory: extracted/snapshot-2026-10-03
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f public/splunk_cluster_doctor_rhel_v1.0.1.tar.gz
+          tar -tzf public/splunk_cluster_doctor_rhel_v1.0.1.tar.gz | grep -Fx 'pilot_splunk_doctor_rhel_staging/setup.sh'
+          tar -tzf public/splunk_cluster_doctor_rhel_v1.0.1.tar.gz | grep -Fx 'pilot_splunk_doctor_rhel_staging/node-runtime/bin/node'
+          tar -tzf public/splunk_cluster_doctor_rhel_v1.0.1.tar.gz | grep -Fx 'pilot_splunk_doctor_rhel_staging/dist/server.cjs'
+
+      - name: Upload RHEL package
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-splunk-doctor-rhel-v1.0.1
+          path: |
+            extracted/snapshot-2026-10-03/public/splunk_cluster_doctor_rhel_v1.0.1.tar.gz
+          if-no-files-found: error
