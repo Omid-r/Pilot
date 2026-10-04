@@ -62,6 +62,7 @@ import { FloatingMiniWindow } from './components/FloatingMiniWindow';
 import { SplunkArchitectOverseerEngine } from './components/SplunkArchitectOverseerEngine';
 import { SplunkSystemDebugModal } from './components/SplunkSystemDebugModal';
 import { AppModulesManagerModal, AppModuleConfig, AVAILABLE_ICONS } from './components/AppModulesManagerModal';
+import ToolErrorBoundary from './components/ToolErrorBoundary';
 import { auditSplunkConfigs, applyRemediationOption } from './utils/splunkAuditEngine';
 import { analyzeSplunkLogLine } from './data/logAnalysisEngine';
 import { parseInputsConf, extractClusterFromConfigs, clusterNodesToSettings } from './utils/splunkConfigParser';
@@ -557,6 +558,10 @@ export default function App() {
   const handleToggleFloatingTool = (toolId: string) => {
     if (floatingTools.includes(toolId)) {
       showToast(isFa ? 'این ابزار در حال حاضر در پنجره شناور در حال اجراست.' : 'This tool is already running in a floating window.');
+      return;
+    }
+    if (floatingTools.length >= 2) {
+      showToast(isFa ? 'برای پایداری مرورگر حداکثر دو پنجره شناور هم‌زمان مجاز است.' : 'For browser stability, at most two floating tools can run at once.');
       return;
     }
     setFloatingTools(prev => [...prev, toolId]);
@@ -3394,7 +3399,12 @@ export default function App() {
             </div>
 
             {/* Active Tool View */}
-            {renderToolContent(activeTab, false)}
+            <ToolErrorBoundary
+              lang={lang}
+              toolName={ALL_MODULES.find(m => m.id === activeTab)?.[isFa ? 'titleFa' : 'titleEn']}
+            >
+              {renderToolContent(activeTab, false)}
+            </ToolErrorBoundary>
           </main>
 
           {/* Issue Detail & Multi-Option Remediation Modal */}
@@ -3665,7 +3675,12 @@ export default function App() {
             onClose={() => handleCloseFloatingTool(toolId)}
             onMaximize={() => handleMaximizeFloatingTool(toolId)}
           >
-            {renderToolContent(toolId, true)}
+            <ToolErrorBoundary
+              lang={lang}
+              toolName={mod?.[isFa ? 'titleFa' : 'titleEn']}
+            >
+              {renderToolContent(toolId, true)}
+            </ToolErrorBoundary>
           </FloatingMiniWindow>
         );
       })}
