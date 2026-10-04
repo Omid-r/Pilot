@@ -265,8 +265,8 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
         });
         setDiagnosticIssues(processedIssues);
         const hasFails = processedIssues.some((i: any) => i.status === 'FAIL');
-        setOverallHealthScore(hasFails ? 35 : 100);
-        setHttpStatusResult(hasFails ? '000' : '200');
+        setOverallHealthScore(Number(data.healthScore ?? data.overallHealthScore ?? (hasFails ? 35 : 100)));
+        setHttpStatusResult(String(data.httpStatus ?? (hasFails ? '000' : '200')));
         setAiAnalysisSummary(data.aiAnalysis || null);
         setLastScanTime(new Date().toLocaleTimeString());
       } else {
@@ -299,7 +299,7 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
 
     setAiLogs([
       `[${new Date().toLocaleTimeString()}] [AI_HEALER] آغاز پروسه خودترمیمی روی ${isReal ? 'سرور اصلی عملیاتی (:8000)' : isVirtual ? 'سرور مجازی داکر کانتینر (:8080)' : 'سرور موازی استیجینگ (:8001)'}...`,
-      `[${new Date().toLocaleTimeString()}] [1/6] آزادسازی سوکت‌های معلق و بررسی پروسه‌های قفل شده...`
+      `[${new Date().toLocaleTimeString()}] [1/6] بررسی قفل‌ها، سوکت‌ها و منابع عملیاتی بدون process scan...`
     ]);
 
     try {
@@ -321,9 +321,9 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
         const data = await res.json();
         setAiLogs(data.logs || []);
         setAutoHealCompleted(true);
-        setHttpStatusResult(data.httpStatus || '200');
-        setOverallHealthScore(100);
-        setAutoHealStats({ fixedCount: data.fixedCount || 6, remainingCount: 0 });
+        setHttpStatusResult(String(data.httpStatus ?? '000'));
+        setOverallHealthScore(Number(data.healthScore ?? data.overallHealthScore ?? (data.success === true ? 100 : 0)));
+        setAutoHealStats({ fixedCount: Number(data.fixedCount ?? 0), remainingCount: Number(data.remainingCount ?? 0) });
         showToast(isFa ? 'هوش مصنوعی تمام خطاها را با موفقیت برطرف کرد ✓' : 'AI Auto-Heal completed successfully ✓');
         
         // Save current issues as fixed for the target server type
