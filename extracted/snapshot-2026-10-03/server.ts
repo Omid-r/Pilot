@@ -3424,6 +3424,123 @@ async function startServer() {
     });
   });
 
+  // =========================================================================
+  // BENTO LIVE TELEMETRY — REAL HOST / SPLUNK / NODES / SOCKETS
+  // =========================================================================
+  app.post('/api/bento/live', async (req, res) => {
+    const started = Date.now();
+    const targets = Array.isArray(req.body?.targets) ? req.body.targets : [];
+    const audit = getSystemAudit();
+    const net = getSystemNetworkInfo();
+    const splunkHome = audit.splunkHome.path;
+    const splunkBin = path.join(splunkHome, 'bin/splunk');
+    const listeners = detectListeningPorts();
+
+    const expectedPorts = [
+      { port: 9997, name: 'S2S Ingestion', protocol: 'TCP/TLS' },
+      { port: 8089, name: 'Management API', protocol: 'HTTPS' },
+      { port: 8000, name: 'Splunk Web', protocol: 'HTTPS' },
+      { port: 8088, name: 'HTTP Event Collector', protocol: 'HTTPS' },
+      { port: 514, name: 'Syslog', protocol: 'UDP/TCP' }
+    ];
+
+    const run = async (cmd: string, args: string[], tool: string) => runCommand(cmd, args, {
+      toolId: tool,
+      toolNameFa: 'Bento — آزمون واقعی',
+      toolNameEn: 'Bento — Real probe',
+      category: 'system',
+      timeoutMs: 12000
+    });
+
+    const df = await run('df', ['-P', '/'], 'bento_disk');
+    const uname = await run('uname', ['-a'], 'bento_kernel');
+    let diskUsage = 0;
+    const dfLine = (df.stdout || '').split(/\n/).filter(Boolean).pop() || '';
+    const dm = dfLine.match(/\s(\d+)%\s+\/\s*$/);
+    if (dm) diskUsage = Number(dm[1]);
+
+    let splunkVersion = '';
+    let splunkVersionOk = false;
+    if (fs.existsSync(splunkBin)) {
+      const v = await runCommand('bash', ['-lc', 'SPLUNK_HOME="' + splunkHome + '" "' + splunkBin + '" version'], {
+        toolId: 'bento_splunk_version', toolNameFa: 'Bento — نسخه Splunk', toolNameEn: 'Bento — Splunk version', category: 'splunk', timeoutMs: 12000
+      });
+      splunkVersion = (v.stdout || v.stderr || '').trim();
+      splunkVersionOk = v.code === 0;
+    }
+
+    let observedEps: number | null = null;
+    let ingestSource = 'unavailable';
+    const logPaths = [path.join(splunkHome, 'var/log/splunk/splunkd.log'), '/var/log/splunk/splunkd.log'];
+    const logPath = logPaths.find(p => fs.existsSync(p));
+    if (logPath) {
+      try {
+        const lines = fs.readFileSync(logPath, 'utf8').split(/\n/).filter(Boolean).slice(-3000);
+        const ingestLines = lines.filter(line => /TcpInputProc|HTTPEventCollector|ExecProcessor|indexing|ingest/i.test(line));
+        observedEps = Math.max(0, Math.round(ingestLines.length / 60));
+        ingestSource = 'splunkd.log observed lines / 60s window';
+      } catch (_) {}
+    }
+
+    const nodeTargets = targets.filter((t: any) => t && t.host).slice(0, 32).map((t: any) => ({
+      id: String(t.id || t.host),
+      name: String(t.name || t.host),
+      host: String(t.host),
+      port: Number(t.port || (String(t.role || '').includes('search') ? 8000 : 8089)),
+      role: String(t.role || 'node')
+    }));
+    const nodes = await Promise.all(nodeTargets.map(async (n: any) => {
+      const p = await testTcpPort(n.host, n.port, 1800);
+      return { ...n, open: p.open, latencyMs: p.latencyMs, error: p.error || null, heartbeat: p.open ? 'healthy' : 'offline', checkedAt: new Date().toISOString() };
+    }));
+
+    const sockets = expectedPorts.map(p => {
+      const found = listeners.find((x: any) => x.port === p.port);
+      return { ...p, open: Boolean(found), address: found?.address || null, detectedProtocol: found?.protocol || null };
+    });
+
+    const read = (rel: string) => {
+      try { const f = path.join(splunkHome, rel); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : ''; } catch (_) { return ''; }
+    };
+    const serverConf = read('etc/system/local/server.conf');
+    const outputsConf = read('etc/system/local/outputs.conf');
+    const indexesConf = read('etc/system/local/indexes.conf');
+    const webConf = read('etc/system/local/web.conf');
+    const architectureChecks = [
+      { id: 'splunk', labelFa: 'باینری و نسخه Splunk', status: splunkVersionOk ? 'pass' : 'warn', detailFa: splunkVersionOk ? splunkVersion : 'باینری یا دستور version واقعی در دسترس نیست.' },
+      { id: 'management', labelFa: 'پورت مدیریت 8089', status: sockets.find(p => p.port === 8089)?.open ? 'pass' : 'warn', detailFa: 'وضعیت listener واقعی 8089.' },
+      { id: 'web', labelFa: 'پورت وب 8000', status: sockets.find(p => p.port === 8000)?.open ? 'pass' : 'warn', detailFa: 'وضعیت listener واقعی 8000.' },
+      { id: 'server-conf', labelFa: 'server.conf', status: serverConf ? 'pass' : 'warn', detailFa: serverConf ? 'فایل واقعی قابل‌خواندن است.' : 'فایل واقعی پیدا نشد.' },
+      { id: 'outputs-conf', labelFa: 'outputs.conf', status: outputsConf ? 'pass' : 'warn', detailFa: outputsConf ? 'فایل واقعی قابل‌خواندن است.' : 'فایل واقعی پیدا نشد.' },
+      { id: 'indexes-conf', labelFa: 'indexes.conf', status: indexesConf ? 'pass' : 'warn', detailFa: indexesConf ? 'فایل واقعی قابل‌خواندن است.' : 'فایل واقعی پیدا نشد.' },
+      { id: 'web-conf', labelFa: 'web.conf', status: webConf ? 'pass' : 'warn', detailFa: webConf ? 'فایل واقعی قابل‌خواندن است.' : 'فایل واقعی پیدا نشد.' },
+      { id: 'disk', labelFa: 'فضای دیسک', status: diskUsage < 85 ? 'pass' : 'warn', detailFa: 'مصرف ریشه: ' + diskUsage + '%' }
+    ];
+
+    const healthSignals = [
+      splunkVersionOk,
+      sockets.some((p: any) => p.port === 8089 && p.open),
+      sockets.some((p: any) => p.port === 8000 && p.open),
+      diskUsage < 90,
+      Boolean(audit.tools?.ss),
+      Boolean(audit.tools?.ip)
+    ];
+    const healthScore = Math.round((healthSignals.filter(Boolean).length / healthSignals.length) * 100);
+    const architectureScore = Math.round((architectureChecks.filter((x: any) => x.status === 'pass').length / architectureChecks.length) * 100);
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res.json({
+      success: true, checkedAt: new Date().toISOString(), latencyMs: Date.now() - started,
+      host: { hostname: net.hostname, primaryIp: net.primaryIp, interfaces: net.ipv4List },
+      health: { score: healthScore, signals: healthSignals, report: architectureChecks },
+      architecture: { score: architectureScore, checks: architectureChecks },
+      ingestion: { eps: observedEps, source: ingestSource },
+      nodes, sockets, listeners,
+      splunk: { installed: fs.existsSync(splunkBin), home: splunkHome, version: splunkVersion, versionOk: splunkVersionOk, logPath: logPath || null },
+      system: { uptimeSeconds: os.uptime(), loadAverage: os.loadavg(), cpuCores: os.cpus().length, memoryTotalBytes: os.totalmem(), memoryFreeBytes: os.freemem(), diskUsagePercent: diskUsage, kernel: (uname.stdout || '').trim() }
+    });
+  });
+
   // Real tool validation for legacy UI.
   const registeredToolIds = [
     'architect_overseer','autonomous_agent','ai_diagnostics','bento_overview','cluster_deployer',
