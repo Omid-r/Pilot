@@ -25,7 +25,6 @@ rm -f /etc/systemd/system/splunk-doctor.service
 systemctl daemon-reload 2>/dev/null || true
 
 rm -f /usr/local/bin/splunk-doctor-node
-rm -f /usr/local/bin/kubectl
 rm -f /etc/yum.repos.d/splunk-doctor-offline.repo
 
 rm -rf /opt/splunk-doctor
