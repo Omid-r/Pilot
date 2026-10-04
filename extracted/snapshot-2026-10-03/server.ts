@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { exec, execSync, execFile } from 'child_process';
 import net from 'net';
+import * as dgram from 'dgram';
 import os from 'os';
 import {
   hashPassword,
@@ -3709,7 +3710,7 @@ async function startServer() {
       const ifaces=await runCommand('ip',['-json','addr']);
       const routes=await runCommand('ip',['-json','route']);
       const neigh=await runCommand('ip',['-json','neigh']);
-      const sockets=await runCommand('ss',['-H','-tulpn']);
+      const sockets=await runCommand('ss',['-H','-tuln']);
       const netInfo=getSystemNetworkInfo();
       const audit=getSystemAudit();
       let dnsServers:string[]=[];
@@ -3726,7 +3727,7 @@ async function startServer() {
         interfaces:netInfo.ipv4List.map(i=>({iface:i.iface,ip:i.ip,status:'UP'})),
         listenersCount:audit.listeningPorts.length,
         listeners:audit.listeningPorts,
-        establishedCount:(getSystemNetworkInfo().ipv4List.length),
+        establishedCount: (sockets.stdout.match(/ESTAB/g) || []).length,
         routes:routeJson,
         neighbors,
         dnsServers,
@@ -3739,26 +3740,146 @@ async function startServer() {
     }catch(e:any){res.status(500).json({success:false,error:e.message});}
   });
 
-  // API: Get Live Connections & Peers — parse the kernel socket table.
-  app.get('/api/toolbox/connections', async (_req,res) => {
-    const r=await runCommand('ss',['-H','-tan']);
-    if(r.code!==0 && !r.stdout) return res.status(500).json({success:false,error:r.stderr||'ss failed'});
-    const rows=r.stdout.split('\\n').map(l=>l.trim()).filter(Boolean).map(line=>{
-      const parts=line.split(/\\s+/);
-      return {state:parts[0]||'',local:parts[3]||'',remote:parts[4]||''};
-    });
-    res.json({success:true,connections:rows,checkedAt:new Date().toISOString()});
+  // API: Probe one or more TCP/UDP ports against a real target.
+  app.post('/api/toolbox/port-scan', async (req, res) => {
+    try {
+      const target = String(req.body?.target || '').trim();
+      const proto = String(req.body?.proto || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
+      if (!target) return res.status(400).json({ success: false, error: 'Target host is required.' });
+
+      const rawPorts = String(req.body?.ports || '');
+      const ports = new Set<number>();
+      for (const token of rawPorts.split(',')) {
+        const value = token.trim();
+        if (!value) continue;
+        const range = value.match(/^(\\d+)\\s*-\\s*(\\d+)$/);
+        if (range) {
+          const lo = Math.min(Number(range[1]), Number(range[2]));
+          const hi = Math.max(Number(range[1]), Number(range[2]));
+          if (lo < 1 || hi > 65535 || hi - lo > 127) return res.status(400).json({ success: false, error: 'Port range must stay within 1-65535 and contain at most 128 ports.' });
+          for (let p = lo; p <= hi; p++) ports.add(p);
+        } else if (/^\\d+$/.test(value)) {
+          const p = Number(value);
+          if (p < 1 || p > 65535) return res.status(400).json({ success: false, error: 'Port must be between 1 and 65535.' });
+          ports.add(p);
+        } else return res.status(400).json({ success: false, error: 'Invalid port expression: ' + value });
+      }
+      const portList = [...ports].slice(0, 128);
+      if (portList.length === 0) return res.status(400).json({ success: false, error: 'At least one port is required.' });
+
+      const cleanTarget = sanitizeHostTarget(target);
+      const probeUdpPort = (port: number): Promise<{ status: 'OPEN' | 'CLOSED' | 'FILTERED' | 'ERROR'; latencyMs: number; message: string }> =>
+        new Promise(resolve => {
+          const socket = dgram.createSocket(cleanTarget.includes(':') ? 'udp6' : 'udp4');
+          const started = Date.now();
+          let settled = false;
+          const finish = (status: 'OPEN' | 'CLOSED' | 'FILTERED' | 'ERROR', message: string) => {
+            if (settled) return;
+            settled = true;
+            try { socket.close(); } catch (_) {}
+            resolve({ status, latencyMs: Date.now() - started, message });
+          };
+          socket.once('error', (err: any) => finish(err?.code === 'ECONNREFUSED' ? 'CLOSED' : 'ERROR', err?.message || 'UDP probe failed'));
+          socket.once('message', () => finish('OPEN', 'UDP response received.'));
+          socket.connect(port, cleanTarget, () => {
+            try {
+              socket.send(Buffer.alloc(0), err => {
+                if (err) finish('ERROR', err.message);
+                else setTimeout(() => finish('FILTERED', 'UDP datagram sent; no response received. This does not prove the port is closed.'), 1400);
+              });
+            } catch (err: any) { finish('ERROR', err?.message || 'UDP send failed'); }
+          });
+          setTimeout(() => finish('FILTERED', 'UDP probe timed out without a response.'), 1800);
+        });
+
+      const results = await Promise.all(portList.map(async port => {
+        if (proto === 'tcp') {
+          const probe = await testTcpPort(cleanTarget, port, 1800);
+          return { port, proto: 'tcp' as const, status: probe.open ? 'OPEN' as const : 'CLOSED' as const, latencyMs: probe.latencyMs, message: probe.open ? 'TCP connection established.' : (probe.error || 'TCP connection refused or timed out.') };
+        }
+        const probe = await probeUdpPort(port);
+        return { port, proto: 'udp' as const, ...probe };
+      }));
+
+      res.json({ success: true, target: cleanTarget, proto, requestedPorts: portList, results, checkedAt: new Date().toISOString() });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e?.message || 'Port probe failed.' });
+    }
   });
 
-  // API: Get Conntrack Active Flow Table — real conntrack when available, otherwise kernel sockets.
-  app.post('/api/toolbox/flows', async (req,res) => {
-    const f=req.body||{};
-    const conn=await runCommand('conntrack',['-L','-o','extended'],{timeoutMs:15000});
-    if(conn.code===0 && conn.stdout.trim()){
-      return res.json({success:true,source:'conntrack',filters:f,raw:conn.stdout,flows:conn.stdout.split('\\n').filter(Boolean)});
+  // API: Real ICMP ping latency/loss probe.
+  app.post('/api/toolbox/ping', async (req, res) => {
+    try {
+      const target = String(req.body?.target || '').trim();
+      const count = Math.min(20, Math.max(1, Number(req.body?.count || 4)));
+      if (!target) return res.status(400).json({ success: false, error: 'Ping target is required.' });
+      const cleanTarget = sanitizeHostTarget(target);
+      const result = await runCommand('ping', ['-n', '-c', String(count), '-W', '2', cleanTarget], { toolId: 'network_toolbox_ping', toolNameFa: 'تست واقعی Ping', toolNameEn: 'Real ICMP Ping', category: 'network', timeoutMs: Math.max(10000, count * 3000) });
+      const raw = (result.stdout || result.stderr || '').toString();
+      const packetMatch = raw.match(/(\\d+)\\s+packets transmitted,\\s+(\\d+)\\s+(?:packets )?received,\\s+(\\d+(?:\\.\\d+)?)%\\s+packet loss/i);
+      const rttMatch = raw.match(/(?:min\/avg\/max\/mdev|round-trip min\/avg\/max\/stddev)\\s*=\\s*([0-9.]+)\\/([0-9.]+)\\/([0-9.]+)\\/([0-9.]+)/i);
+      const samples = [...raw.matchAll(/time=([0-9.]+)\\s*ms/g)].map(m => Number(m[1])).filter(Number.isFinite);
+      const transmitted = packetMatch ? Number(packetMatch[1]) : count;
+      const received = packetMatch ? Number(packetMatch[2]) : samples.length;
+      const lossPercent = packetMatch ? Number(packetMatch[3]) : Math.max(0, Number(((transmitted - received) / Math.max(1, transmitted) * 100).toFixed(1)));
+      res.json({ success: received > 0, target: cleanTarget, transmitted, received, lossPercent, minMs: rttMatch ? Number(rttMatch[1]) : (samples.length ? Math.min(...samples) : undefined), avgMs: rttMatch ? Number(rttMatch[2]) : (samples.length ? Number((samples.reduce((a,b) => a + b, 0) / samples.length).toFixed(3)) : undefined), maxMs: rttMatch ? Number(rttMatch[3]) : (samples.length ? Math.max(...samples) : undefined), mdevMs: rttMatch ? Number(rttMatch[4]) : undefined, rawOutput: raw, exitCode: result.code, checkedAt: new Date().toISOString() });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e?.message || 'Ping probe failed.' });
     }
-    const sockets=await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
-    return res.json({success:true,source:'ss',filters:f,raw:sockets.stdout,flows:sockets.stdout.split('\\n').filter(Boolean)});
+  });
+
+  // API: Get live connections and peers from kernel sockets only.
+  app.get('/api/toolbox/connections', async (_req,res) => {
+    const r = await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
+    if(r.code!==0 && !r.stdout) return res.status(500).json({success:false,error:r.stderr||'ss failed'});
+    const localIps = new Set(getSystemNetworkInfo().ipv4List.map(i => i.ip));
+    const parseEndpoint = (value: string) => {
+      const v = value.trim();
+      const m = v.match(/^\\[([^\\]]+)\\]:(\\d+)$/) || v.match(/^(.+):(\\d+)$/);
+      return m ? { ip: m[1], port: m[2] } : { ip: v, port: '' };
+    };
+    const connections = r.stdout.split('\\n').map(l=>l.trim()).filter(Boolean).map(line => {
+      const parts = line.split(/\\s+/);
+      const state = parts[0] || '';
+      const local = parseEndpoint(parts[3] || '');
+      const remote = parseEndpoint(parts[4] || '');
+      const dir = state === 'LISTEN' ? '-' : localIps.has(remote.ip) ? 'OUT' : localIps.has(local.ip) ? 'IN' : '-';
+      return { remoteIp: remote.ip || '*', remotePort: remote.port || '*', localPort: local.port || '*', localIp: local.ip || '*', proto: 'TCP', state, dir, action: '-', packets: 0, proc: '-', purpose: state === 'LISTEN' ? 'Kernel listener' : state === 'ESTAB' ? 'Established TCP session' : state };
+    });
+    res.json({success:true,connections,establishedCount:connections.filter(c=>c.state==='ESTAB').length,checkedAt:new Date().toISOString()});
+  });
+
+  // API: Conntrack / socket flow table normalized for the UI.
+  app.post('/api/toolbox/flows', async (req,res) => {
+    const filters = req.body || {};
+    const localIps = new Set(getSystemNetworkInfo().ipv4List.map(i => i.ip));
+    const conn = await runCommand('conntrack',['-L','-o','extended'],{timeoutMs:15000});
+    const flows:any[] = [];
+    if (conn.code === 0 && conn.stdout.trim()) {
+      for (const line of conn.stdout.split('\\n').filter(Boolean)) {
+        const head = line.match(/^(tcp|udp|icmp)\\s+\\d+\\s+\\d+\\s+(\\S+)/i);
+        const tuples = [...line.matchAll(/src=([^\\s]+)\\s+dst=([^\\s]+)\\s+sport=(\\d+)\\s+dport=(\\d+)/gi)];
+        if (!head || tuples.length < 2) continue;
+        const orig = tuples[0]; const reply = tuples[1];
+        flows.push({ dir: localIps.has(orig[1]) ? 'OUT' : localIps.has(reply[1]) ? 'IN' : '-', proto: head[1].toUpperCase(), origSrc: orig[1], origDst: orig[2], origSport: orig[3], origDport: orig[4], replySrc: reply[1], replyDst: reply[2], replySport: reply[3], replyDport: reply[4], state: head[2] });
+      }
+    }
+    let source = 'conntrack';
+    if (flows.length === 0) {
+      source = 'ss';
+      const sockets = await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
+      const parseEndpoint = (value: string) => { const m = value.match(/^\\[([^\\]]+)\\]:(\\d+)$/) || value.match(/^(.+):(\\d+)$/); return m ? { ip: m[1], port: m[2] } : { ip: value || '*', port: '*' }; };
+      for (const line of sockets.stdout.split('\\n').filter(Boolean)) {
+        const parts = line.trim().split(/\\s+/); if (parts.length < 5 || parts[0] === 'LISTEN') continue;
+        const local = parseEndpoint(parts[3]); const remote = parseEndpoint(parts[4]); if (remote.port === '*') continue;
+        flows.push({ dir: localIps.has(local.ip) ? 'OUT' : localIps.has(remote.ip) ? 'IN' : '-', proto: 'TCP', origSrc: local.ip, origDst: remote.ip, origSport: local.port, origDport: remote.port, replySrc: remote.ip, replyDst: local.ip, replySport: remote.port, replyDport: local.port, state: parts[0] });
+      }
+    }
+    let filtered = flows;
+    if (filters.fproto && filters.fproto !== 'any') filtered = filtered.filter(f => f.proto.toLowerCase() === String(filters.fproto).toLowerCase());
+    if (filters.fdir && filters.fdir !== 'all') filtered = filtered.filter(f => f.dir.toLowerCase() === String(filters.fdir).toLowerCase());
+    if (filters.fstate) filtered = filtered.filter(f => f.state.toLowerCase().includes(String(filters.fstate).toLowerCase()));
+    res.json({success:true,source,filters,flows:filtered.slice(0,1000),checkedAt:new Date().toISOString()});
   });
 
   // API: Traceroute Path Analysis — real traceroute/tracepath only.
@@ -3767,48 +3888,25 @@ async function startServer() {
     const maxHops=Math.min(30,Math.max(1,Number(req.body?.maxHops||15)));
     if(!target)return res.status(400).json({success:false,error:'Target host is required.'});
     const cleanTarget=sanitizeHostTarget(target);
-    const commandLine = fs.existsSync('/usr/bin/traceroute') || fs.existsSync('/usr/sbin/traceroute')
-      ? `traceroute -m ${maxHops} -n -w 2 "${cleanTarget}"`
-      : `tracepath -m ${maxHops} -n "${cleanTarget}"`;
+    const commandLine = fs.existsSync('/usr/bin/traceroute') || fs.existsSync('/usr/sbin/traceroute') ? `traceroute -m ${maxHops} -n -w 2 "${cleanTarget}"` : `tracepath -m ${maxHops} -n "${cleanTarget}"`;
     const result=await runCommand(commandLine,{timeoutMs:90000});
     if(result.code!==0 && !(result.stdout||result.stderr)) return res.status(503).json({success:false,error:'No traceroute/tracepath result.',exitCode:result.code});
     const raw=result.stdout||result.stderr;
-    const hops=raw.split('\\n').map(line=>line.trim()).filter(Boolean).map(line=>{
-      const m=line.match(/^(\\d+)\\s+([0-9a-fA-F:.]+|\\*)\\s+([0-9.]+)?\\s*ms?/);
-      return m?{hop:Number(m[1]),ip:m[2],latencyMs:m[3]?Number(m[3]):undefined,raw:line}:{raw:line};
-    });
-    res.json({success:result.code===0,target:cleanTarget,hopsCount:hops.length,hops,rawOutput:raw,exitCode:result.code});
+    const hops=raw.split('\\n').map(line=>line.trim()).filter(Boolean).map(line=>{ const m=line.match(/^(\\d+)\\s+([0-9a-fA-F:.]+|\\*)\\s+([0-9.]+)?\\s*ms?/); return m?{hop:Number(m[1]),host:m[2],ip:m[2],latencyMs:m[3]?Number(m[3]):undefined,raw:line}:{host:'*',ip:'*',raw:line}; });
+    res.json({success:result.code===0,target:cleanTarget,hopsCount:hops.length,hops,rawOutput:raw,exitCode:result.code,checkedAt:new Date().toISOString()});
   });
 
   // API: Network Discovery Map — no fabricated nodes.
   app.get('/api/toolbox/network-map', async (_req,res) => {
-    const [neigh,routes]=await Promise.all([
-      runCommand('ip',['-json','neigh']),
-      runCommand('ip',['-json','route'])
-    ]);
-    const nodes:any[]=[];
-    const neighbors=parseJsonSafe<any[]>(neigh.stdout,[]);
-    for(const n of neighbors){
-      if(!n.dst)continue;
-      nodes.push({id:'neighbor-'+n.dst,ip:n.dst,kind:'peer',dev:n.dev,mac:n.lladdr,state:n.state,priority:2});
-    }
+    const [neigh,routes]=await Promise.all([runCommand('ip',['-json','neigh']),runCommand('ip',['-json','route'])]);
+    const nodes:any[]=[]; const neighbors=parseJsonSafe<any[]>(neigh.stdout,[]);
+    for(const n of neighbors){ if(!n.dst)continue; nodes.push({id:'neighbor-'+n.dst,ip:n.dst,kind:'peer',dev:n.dev,mac:n.lladdr,state:n.state,priority:2,note:'ARP/neighbor state: '+(n.state||'unknown')+(n.dev?' via '+n.dev:'')}); }
     const routeJson=parseJsonSafe<any[]>(routes.stdout,[]);
-    for(const r of routeJson){
-      if(r.gateway && !nodes.some(n=>n.ip===r.gateway)) nodes.push({id:'gateway-'+r.gateway,ip:r.gateway,kind:'gateway',dev:r.dev,priority:0});
-    }
-    const home=resolveSplunkDirectory({query:{},body:{}} as any);
-    const outPath=path.join(home,'etc/system/local/outputs.conf');
-    if(fs.existsSync(outPath)){
-      const text=fs.readFileSync(outPath,'utf8');
-      const m=text.match(/^server\\s*=\\s*([^\\n#]+)/im);
-      for(const value of (m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean)){
-        const mm=value.match(/^([^:]+):(\\d+)$/);
-        if(mm && !nodes.some(n=>n.ip===mm[1])) nodes.push({id:'splunk-'+mm[1]+'-'+mm[2],ip:mm[1],kind:'splunk',port:Number(mm[2]),priority:1});
-      }
-    }
+    for(const r of routeJson){ if(r.gateway && !nodes.some(n=>n.ip===r.gateway)) nodes.push({id:'gateway-'+r.gateway,ip:r.gateway,kind:'gateway',dev:r.dev,priority:0,note:'Gateway via '+(r.dev||'route table')}); }
+    const home=resolveSplunkDirectory({query:{},body:{}} as any); const outPath=path.join(home,'etc/system/local/outputs.conf');
+    if(fs.existsSync(outPath)){ const text=fs.readFileSync(outPath,'utf8'); const m=text.match(/^server\\s*=\\s*([^\\n#]+)/im); for(const value of (m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean)){ const mm=value.match(/^([^:]+):(\\d+)$/); if(mm && !nodes.some(n=>n.ip===mm[1])) nodes.push({id:'splunk-'+mm[1]+'-'+mm[2],ip:mm[1],kind:'splunk',port:Number(mm[2]),priority:1,note:'Splunk outputs.conf target :'+mm[2]}); } }
     res.json({success:true,nodes,checkedAt:new Date().toISOString()});
   });
-
   // API: Execute One-Click Heavy Forwarder Fix (incorporates fix.sh logic)
   app.post('/api/toolbox/run-fix-hf', async (req, res) => {
     const user = (req as any).user as UserAccount | undefined;
