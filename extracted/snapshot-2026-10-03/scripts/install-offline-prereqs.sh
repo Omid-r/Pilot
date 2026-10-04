@@ -78,6 +78,10 @@ echo "[+] Bundled RPM files: ${RPM_COUNT}"
 # treating hundreds of RPM files as unrelated command-line packages.
 OFFLINE_REPO_ID="splunk-doctor-offline"
 OFFLINE_REPO_FILE="/etc/yum.repos.d/${OFFLINE_REPO_ID}.repo"
+if [ ! -f "${RPM_DIR}/repodata/repomd.xml" ] && [ -f "${RPM_DIR}/.repodata/repomd.xml" ]; then
+  mv "${RPM_DIR}/.repodata" "${RPM_DIR}/repodata"
+fi
+
 if [ ! -f "${RPM_DIR}/repodata/repomd.xml" ]; then
   echo "[-] Missing offline DNF repository metadata: ${RPM_DIR}/repodata/repomd.xml"
   exit 1
