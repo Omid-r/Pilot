@@ -15,9 +15,11 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      actions: read
     env:
       APP_ROOT: extracted/snapshot-2026-10-03
       KUBECTL_VERSION: v1.37.1
+      VALIDATED_OFFLINE_ARTIFACT_ID: 11295519259
 
     steps:
       - name: Checkout
@@ -43,6 +45,43 @@ jobs:
           npm run build
           npm run smoke
 
+      - name: Reuse validated offline RHEL media
+        id: reuse-offline-media
+        working-directory: ${{ env.APP_ROOT }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/pilot-offline-cache
+          mkdir -p /tmp/pilot-offline-cache
+          if curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${VALIDATED_OFFLINE_ARTIFACT_ID}/zip" \
+            -o /tmp/pilot-offline-cache/artifact.zip; then
+            unzip -q /tmp/pilot-offline-cache/artifact.zip -d /tmp/pilot-offline-cache/unpacked
+            cached_tar="$(find /tmp/pilot-offline-cache/unpacked -type f -name 'splunk-doctor-offline-rhel-1.5.0-complete.tar.gz' -print -quit)"
+            if [ -n "${cached_tar}" ]; then
+              rm -rf /tmp/pilot-offline-cache/media
+              mkdir -p /tmp/pilot-offline-cache/media
+              tar -xzf "${cached_tar}" -C /tmp/pilot-offline-cache/media
+              if [ -d /tmp/pilot-offline-cache/media/splunk-doctor/offline-prereqs ]; then
+                rm -rf offline-prereqs
+                cp -a /tmp/pilot-offline-cache/media/splunk-doctor/offline-prereqs offline-prereqs
+                echo "hit=true" >> "${GITHUB_OUTPUT}"
+                echo "[+] Reused previously validated offline RHEL media."
+              else
+                echo "hit=false" >> "${GITHUB_OUTPUT}"
+                echo "[i] Cached artifact did not contain offline media."
+              fi
+            else
+              echo "hit=false" >> "${GITHUB_OUTPUT}"
+              echo "[i] Cached artifact tarball not found; a fresh closure will be built."
+            fi
+          else
+            echo "hit=false" >> "${GITHUB_OUTPUT}"
+            echo "[i] Cached artifact unavailable; a fresh closure will be built."
+          fi
       - name: Prepare offline media directories
         working-directory: ${{ env.APP_ROOT }}
         run: |
@@ -53,6 +92,7 @@ jobs:
           mkdir -p offline-prereqs/rhel9/x86_64/bin
 
       - name: Build RHEL 8 offline RPM closure
+        if: steps.reuse-offline-media.outputs.hit != 'true'
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
@@ -60,6 +100,7 @@ jobs:
           docker run --rm             -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool'             -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out"             rockylinux:8             bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --arch=x86_64,noarch --destdir /out ${PACKAGES}'
 
       - name: Build RHEL 9 offline RPM closure
+        if: steps.reuse-offline-media.outputs.hit != 'true'
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
