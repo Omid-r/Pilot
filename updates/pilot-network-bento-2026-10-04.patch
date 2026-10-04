@@ -1,0 +1,551 @@
+diff --git a/server.ts b/server.ts
+--- a/server.ts
++++ b/server.ts
+@@ -5,6 +5,7 @@ import path from 'path';
+ import fs from 'fs';
+ import { exec, execSync, execFile } from 'child_process';
+ import net from 'net';
++import * as dgram from 'dgram';
+ import os from 'os';
+ import {
+   hashPassword,
+@@ -3709,7 +3710,7 @@ async function startServer() {
+       const ifaces=await runCommand('ip',['-json','addr']);
+       const routes=await runCommand('ip',['-json','route']);
+       const neigh=await runCommand('ip',['-json','neigh']);
+-      const sockets=await runCommand('ss',['-H','-tulpn']);
++      const sockets=await runCommand('ss',['-H','-tuln']);
+       const netInfo=getSystemNetworkInfo();
+       const audit=getSystemAudit();
+       let dnsServers:string[]=[];
+@@ -3726,7 +3727,7 @@ async function startServer() {
+         interfaces:netInfo.ipv4List.map(i=>({iface:i.iface,ip:i.ip,status:'UP'})),
+         listenersCount:audit.listeningPorts.length,
+         listeners:audit.listeningPorts,
+-        establishedCount:(getSystemNetworkInfo().ipv4List.length),
++        establishedCount: (sockets.stdout.match(/ESTAB/g) || []).length,
+         routes:routeJson,
+         neighbors,
+         dnsServers,
+@@ -3739,26 +3740,146 @@ async function startServer() {
+     }catch(e:any){res.status(500).json({success:false,error:e.message});}
+   });
+ 
+-  // API: Get Live Connections & Peers — parse the kernel socket table.
++  // API: Probe one or more TCP/UDP ports against a real target.
++  app.post('/api/toolbox/port-scan', async (req, res) => {
++    try {
++      const target = String(req.body?.target || '').trim();
++      const proto = String(req.body?.proto || 'tcp').toLowerCase() === 'udp' ? 'udp' : 'tcp';
++      if (!target) return res.status(400).json({ success: false, error: 'Target host is required.' });
++
++      const rawPorts = String(req.body?.ports || '');
++      const ports = new Set<number>();
++      for (const token of rawPorts.split(',')) {
++        const value = token.trim();
++        if (!value) continue;
++        const range = value.match(/^(\d+)\s*-\s*(\d+)$/);
++        if (range) {
++          const lo = Math.min(Number(range[1]), Number(range[2]));
++          const hi = Math.max(Number(range[1]), Number(range[2]));
++          if (lo < 1 || hi > 65535 || hi - lo > 127) return res.status(400).json({ success: false, error: 'Port range must stay within 1-65535 and contain at most 128 ports.' });
++          for (let p = lo; p <= hi; p++) ports.add(p);
++        } else if (/^\d+$/.test(value)) {
++          const p = Number(value);
++          if (p < 1 || p > 65535) return res.status(400).json({ success: false, error: 'Port must be between 1 and 65535.' });
++          ports.add(p);
++        } else return res.status(400).json({ success: false, error: 'Invalid port expression: ' + value });
++      }
++      const portList = [...ports].slice(0, 128);
++      if (portList.length === 0) return res.status(400).json({ success: false, error: 'At least one port is required.' });
++
++      const cleanTarget = sanitizeHostTarget(target);
++      const probeUdpPort = (port: number): Promise<{ status: 'OPEN' | 'CLOSED' | 'FILTERED' | 'ERROR'; latencyMs: number; message: string }> =>
++        new Promise(resolve => {
++          const socket = dgram.createSocket(cleanTarget.includes(':') ? 'udp6' : 'udp4');
++          const started = Date.now();
++          let settled = false;
++          const finish = (status: 'OPEN' | 'CLOSED' | 'FILTERED' | 'ERROR', message: string) => {
++            if (settled) return;
++            settled = true;
++            try { socket.close(); } catch (_) {}
++            resolve({ status, latencyMs: Date.now() - started, message });
++          };
++          socket.once('error', (err: any) => finish(err?.code === 'ECONNREFUSED' ? 'CLOSED' : 'ERROR', err?.message || 'UDP probe failed'));
++          socket.once('message', () => finish('OPEN', 'UDP response received.'));
++          socket.connect(port, cleanTarget, () => {
++            try {
++              socket.send(Buffer.alloc(0), err => {
++                if (err) finish('ERROR', err.message);
++                else setTimeout(() => finish('FILTERED', 'UDP datagram sent; no response received. This does not prove the port is closed.'), 1400);
++              });
++            } catch (err: any) { finish('ERROR', err?.message || 'UDP send failed'); }
++          });
++          setTimeout(() => finish('FILTERED', 'UDP probe timed out without a response.'), 1800);
++        });
++
++      const results = await Promise.all(portList.map(async port => {
++        if (proto === 'tcp') {
++          const probe = await testTcpPort(cleanTarget, port, 1800);
++          return { port, proto: 'tcp' as const, status: probe.open ? 'OPEN' as const : 'CLOSED' as const, latencyMs: probe.latencyMs, message: probe.open ? 'TCP connection established.' : (probe.error || 'TCP connection refused or timed out.') };
++        }
++        const probe = await probeUdpPort(port);
++        return { port, proto: 'udp' as const, ...probe };
++      }));
++
++      res.json({ success: true, target: cleanTarget, proto, requestedPorts: portList, results, checkedAt: new Date().toISOString() });
++    } catch (e: any) {
++      res.status(500).json({ success: false, error: e?.message || 'Port probe failed.' });
++    }
++  });
++
++  // API: Real ICMP ping latency/loss probe.
++  app.post('/api/toolbox/ping', async (req, res) => {
++    try {
++      const target = String(req.body?.target || '').trim();
++      const count = Math.min(20, Math.max(1, Number(req.body?.count || 4)));
++      if (!target) return res.status(400).json({ success: false, error: 'Ping target is required.' });
++      const cleanTarget = sanitizeHostTarget(target);
++      const result = await runCommand('ping', ['-n', '-c', String(count), '-W', '2', cleanTarget], { toolId: 'network_toolbox_ping', toolNameFa: 'تست واقعی Ping', toolNameEn: 'Real ICMP Ping', category: 'network', timeoutMs: Math.max(10000, count * 3000) });
++      const raw = (result.stdout || result.stderr || '').toString();
++      const packetMatch = raw.match(/(\d+)\s+packets transmitted,\s+(\d+)\s+(?:packets )?received,\s+(\d+(?:\.\d+)?)%\s+packet loss/i);
++      const rttMatch = raw.match(/(?:min\/avg\/max\/mdev|round-trip min\/avg\/max\/stddev)\s*=\s*([0-9.]+)\/([0-9.]+)\/([0-9.]+)\/([0-9.]+)/i);
++      const samples = [...raw.matchAll(/time=([0-9.]+)\s*ms/g)].map(m => Number(m[1])).filter(Number.isFinite);
++      const transmitted = packetMatch ? Number(packetMatch[1]) : count;
++      const received = packetMatch ? Number(packetMatch[2]) : samples.length;
++      const lossPercent = packetMatch ? Number(packetMatch[3]) : Math.max(0, Number(((transmitted - received) / Math.max(1, transmitted) * 100).toFixed(1)));
++      res.json({ success: received > 0, target: cleanTarget, transmitted, received, lossPercent, minMs: rttMatch ? Number(rttMatch[1]) : (samples.length ? Math.min(...samples) : undefined), avgMs: rttMatch ? Number(rttMatch[2]) : (samples.length ? Number((samples.reduce((a,b) => a + b, 0) / samples.length).toFixed(3)) : undefined), maxMs: rttMatch ? Number(rttMatch[3]) : (samples.length ? Math.max(...samples) : undefined), mdevMs: rttMatch ? Number(rttMatch[4]) : undefined, rawOutput: raw, exitCode: result.code, checkedAt: new Date().toISOString() });
++    } catch (e: any) {
++      res.status(500).json({ success: false, error: e?.message || 'Ping probe failed.' });
++    }
++  });
++
++  // API: Get live connections and peers from kernel sockets only.
+   app.get('/api/toolbox/connections', async (_req,res) => {
+-    const r=await runCommand('ss',['-H','-tan']);
++    const r = await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
+     if(r.code!==0 && !r.stdout) return res.status(500).json({success:false,error:r.stderr||'ss failed'});
+-    const rows=r.stdout.split('\\n').map(l=>l.trim()).filter(Boolean).map(line=>{
+-      const parts=line.split(/\\s+/);
+-      return {state:parts[0]||'',local:parts[3]||'',remote:parts[4]||''};
++    const localIps = new Set(getSystemNetworkInfo().ipv4List.map(i => i.ip));
++    const parseEndpoint = (value: string) => {
++      const v = value.trim();
++      const m = v.match(/^\[([^\]]+)\]:(\d+)$/) || v.match(/^(.+):(\d+)$/);
++      return m ? { ip: m[1], port: m[2] } : { ip: v, port: '' };
++    };
++    const connections = r.stdout.split('\n').map(l=>l.trim()).filter(Boolean).map(line => {
++      const parts = line.split(/\s+/);
++      const state = parts[0] || '';
++      const local = parseEndpoint(parts[3] || '');
++      const remote = parseEndpoint(parts[4] || '');
++      const dir = state === 'LISTEN' ? '-' : localIps.has(remote.ip) ? 'OUT' : localIps.has(local.ip) ? 'IN' : '-';
++      return { remoteIp: remote.ip || '*', remotePort: remote.port || '*', localPort: local.port || '*', localIp: local.ip || '*', proto: 'TCP', state, dir, action: '-', packets: 0, proc: '-', purpose: state === 'LISTEN' ? 'Kernel listener' : state === 'ESTAB' ? 'Established TCP session' : state };
+     });
+-    res.json({success:true,connections:rows,checkedAt:new Date().toISOString()});
++    res.json({success:true,connections,establishedCount:connections.filter(c=>c.state==='ESTAB').length,checkedAt:new Date().toISOString()});
+   });
+ 
+-  // API: Get Conntrack Active Flow Table — real conntrack when available, otherwise kernel sockets.
++  // API: Conntrack / socket flow table normalized for the UI.
+   app.post('/api/toolbox/flows', async (req,res) => {
+-    const f=req.body||{};
+-    const conn=await runCommand('conntrack',['-L','-o','extended'],{timeoutMs:15000});
+-    if(conn.code===0 && conn.stdout.trim()){
+-      return res.json({success:true,source:'conntrack',filters:f,raw:conn.stdout,flows:conn.stdout.split('\\n').filter(Boolean)});
++    const filters = req.body || {};
++    const localIps = new Set(getSystemNetworkInfo().ipv4List.map(i => i.ip));
++    const conn = await runCommand('conntrack',['-L','-o','extended'],{timeoutMs:15000});
++    const flows:any[] = [];
++    if (conn.code === 0 && conn.stdout.trim()) {
++      for (const line of conn.stdout.split('\n').filter(Boolean)) {
++        const head = line.match(/^(tcp|udp|icmp)\s+\d+\s+\d+\s+(\S+)/i);
++        const tuples = [...line.matchAll(/src=([^\s]+)\s+dst=([^\s]+)\s+sport=(\d+)\s+dport=(\d+)/gi)];
++        if (!head || tuples.length < 2) continue;
++        const orig = tuples[0]; const reply = tuples[1];
++        flows.push({ dir: localIps.has(orig[1]) ? 'OUT' : localIps.has(reply[1]) ? 'IN' : '-', proto: head[1].toUpperCase(), origSrc: orig[1], origDst: orig[2], origSport: orig[3], origDport: orig[4], replySrc: reply[1], replyDst: reply[2], replySport: reply[3], replyDport: reply[4], state: head[2] });
++      }
++    }
++    let source = 'conntrack';
++    if (flows.length === 0) {
++      source = 'ss';
++      const sockets = await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
++      const parseEndpoint = (value: string) => { const m = value.match(/^\[([^\]]+)\]:(\d+)$/) || value.match(/^(.+):(\d+)$/); return m ? { ip: m[1], port: m[2] } : { ip: value || '*', port: '*' }; };
++      for (const line of sockets.stdout.split('\n').filter(Boolean)) {
++        const parts = line.trim().split(/\s+/); if (parts.length < 5 || parts[0] === 'LISTEN') continue;
++        const local = parseEndpoint(parts[3]); const remote = parseEndpoint(parts[4]); if (remote.port === '*') continue;
++        flows.push({ dir: localIps.has(local.ip) ? 'OUT' : localIps.has(remote.ip) ? 'IN' : '-', proto: 'TCP', origSrc: local.ip, origDst: remote.ip, origSport: local.port, origDport: remote.port, replySrc: remote.ip, replyDst: local.ip, replySport: remote.port, replyDport: local.port, state: parts[0] });
++      }
+     }
+-    const sockets=await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
+-    return res.json({success:true,source:'ss',filters:f,raw:sockets.stdout,flows:sockets.stdout.split('\\n').filter(Boolean)});
++    let filtered = flows;
++    if (filters.fproto && filters.fproto !== 'any') filtered = filtered.filter(f => f.proto.toLowerCase() === String(filters.fproto).toLowerCase());
++    if (filters.fdir && filters.fdir !== 'all') filtered = filtered.filter(f => f.dir.toLowerCase() === String(filters.fdir).toLowerCase());
++    if (filters.fstate) filtered = filtered.filter(f => f.state.toLowerCase().includes(String(filters.fstate).toLowerCase()));
++    res.json({success:true,source,filters,flows:filtered.slice(0,1000),checkedAt:new Date().toISOString()});
+   });
+ 
+   // API: Traceroute Path Analysis — real traceroute/tracepath only.
+@@ -3767,48 +3888,25 @@ async function startServer() {
+     const maxHops=Math.min(30,Math.max(1,Number(req.body?.maxHops||15)));
+     if(!target)return res.status(400).json({success:false,error:'Target host is required.'});
+     const cleanTarget=sanitizeHostTarget(target);
+-    const commandLine = fs.existsSync('/usr/bin/traceroute') || fs.existsSync('/usr/sbin/traceroute')
+-      ? `traceroute -m ${maxHops} -n -w 2 "${cleanTarget}"`
+-      : `tracepath -m ${maxHops} -n "${cleanTarget}"`;
++    const commandLine = fs.existsSync('/usr/bin/traceroute') || fs.existsSync('/usr/sbin/traceroute') ? `traceroute -m ${maxHops} -n -w 2 "${cleanTarget}"` : `tracepath -m ${maxHops} -n "${cleanTarget}"`;
+     const result=await runCommand(commandLine,{timeoutMs:90000});
+     if(result.code!==0 && !(result.stdout||result.stderr)) return res.status(503).json({success:false,error:'No traceroute/tracepath result.',exitCode:result.code});
+     const raw=result.stdout||result.stderr;
+-    const hops=raw.split('\\n').map(line=>line.trim()).filter(Boolean).map(line=>{
+-      const m=line.match(/^(\\d+)\\s+([0-9a-fA-F:.]+|\\*)\\s+([0-9.]+)?\\s*ms?/);
+-      return m?{hop:Number(m[1]),ip:m[2],latencyMs:m[3]?Number(m[3]):undefined,raw:line}:{raw:line};
+-    });
+-    res.json({success:result.code===0,target:cleanTarget,hopsCount:hops.length,hops,rawOutput:raw,exitCode:result.code});
++    const hops=raw.split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{ const m=line.match(/^(\d+)\s+([0-9a-fA-F:.]+|\*)\s+([0-9.]+)?\s*ms?/); return m?{hop:Number(m[1]),host:m[2],ip:m[2],latencyMs:m[3]?Number(m[3]):undefined,raw:line}:{host:'*',ip:'*',raw:line}; });
++    res.json({success:result.code===0,target:cleanTarget,hopsCount:hops.length,hops,rawOutput:raw,exitCode:result.code,checkedAt:new Date().toISOString()});
+   });
+ 
+   // API: Network Discovery Map — no fabricated nodes.
+   app.get('/api/toolbox/network-map', async (_req,res) => {
+-    const [neigh,routes]=await Promise.all([
+-      runCommand('ip',['-json','neigh']),
+-      runCommand('ip',['-json','route'])
+-    ]);
+-    const nodes:any[]=[];
+-    const neighbors=parseJsonSafe<any[]>(neigh.stdout,[]);
+-    for(const n of neighbors){
+-      if(!n.dst)continue;
+-      nodes.push({id:'neighbor-'+n.dst,ip:n.dst,kind:'peer',dev:n.dev,mac:n.lladdr,state:n.state,priority:2});
+-    }
++    const [neigh,routes]=await Promise.all([runCommand('ip',['-json','neigh']),runCommand('ip',['-json','route'])]);
++    const nodes:any[]=[]; const neighbors=parseJsonSafe<any[]>(neigh.stdout,[]);
++    for(const n of neighbors){ if(!n.dst)continue; nodes.push({id:'neighbor-'+n.dst,ip:n.dst,kind:'peer',dev:n.dev,mac:n.lladdr,state:n.state,priority:2,note:'ARP/neighbor state: '+(n.state||'unknown')+(n.dev?' via '+n.dev:'')}); }
+     const routeJson=parseJsonSafe<any[]>(routes.stdout,[]);
+-    for(const r of routeJson){
+-      if(r.gateway && !nodes.some(n=>n.ip===r.gateway)) nodes.push({id:'gateway-'+r.gateway,ip:r.gateway,kind:'gateway',dev:r.dev,priority:0});
+-    }
+-    const home=resolveSplunkDirectory({query:{},body:{}} as any);
+-    const outPath=path.join(home,'etc/system/local/outputs.conf');
+-    if(fs.existsSync(outPath)){
+-      const text=fs.readFileSync(outPath,'utf8');
+-      const m=text.match(/^server\\s*=\\s*([^\\n#]+)/im);
+-      for(const value of (m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean)){
+-        const mm=value.match(/^([^:]+):(\\d+)$/);
+-        if(mm && !nodes.some(n=>n.ip===mm[1])) nodes.push({id:'splunk-'+mm[1]+'-'+mm[2],ip:mm[1],kind:'splunk',port:Number(mm[2]),priority:1});
+-      }
+-    }
++    for(const r of routeJson){ if(r.gateway && !nodes.some(n=>n.ip===r.gateway)) nodes.push({id:'gateway-'+r.gateway,ip:r.gateway,kind:'gateway',dev:r.dev,priority:0,note:'Gateway via '+(r.dev||'route table')}); }
++    const home=resolveSplunkDirectory({query:{},body:{}} as any); const outPath=path.join(home,'etc/system/local/outputs.conf');
++    if(fs.existsSync(outPath)){ const text=fs.readFileSync(outPath,'utf8'); const m=text.match(/^server\s*=\s*([^\n#]+)/im); for(const value of (m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean)){ const mm=value.match(/^([^:]+):(\d+)$/); if(mm && !nodes.some(n=>n.ip===mm[1])) nodes.push({id:'splunk-'+mm[1]+'-'+mm[2],ip:mm[1],kind:'splunk',port:Number(mm[2]),priority:1,note:'Splunk outputs.conf target :'+mm[2]}); } }
+     res.json({success:true,nodes,checkedAt:new Date().toISOString()});
+   });
+-
+   // API: Execute One-Click Heavy Forwarder Fix (incorporates fix.sh logic)
+   app.post('/api/toolbox/run-fix-hf', async (req, res) => {
+     const user = (req as any).user as UserAccount | undefined;
+
+diff --git a/src/components/BentoGridConsole.tsx b/src/components/BentoGridConsole.tsx
+--- a/src/components/BentoGridConsole.tsx
++++ b/src/components/BentoGridConsole.tsx
+@@ -97,6 +97,7 @@ interface BentoGridConsoleProps {
+ }
+ 
+ type Report =
++  | { kind: 'summary'; title: string; summary: string; details: Array<[string, string]>; openTab: string }
+   | { kind: 'health'; title: string; data: BentoLiveData['health']['report'] }
+   | { kind: 'architecture'; title: string; data: BentoLiveData['architecture']['checks'] }
+   | { kind: 'node'; title: string; node: BentoLiveData['nodes'][number] }
+@@ -282,40 +283,36 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
+               icon: ShieldCheck,
+               label: isFa ? 'امتیاز سلامت واقعی' : 'Real Health Score',
+               value: live ? `${live.health.score} / 100` : '—',
+-              sub: isFa ? 'کلیک برای گزارش' : 'Click for report',
++              sub: isFa ? 'ابتدا گزارش، سپس ورود به ابزار' : 'Report first, then open tool',
+               color: 'text-[#30d158]',
+-              onClick: () => live && setReport({ kind: 'health', title: isFa ? 'گزارش سلامت واقعی سرور' : 'Real Server Health Report', data: live.health.report }),
++              onClick: () => live && setReport({ kind: 'summary', title: isFa ? 'گزارش کلی سلامت سرور' : 'Server Health Summary', summary: isFa ? 'وضعیت سلامت بر پایه probeهای واقعی همین سرور، listenerها، دیسک و نسخه Splunk محاسبه شده است.' : 'Health is computed from real host probes, listeners, disk usage and Splunk version.', details: [['Health Score', `${live.health.score}/100`], ['Hostname', live.host.hostname], ['Primary IP', live.host.primaryIp], ['Disk', `${live.system.diskUsagePercent}%`], ['Uptime', fmtUptime(live.system.uptimeSeconds)], ['Splunk', live.splunk.version || 'Not detected']], openTab: 'health_audit' }),
+             },
+             {
+               key: 'eps',
+               icon: Activity,
+               label: isFa ? 'ورودی مشاهده‌شده' : 'Observed Ingest Rate',
+               value: eps === null || eps === undefined ? '—' : nf.format(eps),
+-              sub: isFa ? 'از splunkd.log' : 'from splunkd.log',
++              sub: isFa ? 'ابتدا گزارش، سپس ابزار لاگ' : 'Report first, then logs',
+               color: 'text-[#0a84ff]',
+-              onClick: () => onNavigateTab('live_logs'),
++              onClick: () => setReport({ kind: 'summary', title: isFa ? 'گزارش کلی ورودی داده' : 'Ingest Summary', summary: isFa ? 'این مقدار از خطوط مشاهده‌شده در splunkd.log به دست آمده و EPS رسمی Splunk نیست.' : 'This is an observed splunkd.log signal and is not an official Splunk EPS metric.', details: [['Observed Rate', eps === null || eps === undefined ? 'Unavailable' : nf.format(eps)], ['Source', live?.ingestion.source || 'unavailable'], ['Log Path', live?.splunk.logPath || 'Not found'], ['Checked At', live?.checkedAt || '—']], openTab: 'live_logs' }),
+             },
+             {
+               key: 'nodes',
+               icon: Server,
+               label: isFa ? 'نودهای تنظیم‌شده' : 'Configured Nodes',
+               value: `${openCount} / ${totalNodes || 0}`,
+-              sub: isFa ? 'قابل کلیک' : 'Clickable',
++              sub: isFa ? 'ابتدا گزارش heartbeat' : 'Heartbeat report first',
+               color: 'text-white',
+-              onClick: () => onNavigateTab('heartbeat_radar'),
++              onClick: () => setReport({ kind: 'summary', title: isFa ? 'گزارش کلی Heartbeat کلاستر' : 'Cluster Heartbeat Summary', summary: isFa ? 'تمام نودهای نمایش‌داده‌شده از host/port تنظیم‌شده و TCP probe واقعی ساخته می‌شوند.' : 'Every displayed node comes from a configured host/port and a real TCP probe.', details: [['Configured', String(totalNodes || 0)], ['Reachable', String(openCount)], ['Offline', String(Math.max(0, (totalNodes || 0) - openCount))], ['Probe Window', '1800 ms']], openTab: 'heartbeat_radar' }),
+             },
+             {
+               key: 'sockets',
+               icon: Wifi,
+               label: isFa ? 'سوکت‌های اصلی' : 'Core Sockets',
+               value: `${socketOpenCount} / ${socketTotal || 0}`,
+-              sub: isFa ? 'کلیک برای جزئیات' : 'Click for details',
++              sub: isFa ? 'ابتدا گزارش socket' : 'Socket report first',
+               color: 'text-[#ff9f0a]',
+-              onClick: () => live && setReport({
+-                kind: 'socket',
+-                title: isFa ? 'ماتریس سوکت‌های واقعی' : 'Real Socket Matrix',
+-                socket: live.sockets[0] || { port: 0, name: '—', protocol: '—', open: false, address: null, detectedProtocol: null }
+-              }),
++              onClick: () => live && setReport({ kind: 'summary', title: isFa ? 'گزارش کلی سوکت‌های اصلی' : 'Core Socket Summary', summary: isFa ? 'وضعیت هر پورت از جدول socket واقعی kernel خوانده شده است.' : 'Each port is backed by the real kernel socket table.', details: live.sockets.map(s => [`${s.port} · ${s.name}`, s.open ? `OPEN · ${s.address || 'address unavailable'}` : 'CLOSED / NOT LISTENING']), openTab: 'network_toolbox' }),
+             },
+           ].map(item => (
+             <button key={item.key} onClick={item.onClick}
+@@ -348,14 +345,20 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
+ 
+           <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+             <div className="md:col-span-5 flex justify-center">
+-              <div className="relative w-48 h-48 rounded-full border border-white/10 bg-black/40 overflow-hidden">
+-                {[0,1,2,3].map(i => (
+-                  <div key={i} className="absolute inset-0 rounded-full border border-white/[0.05]"
+-                    style={{ inset: `${16*i + 8}px` }} />
++              <div className="relative w-56 h-56 rounded-full border border-[#0a84ff]/20 bg-[radial-gradient(circle_at_center,rgba(10,132,255,.10),rgba(0,0,0,.55)_58%,rgba(0,0,0,.9))] overflow-hidden shadow-[inset_0_0_55px_rgba(10,132,255,.08)]">
++                {[0,1,2,3,4].map(i => (
++                  <div key={i} className={`absolute rounded-full border border-white/[0.07] ${i === 0 ? 'animate-pulse' : ''}`}
++                    style={{ inset: `${10 + i * 21}px` }} />
+                 ))}
+-                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/[0.05]" />
+-                <div className="absolute top-1/2 left-0 right-0 h-px bg-white/[0.05]" />
+-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#0a84ff] shadow-[0_0_18px_rgba(10,132,255,.7)]" />
++                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/[0.07]" />
++                <div className="absolute top-1/2 left-0 right-0 h-px bg-white/[0.07]" />
++                <div className="absolute inset-2 rounded-full border border-[#0a84ff]/10" />
++                <div className="absolute inset-0 origin-center animate-spin" style={{ animationDuration: '4.5s' }}>
++                  <div className="absolute left-1/2 top-1/2 w-1/2 h-px origin-left bg-gradient-to-r from-[#0a84ff]/80 via-[#0a84ff]/25 to-transparent shadow-[0_0_8px_rgba(10,132,255,.7)]" />
++                </div>
++                <div className="absolute inset-[27%] rounded-full border border-[#0a84ff]/20 animate-ping" style={{ animationDuration: '2.8s' }} />
++                <div className="absolute inset-[36%] rounded-full border border-white/[0.08]" />
++                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#0a84ff] shadow-[0_0_20px_rgba(10,132,255,.8)]" />
+                 {(live?.nodes || []).slice(0, 12).map((n, i, arr) => {
+                   const angle = (i / Math.max(1, arr.length)) * Math.PI * 2 - Math.PI / 2;
+                   const radius = 76;
+@@ -413,7 +416,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
+                 <span className="text-[10px] text-white/40">{isFa ? 'بر پایه باینری، کانفیگ، دیسک و listener واقعی' : 'Based on real binary, config, disk and listener checks'}</span>
+               </div>
+             </div>
+-            <button onClick={() => onNavigateTab('architecture_auditor')} className="text-xs text-[#0a84ff]">{isFa ? 'جزئیات' : 'Details'}</button>
++            <button onClick={() => live && setReport({ kind: 'architecture', title: isFa ? 'گزارش ممیزی معماری' : 'Architecture Audit Report', data: live.architecture.checks })} className="text-xs text-[#0a84ff]">{isFa ? 'گزارش' : 'Report'}</button>
+           </div>
+ 
+           <button onClick={() => live && setReport({ kind: 'architecture', title: isFa ? 'گزارش ممیزی معماری' : 'Architecture Audit Report', data: live.architecture.checks })}
+@@ -520,7 +523,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
+       <div className="apple-card p-4 flex flex-col md:flex-row items-center justify-between gap-3">
+         <div className="flex items-center gap-2 text-xs text-white/45">
+           <Info className="w-4 h-4" />
+-          <span>{isFa ? 'داده‌ها از backend واقعی خوانده می‌شوند؛ refresh خودکار هر ۵ ثانیه انجام می‌شود.' : 'Telemetry comes from the real backend; automatic refresh runs every 5 seconds.'}</span>
++          <span>{isFa ? 'داده‌ها از backend واقعی خوانده می‌شوند؛ refresh خودکار هر ۱۲ ثانیه انجام می‌شود.' : 'Telemetry comes from the real backend; automatic refresh runs every 12 seconds.'}</span>
+         </div>
+         <div className="flex items-center gap-4 text-[10px] font-mono text-white/35">
+           <span>{live?.system.kernel || '—'}</span>
+@@ -539,6 +542,22 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
+               <button onClick={() => setReport(null)} className="p-2 rounded-lg hover:bg-white/[0.08] text-white/60"><X className="w-4 h-4" /></button>
+             </div>
+ 
++            {report.kind === 'summary' && (
++              <div className="space-y-4">
++                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
++                  <p className="text-xs text-white/65 leading-relaxed">{report.summary}</p>
++                </div>
++                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
++                  {report.details.map(([key, value]) => (
++                    <div key={key} className="p-3 rounded-lg bg-black/20 border border-white/[0.05]">
++                      <div className="text-[9px] text-white/35 uppercase">{key}</div>
++                      <div className="text-xs text-white font-mono mt-1 break-all">{value}</div>
++                    </div>
++                  ))}
++                </div>
++              </div>
++            )}
++
+             {report.kind === 'node' && (
+               <div className="space-y-3">
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+@@ -586,10 +605,11 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
+ 
+             <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-end gap-2">
+               <button onClick={() => {
++                if (report.kind === 'summary') onNavigateTab(report.openTab);
+                 if (report.kind === 'health') onNavigateTab('health_audit');
+                 if (report.kind === 'architecture') onNavigateTab('architecture_auditor');
+                 if (report.kind === 'node') onNavigateTab('heartbeat_radar');
+-                if (report.kind === 'socket') onNavigateTab('topology');
++                if (report.kind === 'socket') onNavigateTab('network_toolbox');
+                 setReport(null);
+               }} className="apple-btn-primary px-4 py-2 text-xs">
+                 {isFa ? 'باز کردن ماژول کامل' : 'Open Full Module'} <ArrowUpRight className="w-3.5 h-3.5 inline" />
+
+diff --git a/src/components/NetworkToolbox.tsx b/src/components/NetworkToolbox.tsx
+--- a/src/components/NetworkToolbox.tsx
++++ b/src/components/NetworkToolbox.tsx
+@@ -70,7 +70,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
+   const [connections, setConnections] = useState<ToolboxConnection[]>([]);
+   const [loadingConnections, setLoadingConnections] = useState(false);
+   const [connSearch, setConnSearch] = useState('');
+-  const [actionFilter, setActionFilter] = useState<'ALL' | 'ACCEPT' | 'ACCEPT*' | 'DENY' | 'BLOCK'>('ALL');
++  const [connStateFilter, setConnStateFilter] = useState<'ALL' | 'ESTAB' | 'LISTEN' | 'TIME-WAIT' | 'CLOSE-WAIT' | 'SYN-SENT'>('ALL');
+   const [protoFilter, setProtoFilter] = useState<'ALL' | 'TCP' | 'UDP' | 'ICMP'>('ALL');
+ 
+   // 2. Flows State
+@@ -136,7 +136,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
+       const res = await fetch('/api/toolbox/connections');
+       if (res.ok) {
+         const data = await res.json();
+-        setConnections(data);
++        setConnections(data.connections || []);
+       }
+     } catch (e) {
+       console.error('Failed to fetch connections:', e);
+@@ -160,7 +160,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
+       });
+       if (res.ok) {
+         const data = await res.json();
+-        setFlows(data);
++        setFlows(data.flows || []);
+       }
+     } catch (e) {
+       console.error('Failed to fetch flows:', e);
+@@ -263,7 +263,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
+       const res = await fetch('/api/toolbox/network-map');
+       if (res.ok) {
+         const data = await res.json();
+-        setMapNodes(data);
++        setMapNodes(data.nodes || []);
+       }
+     } catch (e) {
+       console.error('Failed to fetch network map:', e);
+@@ -323,11 +323,11 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
+ 
+   // Filtered connections
+   const filteredConnections = connections.filter(c => {
+-    if (actionFilter !== 'ALL' && c.action !== actionFilter) return false;
++    if (connStateFilter !== 'ALL' && c.state !== connStateFilter) return false;
+     if (protoFilter !== 'ALL' && c.proto !== protoFilter) return false;
+     if (connSearch) {
+       const q = connSearch.toLowerCase();
+-      const combined = `${c.remoteIp} ${c.remotePort} ${c.localPort} ${c.proc} ${c.purpose}`.toLowerCase();
++      const combined = `${c.remoteIp} ${c.remotePort} ${c.localIp || ''} ${c.localPort} ${c.state} ${c.purpose}`.toLowerCase();
+       if (!combined.includes(q)) return false;
+     }
+     return true;
+@@ -586,19 +586,19 @@ print(json.dumps({"engine": "Unified Traffic Gateway", "version": "v5-parity"}))
+               />
+             </div>
+ 
+-            <div className="flex items-center gap-2">
+-              <span className="text-slate-500 font-bold">{isFa ? 'فیلتر اکشن فایروال:' : 'Verdict:'}</span>
+-              {(['ALL', 'ACCEPT', 'ACCEPT*', 'DENY', 'BLOCK'] as const).map(act => (
++            <div className="flex items-center gap-2 flex-wrap">
++              <span className="text-slate-500 font-bold">{isFa ? 'فیلتر وضعیت socket:' : 'Socket State:'}</span>
++              {(['ALL', 'ESTAB', 'LISTEN', 'TIME-WAIT', 'CLOSE-WAIT', 'SYN-SENT'] as const).map(state => (
+                 <button
+-                  key={act}
+-                  onClick={() => setActionFilter(act)}
++                  key={state}
++                  onClick={() => setConnStateFilter(state)}
+                   className={`px-2 py-1 rounded text-[11px] font-bold border transition cursor-pointer ${
+-                    actionFilter === act
++                    connStateFilter === state
+                       ? 'bg-cyan-500 text-black border-cyan-400'
+                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                   }`}
+                 >
+-                  {act}
++                  {state}
+                 </button>
+               ))}
+             </div>
+@@ -627,47 +627,43 @@ print(json.dumps({"engine": "Unified Traffic Gateway", "version": "v5-parity"}))
+               <table className="w-full text-left font-mono text-xs" dir="ltr">
+                 <thead className="bg-[#0e1624] text-slate-400 border-b border-slate-800 sticky top-0 z-10 text-[11px]">
+                   <tr>
++                    <th className="p-3">STATE</th>
+                     <th className="p-3">DIRECTION</th>
+                     <th className="p-3">PROTO</th>
+                     <th className="p-3">REMOTE IP:PORT</th>
+-                    <th className="p-3">LOCAL PORT</th>
+-                    <th className="p-3">ACTION</th>
+-                    <th className="p-3">PROCESS</th>
+-                    <th className="p-3">PURPOSE / CLUSTER ROLE</th>
++                    <th className="p-3">LOCAL IP:PORT</th>
++                    <th className="p-3">PURPOSE</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                   {filteredConnections.length > 0 ? (
+                     filteredConnections.map((c, idx) => (
+                       <tr key={idx} className="hover:bg-slate-800/40 transition">
++                        <td className="p-3">
++                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
++                            c.state === 'ESTAB' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
++                            : c.state === 'LISTEN' ? 'bg-cyan-950/60 text-cyan-300 border-cyan-700/60'
++                            : 'bg-slate-800 text-slate-300 border-slate-700'
++                          }`}>{c.state || 'UNKNOWN'}</span>
++                        </td>
+                         <td className="p-3 font-bold">
+                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+-                            c.dir === 'OUT' 
+-                              ? 'bg-amber-950/50 text-amber-300 border-amber-700/60' 
+-                              : 'bg-cyan-950/50 text-cyan-300 border-cyan-700/60'
++                            c.dir === 'OUT' ? 'bg-amber-950/50 text-amber-300 border-amber-700/60' 
++                            : c.dir === 'IN' ? 'bg-cyan-950/50 text-cyan-300 border-cyan-700/60'
++                            : 'bg-slate-800 text-slate-400 border-slate-700'
+                           }`}>
+-                            {c.dir === 'OUT' ? 'OUT →' : 'IN ←'}
++                            {c.dir === 'OUT' ? 'OUT →' : c.dir === 'IN' ? 'IN ←' : 'LOCAL / -'}
+                           </span>
+                         </td>
+                         <td className="p-3 text-indigo-300">{c.proto}</td>
+-                        <td className="p-3 font-bold text-slate-100">
+-                          {c.remoteIp}:{c.remotePort}
+-                        </td>
+-                        <td className="p-3 text-cyan-400 font-bold">:{c.localPort}</td>
+-                        <td className="p-3">
+-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getActionBadgeClass(c.action)}`}>
+-                            {c.action}
+-                          </span>
+-                        </td>
+-                        <td className="p-3 font-bold text-amber-400">{c.proc}</td>
+-                        <td className="p-3 text-slate-400 text-[11px] font-sans">
+-                          {c.purpose}
+-                        </td>
++                        <td className="p-3 font-bold text-slate-100">{c.remoteIp}:{c.remotePort}</td>
++                        <td className="p-3 text-cyan-400 font-mono font-bold">{c.localIp || '*'}:{c.localPort}</td>
++                        <td className="p-3 text-slate-400 text-[11px] font-sans">{c.purpose}</td>
+                       </tr>
+                     ))
+                   ) : (
+                     <tr>
+-                      <td colSpan={7} className="p-8 text-center text-slate-500 font-sans">
++                      <td colSpan={6} className="p-8 text-center text-slate-500 font-sans">
+                         {isFa ? 'هیچ اتصالی مطابق فیلترهای اعمال‌شده یافت نشد.' : 'No connections matched current filters.'}
+                       </td>
+                     </tr>
+
+diff --git a/src/types.ts b/src/types.ts
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -291,7 +291,9 @@ export interface ToolboxConnection {
+   remoteIp: string;
+   remotePort: string;
+   localPort: string;
++  localIp?: string;
+   proto: string;
++  state: string;
+   dir: 'IN' | 'OUT' | '-';
+   action: 'ACCEPT' | 'ACCEPT*' | 'DENY' | 'BLOCK' | '-';
+   packets: number;
