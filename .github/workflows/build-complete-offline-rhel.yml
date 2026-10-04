@@ -164,6 +164,7 @@ jobs:
           for rhel in 8 9; do
             docker pull "rockylinux:${rhel}"
             docker run --rm --network none \
+              -e "RHEL_VERSION=${rhel}" \
               -v "${PWD}/${archive}:/media/app.tar.gz:ro" \
               "rockylinux:${rhel}" \
               bash -lc '
@@ -191,10 +192,11 @@ jobs:
                 done
                 test "${code}" = "200"
                 api_code="$(curl -sS -o /tmp/api-body -w "%{http_code}" http://127.0.0.1:3100/api/real/system || true)"
+                if [ "${api_code}" != "401" ]; then cat /tmp/pilot-server.log; fi
                 test "${api_code}" = "401"
-                if command -v podman >/dev/null 2>&1; then podman --version; else echo "[INFO] Rocky Linux ${rhel}: Podman not installed because it is an optional host capability."; fi
+                if command -v podman >/dev/null 2>&1; then podman --version; else echo "[INFO] Rocky Linux ${RHEL_VERSION}: Podman not installed because it is an optional host capability."; fi
                 kubectl version --client >/dev/null 2>&1
-                echo "[PASS] Rocky Linux ${rhel}: offline media installed, bundled Node executed, kubectl installed, server started, API auth gate responded."
+                echo "[PASS] Rocky Linux ${RHEL_VERSION}: offline media installed, bundled Node executed, kubectl installed, server started, API auth gate responded."
               '
           done
 
