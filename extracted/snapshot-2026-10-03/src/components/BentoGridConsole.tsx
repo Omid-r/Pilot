@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -141,40 +141,67 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
     return clusterTargets.filter(t => t.host).slice(0, 32);
   }, [clusterTargets]);
 
+  const liveInFlightRef = useRef(false);
+  const logsInFlightRef = useRef(false);
+  const liveAbortRef = useRef<AbortController | null>(null);
+  const logsAbortRef = useRef<AbortController | null>(null);
+
   const loadLive = useCallback(async () => {
+    if (liveInFlightRef.current) return;
+    liveInFlightRef.current = true;
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    liveAbortRef.current?.abort();
+    liveAbortRef.current = controller;
     try {
       const res = await fetch('/api/bento/live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         cache: 'no-store',
+        signal: controller.signal,
         body: JSON.stringify({ targets }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+        throw new Error(data.error || 'Bento telemetry request failed');
       }
       setLive(data);
-    } catch (e: any) {
-      setError(e?.message || (isFa ? 'دریافت داده واقعی بنتو ناموفق بود.' : 'Failed to load real Bento telemetry.'));
+    } catch (e) {
+      const err = e as { name?: string; message?: string };
+      if (err?.name !== 'AbortError') {
+        setError(err?.message || (isFa ? 'دریافت داده واقعی بنتو ناموفق بود.' : 'Failed to load real Bento telemetry.'));
+      }
     } finally {
+      if (liveAbortRef.current === controller) liveAbortRef.current = null;
+      liveInFlightRef.current = false;
       setLoading(false);
     }
   }, [isFa, targets]);
 
   const loadLogs = useCallback(async () => {
+    if (logsInFlightRef.current) return;
+    logsInFlightRef.current = true;
+    const controller = new AbortController();
+    logsAbortRef.current?.abort();
+    logsAbortRef.current = controller;
     try {
       const res = await fetch('/api/splunk/logs', {
         cache: 'no-store',
         credentials: 'same-origin',
+        signal: controller.signal,
       });
       if (!res.ok) return;
       const data = await res.json();
       const raw = String(data.logs || '');
-      setLogs(raw.split(/\\n/).filter(Boolean).slice(-6));
-    } catch (_) {}
+      setLogs(raw.split(/\n/).filter(Boolean).slice(-6));
+    } catch (_) {
+      // A transient log read must never tear down the dashboard.
+    } finally {
+      if (logsAbortRef.current === controller) logsAbortRef.current = null;
+      logsInFlightRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -183,8 +210,12 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
     const timer = window.setInterval(() => {
       void loadLive();
       void loadLogs();
-    }, 5000);
-    return () => window.clearInterval(timer);
+    }, 12000);
+    return () => {
+      window.clearInterval(timer);
+      liveAbortRef.current?.abort();
+      logsAbortRef.current?.abort();
+    };
   }, [loadLive, loadLogs]);
 
   const openCount = live?.nodes.filter(n => n.open).length ?? 0;
