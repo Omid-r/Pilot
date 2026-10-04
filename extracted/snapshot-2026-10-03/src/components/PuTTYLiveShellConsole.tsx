@@ -96,10 +96,13 @@ export const PuTTYLiveShellConsole: React.FC<PuTTYLiveShellConsoleProps> = ({
     };
   }, []);
 
-  // Auto-scroll
+  // Auto-scroll without animation queues. SSE can deliver several updates in a burst;
+  // smooth scrolling for every update can overwhelm the browser compositor.
   useEffect(() => {
     if (isAutoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      const el = terminalEndRef.current;
+      const parent = el.parentElement;
+      if (parent) parent.scrollTop = parent.scrollHeight;
     }
   }, [logs, isAutoScroll]);
 
