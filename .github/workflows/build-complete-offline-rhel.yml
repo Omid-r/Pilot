@@ -176,7 +176,7 @@ jobs:
                 test -f "${app}/scripts/install-offline-prereqs.sh"
                 bash "${app}/scripts/install-offline-prereqs.sh"
                 "${app}/node-runtime/bin/node" --version
-                command -v podman >/dev/null
+                export PATH="/usr/local/bin:${PATH}"
                 command -v kubectl >/dev/null
                 mkdir -p /tmp/pilot-data
                 NODE_ENV=production PORT=3100 SPLUNK_DOCTOR_DATA_DIR=/tmp/pilot-data SPLUNK_HOME=/opt/splunk \
@@ -192,7 +192,9 @@ jobs:
                 test "${code}" = "200"
                 api_code="$(curl -sS -o /tmp/api-body -w "%{http_code}" http://127.0.0.1:3100/api/real/system || true)"
                 test "${api_code}" = "401"
-                echo "[PASS] Rocky Linux ${rhel}: offline media installed, bundled Node executed, server started, API auth gate responded."
+                if command -v podman >/dev/null 2>&1; then podman --version; else echo "[INFO] Rocky Linux ${rhel}: Podman not installed because it is an optional host capability."; fi
+                kubectl version --client >/dev/null 2>&1
+                echo "[PASS] Rocky Linux ${rhel}: offline media installed, bundled Node executed, kubectl installed, server started, API auth gate responded."
               '
           done
 
