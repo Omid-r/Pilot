@@ -22,6 +22,10 @@ interface ToolValidationCheck {
   status: 'pass' | 'warn';
   detailFa: string;
   detailEn: string;
+  command?: string;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
 }
 
 interface ToolValidationResult {
@@ -207,8 +211,8 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 {isFa 
-                  ? 'بررسی بلادرنگ اتصال API، سلامت کانفیگ‌ها، پورت‌ها و پردازش‌های بک‌اند برای اطمینان از عملکرد صحیح'
-                  : 'Real-time diagnostic probe on API endpoints, config files, port sockets & backend daemons'}
+                  ? 'هر ابزار با یک فرمان واقعی read-only روی همین سرور اجرا می‌شود و command / stdout / stderr / exit code ثبت می‌گردد.'
+                  : 'Every tool executes a real read-only command on this server; command, stdout, stderr and exit code are recorded.'}
               </p>
             </div>
           </div>
@@ -302,7 +306,9 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                             {isFa ? currentMod.titleFa : currentMod.titleEn}
                           </span>
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                            {isFa ? '🟢 معتبر و در حال کار' : '🟢 Validated & Active'}
+                            {singleResult.status === 'healthy'
+                              ? (isFa ? '🟢 معتبر و در حال کار' : '🟢 Validated & Active')
+                              : (isFa ? '🟠 نیازمند بررسی' : '🟠 Needs Attention')}
                           </span>
                         </div>
                         <p className="text-[11px] text-emerald-300/80 mt-0.5">
@@ -316,7 +322,7 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                         تاخیر: <strong className="text-emerald-400">{singleResult.latencyMs}ms</strong>
                       </span>
                       <span className="text-[11px] font-mono bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30 text-emerald-300 font-bold">
-                        امتیاز: ۱۰۰/۱۰۰
+                        امتیاز واقعی: {singleResult.score}/100
                       </span>
                     </div>
                   </div>
@@ -329,14 +335,28 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {singleResult.checks.map((c, i) => (
                         <div key={i} className="p-3 rounded-xl bg-black/40 border border-white/[0.06] flex items-start gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                          <div className="space-y-0.5">
+                          {c.status === 'pass'
+                            ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            : <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+                          <div className="space-y-1 min-w-0">
                             <span className="font-bold text-white text-[11px]">
                               {isFa ? c.nameFa : c.nameEn}
                             </span>
                             <p className="text-[10px] text-slate-400 leading-relaxed">
                               {isFa ? c.detailFa : c.detailEn}
                             </p>
+                            {c.command && (
+                              <div className="mt-1.5 rounded-lg bg-slate-950/80 border border-slate-800 p-2 font-mono">
+                                <div className="text-[9px] text-cyan-300 break-all">$ {c.command}</div>
+                                {c.stdout && <pre className="mt-1 text-[9px] text-emerald-300 whitespace-pre-wrap break-words max-h-32 overflow-auto">{c.stdout}</pre>}
+                                {c.stderr && <pre className="mt-1 text-[9px] text-rose-300 whitespace-pre-wrap break-words max-h-32 overflow-auto">{c.stderr}</pre>}
+                                {c.exitCode !== undefined && (
+                                  <div className={c.exitCode === 0 ? 'mt-1 text-[9px] text-emerald-400' : 'mt-1 text-[9px] text-rose-400'}>
+                                    exit {c.exitCode}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
