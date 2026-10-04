@@ -97,6 +97,7 @@ interface BentoGridConsoleProps {
 }
 
 type Report =
+  | { kind: 'summary'; title: string; summary: string; details: Array<[string, string]>; openTab: string }
   | { kind: 'health'; title: string; data: BentoLiveData['health']['report'] }
   | { kind: 'architecture'; title: string; data: BentoLiveData['architecture']['checks'] }
   | { kind: 'node'; title: string; node: BentoLiveData['nodes'][number] }
@@ -282,40 +283,36 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               icon: ShieldCheck,
               label: isFa ? 'امتیاز سلامت واقعی' : 'Real Health Score',
               value: live ? `${live.health.score} / 100` : '—',
-              sub: isFa ? 'کلیک برای گزارش' : 'Click for report',
+              sub: isFa ? 'ابتدا گزارش، سپس ورود به ابزار' : 'Report first, then open tool',
               color: 'text-[#30d158]',
-              onClick: () => live && setReport({ kind: 'health', title: isFa ? 'گزارش سلامت واقعی سرور' : 'Real Server Health Report', data: live.health.report }),
+              onClick: () => live && setReport({ kind: 'summary', title: isFa ? 'گزارش کلی سلامت سرور' : 'Server Health Summary', summary: isFa ? 'وضعیت سلامت بر پایه probeهای واقعی همین سرور، listenerها، دیسک و نسخه Splunk محاسبه شده است.' : 'Health is computed from real host probes, listeners, disk usage and Splunk version.', details: [['Health Score', `${live.health.score}/100`], ['Hostname', live.host.hostname], ['Primary IP', live.host.primaryIp], ['Disk', `${live.system.diskUsagePercent}%`], ['Uptime', fmtUptime(live.system.uptimeSeconds)], ['Splunk', live.splunk.version || 'Not detected']], openTab: 'health_audit' }),
             },
             {
               key: 'eps',
               icon: Activity,
               label: isFa ? 'ورودی مشاهده‌شده' : 'Observed Ingest Rate',
               value: eps === null || eps === undefined ? '—' : nf.format(eps),
-              sub: isFa ? 'از splunkd.log' : 'from splunkd.log',
+              sub: isFa ? 'ابتدا گزارش، سپس ابزار لاگ' : 'Report first, then logs',
               color: 'text-[#0a84ff]',
-              onClick: () => onNavigateTab('live_logs'),
+              onClick: () => setReport({ kind: 'summary', title: isFa ? 'گزارش کلی ورودی داده' : 'Ingest Summary', summary: isFa ? 'این مقدار از خطوط مشاهده‌شده در splunkd.log به دست آمده و EPS رسمی Splunk نیست.' : 'This is an observed splunkd.log signal and is not an official Splunk EPS metric.', details: [['Observed Rate', eps === null || eps === undefined ? 'Unavailable' : nf.format(eps)], ['Source', live?.ingestion.source || 'unavailable'], ['Log Path', live?.splunk.logPath || 'Not found'], ['Checked At', live?.checkedAt || '—']], openTab: 'live_logs' }),
             },
             {
               key: 'nodes',
               icon: Server,
               label: isFa ? 'نودهای تنظیم‌شده' : 'Configured Nodes',
               value: `${openCount} / ${totalNodes || 0}`,
-              sub: isFa ? 'قابل کلیک' : 'Clickable',
+              sub: isFa ? 'ابتدا گزارش heartbeat' : 'Heartbeat report first',
               color: 'text-white',
-              onClick: () => onNavigateTab('heartbeat_radar'),
+              onClick: () => setReport({ kind: 'summary', title: isFa ? 'گزارش کلی Heartbeat کلاستر' : 'Cluster Heartbeat Summary', summary: isFa ? 'تمام نودهای نمایش‌داده‌شده از host/port تنظیم‌شده و TCP probe واقعی ساخته می‌شوند.' : 'Every displayed node comes from a configured host/port and a real TCP probe.', details: [['Configured', String(totalNodes || 0)], ['Reachable', String(openCount)], ['Offline', String(Math.max(0, (totalNodes || 0) - openCount))], ['Probe Window', '1800 ms']], openTab: 'heartbeat_radar' }),
             },
             {
               key: 'sockets',
               icon: Wifi,
               label: isFa ? 'سوکت‌های اصلی' : 'Core Sockets',
               value: `${socketOpenCount} / ${socketTotal || 0}`,
-              sub: isFa ? 'کلیک برای جزئیات' : 'Click for details',
+              sub: isFa ? 'ابتدا گزارش socket' : 'Socket report first',
               color: 'text-[#ff9f0a]',
-              onClick: () => live && setReport({
-                kind: 'socket',
-                title: isFa ? 'ماتریس سوکت‌های واقعی' : 'Real Socket Matrix',
-                socket: live.sockets[0] || { port: 0, name: '—', protocol: '—', open: false, address: null, detectedProtocol: null }
-              }),
+              onClick: () => live && setReport({ kind: 'summary', title: isFa ? 'گزارش کلی سوکت‌های اصلی' : 'Core Socket Summary', summary: isFa ? 'وضعیت هر پورت از جدول socket واقعی kernel خوانده شده است.' : 'Each port is backed by the real kernel socket table.', details: live.sockets.map(s => [`${s.port} · ${s.name}`, s.open ? `OPEN · ${s.address || 'address unavailable'}` : 'CLOSED / NOT LISTENING']), openTab: 'network_toolbox' }),
             },
           ].map(item => (
             <button key={item.key} onClick={item.onClick}
@@ -348,14 +345,20 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
             <div className="md:col-span-5 flex justify-center">
-              <div className="relative w-48 h-48 rounded-full border border-white/10 bg-black/40 overflow-hidden">
-                {[0,1,2,3].map(i => (
-                  <div key={i} className="absolute inset-0 rounded-full border border-white/[0.05]"
-                    style={{ inset: `${16*i + 8}px` }} />
+              <div className="relative w-56 h-56 rounded-full border border-[#0a84ff]/20 bg-[radial-gradient(circle_at_center,rgba(10,132,255,.10),rgba(0,0,0,.55)_58%,rgba(0,0,0,.9))] overflow-hidden shadow-[inset_0_0_55px_rgba(10,132,255,.08)]">
+                {[0,1,2,3,4].map(i => (
+                  <div key={i} className={`absolute rounded-full border border-white/[0.07] ${i === 0 ? 'animate-pulse' : ''}`}
+                    style={{ inset: `${10 + i * 21}px` }} />
                 ))}
-                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/[0.05]" />
-                <div className="absolute top-1/2 left-0 right-0 h-px bg-white/[0.05]" />
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#0a84ff] shadow-[0_0_18px_rgba(10,132,255,.7)]" />
+                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/[0.07]" />
+                <div className="absolute top-1/2 left-0 right-0 h-px bg-white/[0.07]" />
+                <div className="absolute inset-2 rounded-full border border-[#0a84ff]/10" />
+                <div className="absolute inset-0 origin-center animate-spin" style={{ animationDuration: '4.5s' }}>
+                  <div className="absolute left-1/2 top-1/2 w-1/2 h-px origin-left bg-gradient-to-r from-[#0a84ff]/80 via-[#0a84ff]/25 to-transparent shadow-[0_0_8px_rgba(10,132,255,.7)]" />
+                </div>
+                <div className="absolute inset-[27%] rounded-full border border-[#0a84ff]/20 animate-ping" style={{ animationDuration: '2.8s' }} />
+                <div className="absolute inset-[36%] rounded-full border border-white/[0.08]" />
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#0a84ff] shadow-[0_0_20px_rgba(10,132,255,.8)]" />
                 {(live?.nodes || []).slice(0, 12).map((n, i, arr) => {
                   const angle = (i / Math.max(1, arr.length)) * Math.PI * 2 - Math.PI / 2;
                   const radius = 76;
@@ -413,7 +416,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
                 <span className="text-[10px] text-white/40">{isFa ? 'بر پایه باینری، کانفیگ، دیسک و listener واقعی' : 'Based on real binary, config, disk and listener checks'}</span>
               </div>
             </div>
-            <button onClick={() => onNavigateTab('architecture_auditor')} className="text-xs text-[#0a84ff]">{isFa ? 'جزئیات' : 'Details'}</button>
+            <button onClick={() => live && setReport({ kind: 'architecture', title: isFa ? 'گزارش ممیزی معماری' : 'Architecture Audit Report', data: live.architecture.checks })} className="text-xs text-[#0a84ff]">{isFa ? 'گزارش' : 'Report'}</button>
           </div>
 
           <button onClick={() => live && setReport({ kind: 'architecture', title: isFa ? 'گزارش ممیزی معماری' : 'Architecture Audit Report', data: live.architecture.checks })}
@@ -520,7 +523,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
       <div className="apple-card p-4 flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-white/45">
           <Info className="w-4 h-4" />
-          <span>{isFa ? 'داده‌ها از backend واقعی خوانده می‌شوند؛ refresh خودکار هر ۵ ثانیه انجام می‌شود.' : 'Telemetry comes from the real backend; automatic refresh runs every 5 seconds.'}</span>
+          <span>{isFa ? 'داده‌ها از backend واقعی خوانده می‌شوند؛ refresh خودکار هر ۱۲ ثانیه انجام می‌شود.' : 'Telemetry comes from the real backend; automatic refresh runs every 12 seconds.'}</span>
         </div>
         <div className="flex items-center gap-4 text-[10px] font-mono text-white/35">
           <span>{live?.system.kernel || '—'}</span>
@@ -538,6 +541,22 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               </div>
               <button onClick={() => setReport(null)} className="p-2 rounded-lg hover:bg-white/[0.08] text-white/60"><X className="w-4 h-4" /></button>
             </div>
+
+            {report.kind === 'summary' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-xs text-white/65 leading-relaxed">{report.summary}</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {report.details.map(([key, value]) => (
+                    <div key={key} className="p-3 rounded-lg bg-black/20 border border-white/[0.05]">
+                      <div className="text-[9px] text-white/35 uppercase">{key}</div>
+                      <div className="text-xs text-white font-mono mt-1 break-all">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {report.kind === 'node' && (
               <div className="space-y-3">
@@ -586,10 +605,11 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
 
             <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-end gap-2">
               <button onClick={() => {
+                if (report.kind === 'summary') onNavigateTab(report.openTab);
                 if (report.kind === 'health') onNavigateTab('health_audit');
                 if (report.kind === 'architecture') onNavigateTab('architecture_auditor');
                 if (report.kind === 'node') onNavigateTab('heartbeat_radar');
-                if (report.kind === 'socket') onNavigateTab('topology');
+                if (report.kind === 'socket') onNavigateTab('network_toolbox');
                 setReport(null);
               }} className="apple-btn-primary px-4 py-2 text-xs">
                 {isFa ? 'باز کردن ماژول کامل' : 'Open Full Module'} <ArrowUpRight className="w-3.5 h-3.5 inline" />
