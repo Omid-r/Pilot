@@ -59,13 +59,6 @@ const PRESET_COMMANDS = [
     explanationFa: 'این دستور سوکت‌های TCP/UDP فعال در سیستم‌عامل لینوکس را فیلتر کرده و مشخص می‌کند آیا اسپلانک روی پورت‌های ۸۰۰۰ (وب)، ۸۰۸۹ (مدیریت)، ۹۹۹۷ (ایندکسر)، ۸۰۸۸ (HEC) و ۵۱۴ (سیسلاگ) در حال گوش دادن است یا خیر.'
   },
   {
-    cmd: 'ps aux | grep -E "splunkd|splunk|python" | grep -v grep',
-    descFa: 'مشاهده فرآیندهای در حال اجرای اسپلانک در جدول پروسس‌های لینوکس',
-    descEn: 'Inspect running Splunk daemon processes in OS process table',
-    category: 'splunk',
-    explanationFa: 'فرآیند اصلی splunkd، سرویس وب splunkweb و پروسس‌های کمکی پایتون را همراه با شناسه فرآیند (PID) و میزان مصرف CPU و RAM نشان می‌دهد.'
-  },
-  {
     cmd: 'cat /opt/splunk/etc/system/local/server.conf 2>/dev/null || cat /opt/splunk_parallel/etc/system/local/server.conf 2>/dev/null',
     descFa: 'مشاهده محتوای فایل اصلی پیکربندی سرور (server.conf)',
     descEn: 'View main server.conf configuration stanza on disk',
@@ -517,7 +510,7 @@ export const ServerCommandPromptConsole: React.FC<ServerCommandPromptConsoleProp
     setHistoryIndex(-1);
 
     try {
-      const token = localStorage.getItem('splunk_doctor_session_token');
+      const token = localStorage.getItem('splunk_doctor_auth_token');
       const res = await fetch('/api/system/terminal/exec', {
         method: 'POST',
         headers: {
