@@ -3752,13 +3752,13 @@ async function startServer() {
       for (const token of rawPorts.split(',')) {
         const value = token.trim();
         if (!value) continue;
-        const range = value.match(/^(\\d+)\\s*-\\s*(\\d+)$/);
+        const range = value.match(/^(\d+)\s*-\s*(\d+)$/);
         if (range) {
           const lo = Math.min(Number(range[1]), Number(range[2]));
           const hi = Math.max(Number(range[1]), Number(range[2]));
           if (lo < 1 || hi > 65535 || hi - lo > 127) return res.status(400).json({ success: false, error: 'Port range must stay within 1-65535 and contain at most 128 ports.' });
           for (let p = lo; p <= hi; p++) ports.add(p);
-        } else if (/^\\d+$/.test(value)) {
+        } else if (/^\d+$/.test(value)) {
           const p = Number(value);
           if (p < 1 || p > 65535) return res.status(400).json({ success: false, error: 'Port must be between 1 and 65535.' });
           ports.add(p);
@@ -3816,9 +3816,9 @@ async function startServer() {
       const cleanTarget = sanitizeHostTarget(target);
       const result = await runCommand('ping', ['-n', '-c', String(count), '-W', '2', cleanTarget], { toolId: 'network_toolbox_ping', toolNameFa: 'تست واقعی Ping', toolNameEn: 'Real ICMP Ping', category: 'network', timeoutMs: Math.max(10000, count * 3000) });
       const raw = (result.stdout || result.stderr || '').toString();
-      const packetMatch = raw.match(/(\\d+)\\s+packets transmitted,\\s+(\\d+)\\s+(?:packets )?received,\\s+(\\d+(?:\\.\\d+)?)%\\s+packet loss/i);
-      const rttMatch = raw.match(/(?:min\/avg\/max\/mdev|round-trip min\/avg\/max\/stddev)\\s*=\\s*([0-9.]+)\\/([0-9.]+)\\/([0-9.]+)\\/([0-9.]+)/i);
-      const samples = [...raw.matchAll(/time=([0-9.]+)\\s*ms/g)].map(m => Number(m[1])).filter(Number.isFinite);
+      const packetMatch = raw.match(/(\d+)\s+packets transmitted,\s+(\d+)\s+(?:packets )?received,\s+(\d+(?:\.\d+)?)%\s+packet loss/i);
+      const rttMatch = raw.match(/(?:min\/avg\/max\/mdev|round-trip min\/avg\/max\/stddev)\s*=\s*([0-9.]+)\/([0-9.]+)\/([0-9.]+)\/([0-9.]+)/i);
+      const samples = [...raw.matchAll(/time=([0-9.]+)\s*ms/g)].map(m => Number(m[1])).filter(Number.isFinite);
       const transmitted = packetMatch ? Number(packetMatch[1]) : count;
       const received = packetMatch ? Number(packetMatch[2]) : samples.length;
       const lossPercent = packetMatch ? Number(packetMatch[3]) : Math.max(0, Number(((transmitted - received) / Math.max(1, transmitted) * 100).toFixed(1)));
@@ -3835,11 +3835,11 @@ async function startServer() {
     const localIps = new Set(getSystemNetworkInfo().ipv4List.map(i => i.ip));
     const parseEndpoint = (value: string) => {
       const v = value.trim();
-      const m = v.match(/^\\[([^\\]]+)\\]:(\\d+)$/) || v.match(/^(.+):(\\d+)$/);
+      const m = v.match(/^\[([^\]]+)\]:(\d+)$/) || v.match(/^(.+):(\d+)$/);
       return m ? { ip: m[1], port: m[2] } : { ip: v, port: '' };
     };
-    const connections = r.stdout.split('\\n').map(l=>l.trim()).filter(Boolean).map(line => {
-      const parts = line.split(/\\s+/);
+    const connections = r.stdout.split('\n').map(l=>l.trim()).filter(Boolean).map(line => {
+      const parts = line.split(/\s+/);
       const state = parts[0] || '';
       const local = parseEndpoint(parts[3] || '');
       const remote = parseEndpoint(parts[4] || '');
@@ -3856,9 +3856,9 @@ async function startServer() {
     const conn = await runCommand('conntrack',['-L','-o','extended'],{timeoutMs:15000});
     const flows:any[] = [];
     if (conn.code === 0 && conn.stdout.trim()) {
-      for (const line of conn.stdout.split('\\n').filter(Boolean)) {
-        const head = line.match(/^(tcp|udp|icmp)\\s+\\d+\\s+\\d+\\s+(\\S+)/i);
-        const tuples = [...line.matchAll(/src=([^\\s]+)\\s+dst=([^\\s]+)\\s+sport=(\\d+)\\s+dport=(\\d+)/gi)];
+      for (const line of conn.stdout.split('\n').filter(Boolean)) {
+        const head = line.match(/^(tcp|udp|icmp)\s+\d+\s+\d+\s+(\S+)/i);
+        const tuples = [...line.matchAll(/src=([^\s]+)\s+dst=([^\s]+)\s+sport=(\d+)\s+dport=(\d+)/gi)];
         if (!head || tuples.length < 2) continue;
         const orig = tuples[0]; const reply = tuples[1];
         flows.push({ dir: localIps.has(orig[1]) ? 'OUT' : localIps.has(reply[1]) ? 'IN' : '-', proto: head[1].toUpperCase(), origSrc: orig[1], origDst: orig[2], origSport: orig[3], origDport: orig[4], replySrc: reply[1], replyDst: reply[2], replySport: reply[3], replyDport: reply[4], state: head[2] });
@@ -3868,9 +3868,9 @@ async function startServer() {
     if (flows.length === 0) {
       source = 'ss';
       const sockets = await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
-      const parseEndpoint = (value: string) => { const m = value.match(/^\\[([^\\]]+)\\]:(\\d+)$/) || value.match(/^(.+):(\\d+)$/); return m ? { ip: m[1], port: m[2] } : { ip: value || '*', port: '*' }; };
-      for (const line of sockets.stdout.split('\\n').filter(Boolean)) {
-        const parts = line.trim().split(/\\s+/); if (parts.length < 5 || parts[0] === 'LISTEN') continue;
+      const parseEndpoint = (value: string) => { const m = value.match(/^\[([^\]]+)\]:(\d+)$/) || value.match(/^(.+):(\d+)$/); return m ? { ip: m[1], port: m[2] } : { ip: value || '*', port: '*' }; };
+      for (const line of sockets.stdout.split('\n').filter(Boolean)) {
+        const parts = line.trim().split(/\s+/); if (parts.length < 5 || parts[0] === 'LISTEN') continue;
         const local = parseEndpoint(parts[3]); const remote = parseEndpoint(parts[4]); if (remote.port === '*') continue;
         flows.push({ dir: localIps.has(local.ip) ? 'OUT' : localIps.has(remote.ip) ? 'IN' : '-', proto: 'TCP', origSrc: local.ip, origDst: remote.ip, origSport: local.port, origDport: remote.port, replySrc: remote.ip, replyDst: local.ip, replySport: remote.port, replyDport: local.port, state: parts[0] });
       }
@@ -3892,7 +3892,7 @@ async function startServer() {
     const result=await runCommand(commandLine,{timeoutMs:90000});
     if(result.code!==0 && !(result.stdout||result.stderr)) return res.status(503).json({success:false,error:'No traceroute/tracepath result.',exitCode:result.code});
     const raw=result.stdout||result.stderr;
-    const hops=raw.split('\\n').map(line=>line.trim()).filter(Boolean).map(line=>{ const m=line.match(/^(\\d+)\\s+([0-9a-fA-F:.]+|\\*)\\s+([0-9.]+)?\\s*ms?/); return m?{hop:Number(m[1]),host:m[2],ip:m[2],latencyMs:m[3]?Number(m[3]):undefined,raw:line}:{host:'*',ip:'*',raw:line}; });
+    const hops=raw.split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{ const m=line.match(/^(\d+)\s+([0-9a-fA-F:.]+|\*)\s+([0-9.]+)?\s*ms?/); return m?{hop:Number(m[1]),host:m[2],ip:m[2],latencyMs:m[3]?Number(m[3]):undefined,raw:line}:{host:'*',ip:'*',raw:line}; });
     res.json({success:result.code===0,target:cleanTarget,hopsCount:hops.length,hops,rawOutput:raw,exitCode:result.code,checkedAt:new Date().toISOString()});
   });
 
@@ -3904,7 +3904,7 @@ async function startServer() {
     const routeJson=parseJsonSafe<any[]>(routes.stdout,[]);
     for(const r of routeJson){ if(r.gateway && !nodes.some(n=>n.ip===r.gateway)) nodes.push({id:'gateway-'+r.gateway,ip:r.gateway,kind:'gateway',dev:r.dev,priority:0,note:'Gateway via '+(r.dev||'route table')}); }
     const home=resolveSplunkDirectory({query:{},body:{}} as any); const outPath=path.join(home,'etc/system/local/outputs.conf');
-    if(fs.existsSync(outPath)){ const text=fs.readFileSync(outPath,'utf8'); const m=text.match(/^server\\s*=\\s*([^\\n#]+)/im); for(const value of (m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean)){ const mm=value.match(/^([^:]+):(\\d+)$/); if(mm && !nodes.some(n=>n.ip===mm[1])) nodes.push({id:'splunk-'+mm[1]+'-'+mm[2],ip:mm[1],kind:'splunk',port:Number(mm[2]),priority:1,note:'Splunk outputs.conf target :'+mm[2]}); } }
+    if(fs.existsSync(outPath)){ const text=fs.readFileSync(outPath,'utf8'); const m=text.match(/^server\s*=\s*([^\n#]+)/im); for(const value of (m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean)){ const mm=value.match(/^([^:]+):(\d+)$/); if(mm && !nodes.some(n=>n.ip===mm[1])) nodes.push({id:'splunk-'+mm[1]+'-'+mm[2],ip:mm[1],kind:'splunk',port:Number(mm[2]),priority:1,note:'Splunk outputs.conf target :'+mm[2]}); } }
     res.json({success:true,nodes,checkedAt:new Date().toISOString()});
   });
   // API: Execute One-Click Heavy Forwarder Fix (incorporates fix.sh logic)
