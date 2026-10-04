@@ -89,8 +89,8 @@ jobs:
           test "$(find offline-prereqs/rhel9/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -gt 0
           test -x offline-prereqs/rhel8/x86_64/bin/kubectl
           test -x offline-prereqs/rhel9/x86_64/bin/kubectl
-          test -f offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml
-          test -f offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml
+          test -f offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml || test -f offline-prereqs/rhel8/x86_64/rpms/.repodata/repomd.xml
+          test -f offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml || test -f offline-prereqs/rhel9/x86_64/rpms/.repodata/repomd.xml
           test -f scripts/install-offline-prereqs.sh
           chmod 0755 scripts/install-offline-prereqs.sh
 
@@ -134,8 +134,8 @@ jobs:
           grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/[^[:space:]]+\.rpm$' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/bin/kubectl' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl' "${manifest}"
-          grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml' "${manifest}"
-          grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml' "${manifest}"
+          grep -Eq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/(repodata|\.repodata)/repomd.xml' "${manifest}"
+          grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/(repodata|\.repodata)/repomd.xml' "${manifest}"
 
           if grep -Eq '(security-db\.json|master-signing\.key|bootstrap-admin-password)$' "${manifest}"; then
             echo "Runtime secret leaked into release archive."
