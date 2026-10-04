@@ -4325,6 +4325,7 @@ disabled = 0
         splunkHome: splunkHome || null,
         splunkBinary: splunkBinary || null,
         splunkVersion,
+        splunkVersionOk,
       };
 
       const toolSpecs: Record<string, any> = {
