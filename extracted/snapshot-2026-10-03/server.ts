@@ -35,7 +35,16 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
 
+  app.disable('x-powered-by');
   app.use(express.json());
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path === '/' || req.path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    next();
+  });
 
   app.use('/api', (req, res, next) => {
     if (req.path === '/auth/login' || req.path === '/health') return next();
@@ -853,16 +862,30 @@ async function startServer() {
   // =========================================================================
 
   // Authentication Middleware: Validates Bearer Token & User Expiration
+  function readSessionCookie(req: express.Request): string {
+    const raw = req.headers.cookie || '';
+    for (const part of raw.split(';')) {
+      const trimmed = part.trim();
+      if (trimmed.startsWith('splunk_doctor_session=')) {
+        return decodeURIComponent(trimmed.slice('splunk_doctor_session='.length));
+      }
+    }
+    return '';
+  }
+
   function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ 
+    const headerToken = authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.replace('Bearer ', '').trim()
+      : '';
+    const cookieToken = readSessionCookie(req);
+    const token = headerToken || cookieToken;
+    if (!token) {
+      return res.status(401).json({
         error: 'احراز هویت الزامی است. لطفاً ابتدا وارد حساب کاربری خود شوید.',
         code: 'AUTH_REQUIRED'
       });
     }
-
-    const token = authHeader.replace('Bearer ', '').trim();
     const session = verifySessionToken(token);
     if (!session) {
       return res.status(401).json({ 
@@ -1162,6 +1185,12 @@ async function startServer() {
     const token = generateSessionToken(safeUser);
     logAuditEvent('AUTH', 'LOGIN_SUCCESS', 'SUCCESS', username, clientIp, `ورود موفق کاربر با نقش [${user.role}].`);
 
+    const expiresAtMs = Date.parse(safeUser.expiresAt);
+    const maxAge = Number.isFinite(expiresAtMs)
+      ? Math.max(300, Math.floor((expiresAtMs - Date.now()) / 1000))
+      : 31536000;
+    res.setHeader('Set-Cookie', `splunk_doctor_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`);
+
     res.json({
       success: true,
       token,
@@ -1190,6 +1219,7 @@ async function startServer() {
     const token = (req as any).sessionToken;
     const user = (req as any).user as UserAccount;
     if (token) revokeSessionToken(token);
+    res.setHeader('Set-Cookie', 'splunk_doctor_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
     logAuditEvent('AUTH', 'LOGOUT_SUCCESS', 'SUCCESS', user.username, req.ip || 'unknown', 'کاربر از سیستم خارج شد.');
     res.json({ success: true, message: 'خروج با موفقیت انجام شد.' });
   });
@@ -4547,8 +4577,17 @@ disabled = 0
       distPath = path.join(__dirname, 'dist');
     }
     
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
