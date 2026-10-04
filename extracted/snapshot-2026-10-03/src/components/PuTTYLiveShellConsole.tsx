@@ -114,18 +114,55 @@ export const PuTTYLiveShellConsole: React.FC<PuTTYLiveShellConsoleProps> = ({
     setCommandInput('');
 
     try {
-      await fetch('/api/system/terminal/exec', {
+      const res = await fetch('/api/system/terminal/exec', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           command: cmd,
           toolId: 'putty_shell',
-          toolNameFa: 'ترمینال زنده PuTTY SSH',
-          toolNameEn: 'PuTTY Live SSH Shell'
+          toolNameFa: 'ترمینال زنده روی سرور',
+          toolNameEn: 'Live Server Terminal'
         })
       });
+      const data = await res.json().catch(() => ({}));
+      const entry: ServerCommandLogEntry = {
+        id: data.entryId || `local-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        toolId: 'putty_shell',
+        toolNameFa: 'ترمینال زنده روی سرور',
+        toolNameEn: 'Live Server Terminal',
+        command: data.command || cmd,
+        workingDir: data.cwd || '/opt/splunk',
+        user: 'root',
+        status: data.success ? 'success' : 'failed',
+        exitCode: data.exitCode ?? (data.success ? 0 : 1),
+        stdout: data.stdout || '',
+        stderr: data.stderr || (!res.ok ? `HTTP ${res.status}` : ''),
+        durationMs: Number(data.durationMs || 0),
+        category: 'custom_prompt'
+      };
+      setLogs(prev => [entry, ...prev.filter(e => e.id !== entry.id)].slice(0, 100));
+      if (!res.ok) {
+        setRemediationFeedback(isFa ? `اجرای دستور شکست خورد: ${entry.stderr || 'خطای سرور'}` : `Command failed: ${entry.stderr || 'server error'}`);
+        setTimeout(() => setRemediationFeedback(null), 5000);
+      }
     } catch (e: any) {
-      console.error('Terminal exec error:', e);
+      const entry: ServerCommandLogEntry = {
+        id: `local-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        toolId: 'putty_shell',
+        toolNameFa: 'ترمینال زنده روی سرور',
+        toolNameEn: 'Live Server Terminal',
+        command: cmd,
+        workingDir: '/opt/splunk',
+        user: 'root',
+        status: 'failed',
+        exitCode: 1,
+        stdout: '',
+        stderr: e?.message || 'Connection error to server backend',
+        category: 'custom_prompt'
+      };
+      setLogs(prev => [entry, ...prev]);
     } finally {
       setIsRunning(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -265,15 +302,6 @@ export const PuTTYLiveShellConsole: React.FC<PuTTYLiveShellConsoleProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleExecute('docker ps -a 2>/dev/null || which docker || ps aux | grep splunk')}
-            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition cursor-pointer"
-            title="بررسی سریع پروسس‌ها و داکر"
-          >
-            {isFa ? '🔍 بررسی پروسس‌ها' : 'Inspect Processes'}
-          </button>
-
           <button
             type="button"
             onClick={() => handleExecute('curl -I http://localhost:8001/en-US/account/login 2>/dev/null || ss -tulpn | grep 8001')}
