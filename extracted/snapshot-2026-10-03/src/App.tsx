@@ -1019,12 +1019,11 @@ export default function App() {
       });
   }, [authToken]);
 
-  // First authenticated action after UI startup: verify the real offline server/tool state.
+  // Do not launch heavy validation or a live terminal automatically after login.
+  // These tools are intentionally user-triggered so the main workspace stays responsive.
   useEffect(() => {
     if (!sessionValidated || !authToken || !currentUser) return;
     setValidatingToolId('bento_overview');
-    setIsToolValidationModalOpen(true);
-    setIsGlobalTerminalOpen(true);
   }, [sessionValidated, authToken, currentUser]);
 
   // Read the controller build identity after startup so stale browser assets are obvious.
@@ -1495,7 +1494,7 @@ export default function App() {
       }
     }
     initLiveMode();
-  }, [isLiveMode]);
+  }, []);
 
   // Fetch live log tails
   const fetchLiveLogs = async () => {
@@ -3490,7 +3489,7 @@ export default function App() {
             currentToolId={validatingToolId}
             allModules={ALL_MODULES}
             initialTab="all"
-            autoRunAllOnOpen={true}
+            autoRunAllOnOpen={false}
             onNavigateToTool={(tId) => handleSelectModule(tId as any)}
           />
 
