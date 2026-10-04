@@ -26,7 +26,7 @@ export class ToolErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidUpdate(prevProps: Props) {
-    if (prevProps.children !== this.props.children && this.state.hasError) {
+    if (prevProps.toolName !== this.props.toolName && this.state.hasError) {
       this.setState({ hasError: false, message: '' });
     }
   }
