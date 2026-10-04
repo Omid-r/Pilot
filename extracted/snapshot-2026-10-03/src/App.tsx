@@ -684,6 +684,7 @@ export default function App() {
   // Tool Validation & Diagnostic Health Modal State (اعتبار سنجی ابزارهای سامانه)
   const [isToolValidationModalOpen, setIsToolValidationModalOpen] = useState<boolean>(false);
   const [isGlobalTerminalOpen, setIsGlobalTerminalOpen] = useState<boolean>(false);
+  const [controllerHealth, setControllerHealth] = useState<{ version: string; buildId: string } | null>(null);
   const [validatingToolId, setValidatingToolId] = useState<string>('bento_overview');
 
   // Splunk System Debugger & Telemetry Modal State
@@ -1025,6 +1026,18 @@ export default function App() {
     setIsToolValidationModalOpen(true);
     setIsGlobalTerminalOpen(true);
   }, [sessionValidated, authToken, currentUser]);
+
+  // Read the controller build identity after startup so stale browser assets are obvious.
+  useEffect(() => {
+    fetch('/api/health', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.version) {
+          setControllerHealth({ version: String(data.version), buildId: String(data.buildId || 'unknown') });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleLoginSuccess = (session: AuthSession) => {
     setAuthToken(session.token);
