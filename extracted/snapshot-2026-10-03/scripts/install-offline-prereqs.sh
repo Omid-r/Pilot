@@ -157,10 +157,18 @@ done
 echo "[+] Node.js runtime bundled with the application:"
 "${APP_DIR}/node-runtime/bin/node" --version
 
-echo "[+] Podman:   $(podman --version)"
-echo "[+] kubectl:  $(kubectl version --client --output=yaml 2>/dev/null | awk '/gitVersion:/{print $2; exit}' || kubectl version --client 2>/dev/null | head -n 1)"
-echo "[+] Python:    $(python3 --version)"
-echo "[+] OpenSSL:   $(openssl version)"
+if command -v podman >/dev/null 2>&1; then
+  echo "[+] Podman:   $(podman --version)"
+else
+  echo "[i] Podman:   not installed (optional container capability)"
+fi
+if command -v kubectl >/dev/null 2>&1; then
+  echo "[+] kubectl:  $(kubectl version --client --output=yaml 2>/dev/null | awk '/gitVersion:/{print $2; exit}' || kubectl version --client 2>/dev/null | head -n 1)"
+else
+  echo "[i] kubectl:  not available"
+fi
+if command -v python3 >/dev/null 2>&1; then echo "[+] Python:    $(python3 --version)"; else echo "[i] Python:    not installed (optional diagnostic capability)"; fi
+if command -v openssl >/dev/null 2>&1; then echo "[+] OpenSSL:   $(openssl version)"; else echo "[i] OpenSSL:   not installed (optional diagnostic capability)"; fi
 echo "[+] curl:      $(curl --version | head -n 1)"
 echo "[+] iproute:   $(ip -V 2>&1 | head -n 1)"
 echo "[+] firewalld: $(firewall-cmd --version 2>/dev/null || true)"
