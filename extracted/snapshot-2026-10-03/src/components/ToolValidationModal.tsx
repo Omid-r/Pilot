@@ -181,6 +181,14 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
     }
   };
 
+  const copyDiagnosticReport = async () => {
+    if (!diagnosticReport) return;
+    const json = JSON.stringify(diagnosticReport, null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+    } catch (_) {}
+  };
+
   const downloadDiagnosticReport = () => {
     if (!diagnosticReport) return;
     const json = JSON.stringify(diagnosticReport, null, 2);
@@ -459,12 +467,21 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                   </button>
                   {diagnosticReport && (
                     <button
-                      onClick={downloadDiagnosticReport}
+                      onClick={() => { void copyDiagnosticReport(); }}
                       className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"
                       title={isFa ? 'دانلود گزارش JSON برای ارسال به پشتیبان/هوش مصنوعی' : 'Download JSON report for support/AI analysis'}
                     >
                       <ArrowRight className="w-3.5 h-3.5 rotate-90" />
-                      <span>{isFa ? 'دانلود گزارش' : 'Download Report'}</span>
+                      <span>{isFa ? 'کپی JSON' : 'Copy JSON'}</span>
+                    </button>
+                  )}
+                  {diagnosticReport && (
+                    <button
+                      onClick={downloadDiagnosticReport}
+                      className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5 rotate-90" />
+                      <span>{isFa ? 'دانلود JSON' : 'Download JSON'}</span>
                     </button>
                   )}
                   <button
