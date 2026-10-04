@@ -169,13 +169,24 @@ for cmd in "${OPTIONAL_CMDS[@]}"; do
 done
 
 echo "[+] Node.js runtime bundled with the application:"
-NODE_BIN="${APP_DIR}/node-runtime/bin/node"
-# The package may have crossed a filesystem boundary that strips execute bits.
-# Normalize the private runtime before its first execution; setup.sh also
-# restores this mode after its safe recursive permission normalization.
-chmod 0755 "${NODE_BIN}"
-test -x "${NODE_BIN}"
-"${NODE_BIN}" --version
+BUNDLED_NODE="${APP_DIR}/node-runtime/bin/node"
+HOST_NODE="/usr/local/bin/splunk-doctor-node"
+if [ ! -f "${BUNDLED_NODE}" ]; then
+  echo "[-] Bundled Node.js runtime is missing: ${BUNDLED_NODE}"
+  exit 1
+fi
+# Some hardened RHEL hosts mount /opt with noexec and/or apply SELinux labels
+# that are not suitable for executing application payloads directly. Stage the
+# immutable bundled binary in the system executable path so its mode and
+# SELinux context are normalized before first execution.
+install -d -m 0755 /usr/local/bin
+install -m 0755 "${BUNDLED_NODE}" "${HOST_NODE}"
+if command -v restorecon >/dev/null 2>&1; then
+  restorecon -F "${HOST_NODE}" >/dev/null 2>&1 || true
+fi
+chmod 0755 "${HOST_NODE}"
+test -x "${HOST_NODE}"
+"${HOST_NODE}" --version
 
 if command -v podman >/dev/null 2>&1; then
   echo "[+] Podman:   $(podman --version)"
