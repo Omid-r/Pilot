@@ -71,7 +71,6 @@ async function startServer() {
       version,
       buildId,
       node: process.version,
-      pid: process.pid,
       startedAt: new Date().toISOString()
     });
   });
