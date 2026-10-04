@@ -1,588 +1,194 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  CheckCircle2, 
-  AlertTriangle, 
-  RefreshCw, 
-  X, 
-  Activity, 
-  Cpu, 
-  Server, 
-  Zap, 
-  ArrowRight,
-  Sparkles,
-  Layers,
-  Terminal,
-  FileCheck
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowRight, CheckCircle2, FileCheck, Layers, RefreshCw, ShieldCheck, X } from 'lucide-react';
 
 interface ToolValidationCheck {
-  nameFa: string;
-  nameEn: string;
-  status: 'pass' | 'warn';
-  detailFa: string;
-  detailEn: string;
-  command?: string;
-  stdout?: string;
-  stderr?: string;
-  exitCode?: number;
+  nameFa: string; nameEn: string; status: 'pass' | 'warn'; detailFa: string; detailEn: string;
+  command?: string; stdout?: string; stderr?: string; exitCode?: number;
 }
 
 interface ToolValidationResult {
-  toolId: string;
-  status: 'healthy' | 'warning' | 'error';
-  score: number;
-  latencyMs: number;
-  checks: ToolValidationCheck[];
-  summaryFa: string;
-  summaryEn: string;
-  installed?: boolean;
-  operational?: boolean;
+  toolId: string; status: 'healthy' | 'warning' | 'error'; score: number; latencyMs: number;
+  checks: ToolValidationCheck[]; summaryFa: string; summaryEn: string;
+  installed?: boolean; operational?: boolean;
 }
 
-interface OfflineReadinessSummary {
-  overallStatus: 'healthy' | 'warning' | 'error';
-  score: number;
-  totalTools: number;
-  healthyCount: number;
-  warningCount: number;
-  errorCount: number;
-  checkedAt: string;
-  durationMs: number;
-  messageFa: string;
-  messageEn: string;
+interface OfflineSummary {
+  overallStatus: 'healthy' | 'warning' | 'error'; score: number; totalTools: number;
+  healthyCount: number; warningCount: number; errorCount: number; checkedAt: string; durationMs: number;
+  messageFa: string; messageEn: string;
 }
 
-interface ToolValidationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  isFa: boolean;
-  currentToolId: string;
-  allModules: Array<{
-    id: string;
-    titleFa: string;
-    titleEn: string;
-    categoryNameFa: string;
-    categoryNameEn: string;
-    badge?: string;
-  }>;
+interface Props {
+  isOpen: boolean; onClose: () => void; isFa: boolean; currentToolId: string;
+  allModules: Array<{ id: string; titleFa: string; titleEn: string; categoryNameFa: string; categoryNameEn: string; badge?: string }>;
   onNavigateToTool?: (toolId: string) => void;
-  initialTab?: 'current' | 'all';
-  autoRunAllOnOpen?: boolean;
+  initialTab?: 'current' | 'all'; autoRunAllOnOpen?: boolean;
 }
 
-export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
-  isOpen,
-  onClose,
-  isFa,
-  currentToolId,
-  allModules,
-  onNavigateToTool,
-  initialTab = 'current',
-  autoRunAllOnOpen = false
+const safeError = (e: unknown) => e instanceof Error ? e.message : String(e || 'backend error');
+
+export const ToolValidationModal: React.FC<Props> = ({
+  isOpen, onClose, isFa, currentToolId, allModules, onNavigateToTool, initialTab = 'current', autoRunAllOnOpen = false
 }) => {
-  const [activeTab, setActiveTab] = useState<'current' | 'all'>('current');
-  const [selectedTool, setSelectedTool] = useState<string>(currentToolId);
+  const [activeTab, setActiveTab] = useState<'current' | 'all'>(initialTab);
+  const [selectedTool, setSelectedTool] = useState(currentToolId);
   const [isValidating, setIsValidating] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [singleResult, setSingleResult] = useState<ToolValidationResult | null>(null);
   const [allResults, setAllResults] = useState<Record<string, ToolValidationResult>>({});
-  const [totalTested, setTotalTested] = useState<number>(0);
-  const [offlineSummary, setOfflineSummary] = useState<OfflineReadinessSummary | null>(null);
+  const [offlineSummary, setOfflineSummary] = useState<OfflineSummary | null>(null);
   const [diagnosticReport, setDiagnosticReport] = useState<any | null>(null);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedTool(currentToolId);
-      setActiveTab(autoRunAllOnOpen ? 'all' : initialTab);
-      if (autoRunAllOnOpen || initialTab === 'all') {
-        runValidateAll();
-      } else {
-        runValidationForTool(currentToolId);
-      }
-    }
-  }, [isOpen, currentToolId, initialTab, autoRunAllOnOpen]);
-
-  const runValidationForTool = async (tId: string) => {
-    setIsValidating(true);
-    setSingleResult(null);
+  const runValidationForTool = async (toolId: string) => {
+    setIsValidating(true); setSingleResult(null);
     try {
       const res = await fetch('/api/tools/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolId: tId })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSingleResult(data);
-      }
-    } catch (e: any) {
-      setSingleResult({
-        toolId: tId,
-        status: 'warning',
-        score: 0,
-        latencyMs: 0,
-        checks: [],
-        summaryFa: `اعتبارسنجی واقعی انجام نشد: ${e?.message || 'خطای ارتباط با backend'}`,
-        summaryEn: `Real validation did not complete: ${e?.message || 'backend communication error'}`
-      });
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  const generateDiagnosticReport = async () => {
-    setIsGeneratingReport(true);
-    setDiagnosticReport(null);
-    try {
-      const res = await fetch('/api/tools/diagnostic-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        cache: 'no-store',
-        body: JSON.stringify({})
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', cache: 'no-store',
+        body: JSON.stringify({ toolId })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.success !== true) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-
-      setDiagnosticReport(data);
-      setAllResults(data.tools || {});
-      setTotalTested(Number(data.totalTools || 0));
-      setOfflineSummary({
-        overallStatus: data.errorCount > 0 ? 'error' : data.warningCount > 0 ? 'warning' : 'healthy',
-        score: Number(data.overallScore || 0),
-        totalTools: Number(data.totalTools || 0),
-        healthyCount: Number(data.healthyCount || 0),
-        warningCount: Number(data.warningCount || 0),
-        errorCount: Number(data.errorCount || 0),
-        checkedAt: data.generatedAt || new Date().toISOString(),
-        durationMs: Number(data.durationMs || 0),
-        messageFa: `گزارش جامع ${data.totalTools || 0} ابزار تکمیل شد. سالم: ${data.healthyCount || 0}، هشدار: ${data.warningCount || 0}، خطا: ${data.errorCount || 0}.`,
-        messageEn: `Comprehensive report completed for ${data.totalTools || 0} tools. Healthy: ${data.healthyCount || 0}, warning: ${data.warningCount || 0}, error: ${data.errorCount || 0}.`
-      });
-    } catch (e: any) {
-      setDiagnosticReport(null);
-      setOfflineSummary({
-        overallStatus: 'error',
-        score: 0,
-        totalTools: 0,
-        healthyCount: 0,
-        warningCount: 0,
-        errorCount: 1,
-        checkedAt: new Date().toISOString(),
-        durationMs: 0,
-        messageFa: 'ساخت گزارش جامع ناموفق بود: ' + (e?.message || 'خطای backend'),
-        messageEn: 'Comprehensive report failed: ' + (e?.message || 'backend error')
-      });
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
-
-  const copyDiagnosticReport = async () => {
-    if (!diagnosticReport) return;
-    const json = JSON.stringify(diagnosticReport, null, 2);
-    try {
-      await navigator.clipboard.writeText(json);
-    } catch (_) {}
-  };
-
-  const downloadDiagnosticReport = () => {
-    if (!diagnosticReport) return;
-    const json = JSON.stringify(diagnosticReport, null, 2);
-    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    a.href = url;
-    a.download = `pilot-comprehensive-tool-diagnostic-${stamp}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+      if (!res.ok || data.success === false) throw new Error(data.error || 'Validation failed');
+      setSingleResult(data);
+    } catch (e) {
+      setSingleResult({ toolId, status: 'error', score: 0, latencyMs: 0, checks: [], summaryFa: 'اعتبارسنجی اجرا نشد: ' + safeError(e), summaryEn: 'Validation failed: ' + safeError(e) });
+    } finally { setIsValidating(false); }
   };
 
   const runValidateAll = async () => {
-    setIsValidating(true);
-    setOfflineSummary(null);
+    setIsValidating(true); setOfflineSummary(null);
     try {
-      const res = await fetch('/api/tools/offline-readiness');
+      const res = await fetch('/api/tools/offline-readiness', { credentials: 'same-origin', cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.success === false) {
-        throw new Error(data.error || ('Offline validation failed (HTTP ' + res.status + ')'));
-      }
-      const validatedResults = data.results || data.tools || {};
-      setAllResults(validatedResults);
-      setTotalTested(data.totalTools || Object.keys(validatedResults).length || allModules.length);
+      if (!res.ok || data.success === false) throw new Error(data.error || 'Offline validation failed');
+      setAllResults(data.results || data.tools || {});
       setOfflineSummary({
-        overallStatus: data.overallStatus || 'warning',
-        score: Number(data.score || 0),
-        totalTools: Number(data.totalTools || 0),
-        healthyCount: Number(data.healthyCount || 0),
-        warningCount: Number(data.warningCount || 0),
-        errorCount: Number(data.errorCount || 0),
-        checkedAt: data.checkedAt || new Date().toISOString(),
-        durationMs: Number(data.durationMs || 0),
-        messageFa: data.messageFa || 'اعتبارسنجی آفلاین کامل شد.',
-        messageEn: data.messageEn || 'Offline readiness validation completed.'
+        overallStatus: data.overallStatus || 'warning', score: Number(data.score || 0),
+        totalTools: Number(data.totalTools || 0), healthyCount: Number(data.healthyCount || 0),
+        warningCount: Number(data.warningCount || 0), errorCount: Number(data.errorCount || 0),
+        checkedAt: data.checkedAt || new Date().toISOString(), durationMs: Number(data.durationMs || 0),
+        messageFa: data.messageFa || 'اعتبارسنجی کامل شد.', messageEn: data.messageEn || 'Validation completed.'
       });
-    } catch (e: any) {
+    } catch (e) {
       setAllResults({});
-      setTotalTested(0);
-      setOfflineSummary({
-        overallStatus: 'error',
-        score: 0,
-        totalTools: 0,
-        healthyCount: 0,
-        warningCount: 0,
-        errorCount: 1,
-        checkedAt: new Date().toISOString(),
-        durationMs: 0,
-        messageFa: 'اعتبارسنجی آفلاین انجام نشد: ' + (e?.message || 'خطای ارتباط با backend'),
-        messageEn: 'Offline validation failed: ' + (e?.message || 'backend communication error')
-      });
-    } finally {
-      setIsValidating(false);
-    }
+      setOfflineSummary({ overallStatus: 'error', score: 0, totalTools: 0, healthyCount: 0, warningCount: 0, errorCount: 1, checkedAt: new Date().toISOString(), durationMs: 0, messageFa: 'اعتبارسنجی انجام نشد: ' + safeError(e), messageEn: 'Validation failed: ' + safeError(e) });
+    } finally { setIsValidating(false); }
   };
 
-  if (!isOpen) return null;
+  const generateDiagnosticReport = async () => {
+    setIsGeneratingReport(true); setDiagnosticReport(null); setActiveTab('all');
+    try {
+      const res = await fetch('/api/tools/diagnostic-report', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', cache: 'no-store', body: '{}'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) throw new Error(data.error || ('HTTP ' + res.status));
+      setDiagnosticReport(data); setAllResults(data.tools || {});
+      setOfflineSummary({
+        overallStatus: Number(data.errorCount || 0) > 0 ? 'error' : Number(data.warningCount || 0) > 0 ? 'warning' : 'healthy',
+        score: Number(data.overallScore || 0), totalTools: Number(data.totalTools || 0),
+        healthyCount: Number(data.healthyCount || 0), warningCount: Number(data.warningCount || 0), errorCount: Number(data.errorCount || 0),
+        checkedAt: data.generatedAt || new Date().toISOString(), durationMs: Number(data.durationMs || 0),
+        messageFa: 'گزارش جامع ' + Number(data.totalTools || 0) + ' ابزار آماده شد.',
+        messageEn: 'Comprehensive report for ' + Number(data.totalTools || 0) + ' tools is ready.'
+      });
+    } catch (e) {
+      setOfflineSummary({ overallStatus: 'error', score: 0, totalTools: 0, healthyCount: 0, warningCount: 0, errorCount: 1, checkedAt: new Date().toISOString(), durationMs: 0, messageFa: 'ساخت گزارش ناموفق بود: ' + safeError(e), messageEn: 'Report generation failed: ' + safeError(e) });
+    } finally { setIsGeneratingReport(false); }
+  };
 
-  const currentMod = allModules.find(m => m.id === selectedTool) || allModules[0];
+  const reportJson = diagnosticReport ? JSON.stringify(diagnosticReport, null, 2) : '';
+  const copyReport = async () => { if (reportJson) { try { await navigator.clipboard.writeText(reportJson); } catch (_) {} } };
+  const downloadReport = () => {
+    if (!reportJson) return;
+    const blob = new Blob([reportJson], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = 'pilot-comprehensive-tool-diagnostic-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedTool(currentToolId); setActiveTab(autoRunAllOnOpen ? 'all' : initialTab);
+    if (autoRunAllOnOpen) void generateDiagnosticReport(); else void runValidationForTool(currentToolId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, currentToolId, initialTab, autoRunAllOnOpen]);
+
+  if (!isOpen) return null;
+  const currentModule = allModules.find(m => m.id === selectedTool) || allModules[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div 
-        className="bg-[#0b0e17] border border-violet-500/30 rounded-3xl max-w-3xl w-full shadow-[0_0_80px_rgba(139,92,246,0.25)] overflow-hidden flex flex-col max-h-[90vh]"
-        dir={isFa ? 'rtl' : 'ltr'}
-      >
-        {/* Modal Header */}
-        <div className="p-5 bg-gradient-to-r from-violet-950/60 via-[#0e121e] to-indigo-950/40 border-b border-violet-500/20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-violet-500/20 border border-violet-500/40 text-violet-400 shadow-[0_0_20px_rgba(139,92,246,0.3)]">
-              <ShieldCheck className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-white">
-                  {isFa ? 'اعتبارسنجی واقعی و آفلاین ابزارها' : 'Real Offline Tool Validation'}
-                </h2>
-                <span className={
-                  'text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ' +
-                  (offlineSummary?.overallStatus === 'healthy'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : offlineSummary?.overallStatus === 'error'
-                      ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30')
-                }>
-                  {offlineSummary
-                    ? (isFa
-                      ? offlineSummary.healthyCount + '/' + offlineSummary.totalTools + ' سالم'
-                      : offlineSummary.healthyCount + '/' + offlineSummary.totalTools + ' healthy')
-                    : (isFa ? 'در حال بررسی' : 'Validating')}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {isFa 
-                  ? 'هر ابزار با یک فرمان واقعی read-only روی همین سرور اجرا می‌شود و command / stdout / stderr / exit code ثبت می‌گردد.'
-                  : 'Every tool executes a real read-only command on this server; command, stdout, stderr and exit code are recorded.'}
-              </p>
-            </div>
+    <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md'>
+      <div className='bg-[#0b0e17] border border-violet-500/30 rounded-3xl max-w-5xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]' dir={isFa ? 'rtl' : 'ltr'}>
+        <div className='p-5 border-b border-white/[0.08] flex items-center justify-between'>
+          <div className='flex items-center gap-3'>
+            <ShieldCheck className='w-5 h-5 text-violet-400' />
+            <div><h2 className='text-base font-black text-white'>{isFa ? 'ممیزی و گزارش واقعی ابزارها' : 'Real Tool Audit & Diagnostic Report'}</h2>
+              <p className='text-[11px] text-slate-400 mt-1'>{isFa ? 'فرمان، خروجی، کد خطا و وضعیت هر ابزار ثبت می‌شود.' : 'Command, output, exit code and status are recorded for each tool.'}</p></div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className='p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 cursor-pointer'><X className='w-4 h-4' /></button>
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="px-6 pt-4 border-b border-white/[0.08] flex items-center gap-2 bg-white/[0.01]">
-          <button
-            onClick={() => setActiveTab('current')}
-            className={`px-4 py-2 rounded-t-xl text-xs font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'current'
-                ? 'border-violet-500 text-white bg-white/[0.04]'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-violet-400" />
-            <span>{isFa ? 'اعتبار سنجی ابزار فعلی' : 'Current Tool Validation'}</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveTab('all');
-              if (Object.keys(allResults).length === 0) {
-                runValidateAll();
-              }
-            }}
-            className={`px-4 py-2 rounded-t-xl text-xs font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'all'
-                ? 'border-violet-500 text-white bg-white/[0.04]'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{isFa ? `اعتبار سنجی جامع همه ابزارها (${allModules.length} ماژول)` : `Validate All Tools (${allModules.length})`}</span>
-          </button>
+        <div className='px-6 pt-4 border-b border-white/[0.08] flex items-center gap-2'>
+          <button onClick={() => setActiveTab('current')} className={'px-4 py-2 rounded-t-xl text-xs font-bold border-b-2 cursor-pointer ' + (activeTab === 'current' ? 'border-violet-500 text-white' : 'border-transparent text-slate-400')}><ZapLabel isFa={isFa} /></button>
+          <button onClick={() => { setActiveTab('all'); if (!Object.keys(allResults).length) void runValidateAll(); }} className={'px-4 py-2 rounded-t-xl text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer ' + (activeTab === 'all' ? 'border-violet-500 text-white' : 'border-transparent text-slate-400')}><Layers className='w-3.5 h-3.5 text-indigo-400' />{isFa ? 'گزارش همه ابزارها' : 'All Tools'}</button>
         </div>
 
-        {/* Content Area */}
-        <div className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
+        <div className='p-6 overflow-y-auto space-y-5 flex-1'>
           {activeTab === 'current' ? (
-            <div className="space-y-4">
-              {/* Tool Selector Dropdown */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4">
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 block">
-                    {isFa ? 'انتخاب ابزار مورد نظر جهت تست عملکرد:' : 'Target tool for validation:'}
-                  </span>
-                  <select
-                    value={selectedTool}
-                    onChange={(e) => {
-                      setSelectedTool(e.target.value);
-                      runValidationForTool(e.target.value);
-                    }}
-                    className="bg-[#0e1322] border border-white/20 text-white rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-violet-500"
-                  >
-                    {allModules.map(m => (
-                      <option key={m.id} value={m.id} className="bg-[#0b0e17] text-white">
-                        {isFa ? `${m.titleFa} (${m.categoryNameFa})` : `${m.titleEn} (${m.categoryNameEn})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  onClick={() => runValidationForTool(selectedTool)}
-                  disabled={isValidating}
-                  className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 self-start sm:self-center shadow-[0_0_15px_rgba(139,92,246,0.3)]"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isValidating ? 'animate-spin' : ''}`} />
-                  <span>{isValidating ? (isFa ? 'در حال تست...' : 'Testing...') : (isFa ? 'تست مجدد ابزار' : 'Re-test Tool')}</span>
-                </button>
+            <div className='space-y-4'>
+              <div className='flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08]'>
+                <select value={selectedTool} onChange={e => { setSelectedTool(e.target.value); void runValidationForTool(e.target.value); }} className='bg-[#0e1322] border border-white/20 text-white rounded-xl px-3 py-2 text-xs w-full sm:w-auto'>
+                  {allModules.map(m => <option key={m.id} value={m.id}>{isFa ? m.titleFa : m.titleEn}</option>)}
+                </select>
+                <button onClick={() => void runValidationForTool(selectedTool)} disabled={isValidating} className='px-4 py-2 rounded-xl bg-violet-600 text-white text-xs font-bold cursor-pointer disabled:opacity-40 flex items-center gap-2'><RefreshCw className={'w-3.5 h-3.5 ' + (isValidating ? 'animate-spin' : '')} />{isFa ? 'تست مجدد' : 'Re-test'}</button>
               </div>
-
-              {/* Validation Result Hero Card */}
-              {singleResult && (
-                <div className="border border-emerald-500/30 bg-emerald-950/20 rounded-2xl p-5 space-y-4 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                        <CheckCircle2 className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-white text-sm">
-                            {isFa ? currentMod.titleFa : currentMod.titleEn}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                            {singleResult.status === 'healthy'
-                              ? (isFa ? '🟢 معتبر و در حال کار' : '🟢 Validated & Active')
-                              : (isFa ? '🟠 نیازمند بررسی' : '🟠 Needs Attention')}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-emerald-300/80 mt-0.5">
-                          {isFa ? singleResult.summaryFa : singleResult.summaryEn}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-start sm:self-center">
-                      <span className="text-[11px] font-mono bg-black/40 px-2.5 py-1 rounded-lg border border-white/10 text-slate-300">
-                        تاخیر: <strong className="text-emerald-400">{singleResult.latencyMs}ms</strong>
-                      </span>
-                      <span className="text-[11px] font-mono bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30 text-emerald-300 font-bold">
-                        امتیاز واقعی: {singleResult.score}/100
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Checklist of internal tests */}
-                  <div className="space-y-2.5">
-                    <span className="font-bold text-slate-300 block text-[11px]">
-                      {isFa ? 'نتایج آزمون‌های اعتبارسنجی مؤلفه‌ها:' : 'Individual component test results:'}
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {singleResult.checks.map((c, i) => (
-                        <div key={i} className="p-3 rounded-xl bg-black/40 border border-white/[0.06] flex items-start gap-2.5">
-                          {c.status === 'pass'
-                            ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                            : <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
-                          <div className="space-y-1 min-w-0">
-                            <span className="font-bold text-white text-[11px]">
-                              {isFa ? c.nameFa : c.nameEn}
-                            </span>
-                            <p className="text-[10px] text-slate-400 leading-relaxed">
-                              {isFa ? c.detailFa : c.detailEn}
-                            </p>
-                            {c.command && (
-                              <div className="mt-1.5 rounded-lg bg-slate-950/80 border border-slate-800 p-2 font-mono">
-                                <div className="text-[9px] text-cyan-300 break-all">$ {c.command}</div>
-                                {c.stdout && <pre className="mt-1 text-[9px] text-emerald-300 whitespace-pre-wrap break-words max-h-32 overflow-auto">{c.stdout}</pre>}
-                                {c.stderr && <pre className="mt-1 text-[9px] text-rose-300 whitespace-pre-wrap break-words max-h-32 overflow-auto">{c.stderr}</pre>}
-                                {c.exitCode !== undefined && (
-                                  <div className={c.exitCode === 0 ? 'mt-1 text-[9px] text-emerald-400' : 'mt-1 text-[9px] text-rose-400'}>
-                                    exit {c.exitCode}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              {singleResult && <ResultCard result={singleResult} isFa={isFa} module={currentModule} />}
             </div>
           ) : (
-            /* All Tools Grid Overview */
-            <div className="space-y-4">
-              <div className="flex items-center justify-between bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4">
-                <div>
-                  <h3 className="font-bold text-white text-xs">
-                    {isFa ? 'گزارش تجمیعی اعتبارسنجی تمامی ابزارهای سامانه' : 'Suite-wide Comprehensive Health Audit'}
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {offlineSummary
-                      ? (isFa ? offlineSummary.messageFa : offlineSummary.messageEn)
-                      : (isFa
-                        ? 'آزمون فقط با داده‌های محلی سرور، فایل‌ها، Runtime، routeها و وابستگی‌های واقعی اجرا می‌شود.'
-                        : 'Validation uses only local server files, runtime, routes and installed dependencies.')}
-                  </p>
+            <div className='space-y-4'>
+              <div className='p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3'>
+                <div><h3 className='text-xs font-bold text-white'>{isFa ? 'ممیزی جامع همه ابزارها' : 'Comprehensive tool audit'}</h3>
+                  <p className='text-[10px] text-slate-400 mt-1'>{offlineSummary ? (isFa ? offlineSummary.messageFa : offlineSummary.messageEn) : (isFa ? 'آزمون مرحله‌ای و واقعی روی خود سرور.' : 'Sequential real validation on this server.')}</p></div>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <button onClick={() => void generateDiagnosticReport()} disabled={isGeneratingReport || isValidating} className='px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold cursor-pointer disabled:opacity-40 flex items-center gap-2'><FileCheck className={'w-3.5 h-3.5 ' + (isGeneratingReport ? 'animate-spin' : '')} />{isGeneratingReport ? (isFa ? 'در حال ساخت...' : 'Building...') : (isFa ? 'اجرای همه و ساخت گزارش' : 'Run All + Build Report')}</button>
+                  {diagnosticReport && <><button onClick={() => void copyReport()} className='px-3 py-2 rounded-xl bg-white/[0.06] text-white text-xs font-bold cursor-pointer'>Copy JSON</button><button onClick={downloadReport} className='px-3 py-2 rounded-xl bg-white/[0.06] text-white text-xs font-bold cursor-pointer'>{isFa ? 'دانلود JSON' : 'Download JSON'}</button></>}
+                  <button onClick={() => void runValidateAll()} disabled={isValidating || isGeneratingReport} className='px-3 py-2 rounded-xl bg-white/[0.06] text-white text-xs font-bold cursor-pointer disabled:opacity-40'><RefreshCw className='w-3.5 h-3.5 inline mr-1' />{isFa ? 'تست معمولی' : 'Basic Run'}</button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={generateDiagnosticReport}
-                    disabled={isValidating || isGeneratingReport}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
-                  >
-                    <FileCheck className={`w-3.5 h-3.5 ${isGeneratingReport ? 'animate-spin' : ''}`} />
-                    <span>{isGeneratingReport ? (isFa ? 'در حال ساخت گزارش...' : 'Building report...') : (isFa ? 'اجرای همه و ساخت گزارش' : 'Run All + Build Report')}</span>
-                  </button>
-                  {diagnosticReport && (
-                    <button
-                      onClick={() => { void copyDiagnosticReport(); }}
-                      className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"
-                      title={isFa ? 'دانلود گزارش JSON برای ارسال به پشتیبان/هوش مصنوعی' : 'Download JSON report for support/AI analysis'}
-                    >
-                      <ArrowRight className="w-3.5 h-3.5 rotate-90" />
-                      <span>{isFa ? 'کپی JSON' : 'Copy JSON'}</span>
-                    </button>
-                  )}
-                  {diagnosticReport && (
-                    <button
-                      onClick={downloadDiagnosticReport}
-                      className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"
-                    >
-                      <ArrowRight className="w-3.5 h-3.5 rotate-90" />
-                      <span>{isFa ? 'دانلود JSON' : 'Download JSON'}</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={runValidateAll}
-                    disabled={isValidating || isGeneratingReport}
-                  className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isValidating ? 'animate-spin' : ''}`} />
-                  <span>{isValidating ? (isFa ? 'درحال آزمون...' : 'Testing...') : (isFa ? 'اجرای مجدد آزمون جامع' : 'Re-run Full Audit')}</span>
-                </button>
               </div>
-
-              {diagnosticReport && (
-                <div className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/10">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-black text-white">
-                        {isFa ? 'گزارش آماده ارسال به ChatGPT / پشتیبان' : 'Report ready for ChatGPT / Support'}
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {isFa
-                          ? 'تمام ابزارها به صورت مرحله‌ای اجرا شده‌اند تا فشار روی سرور و مرورگر کنترل شود.'
-                          : 'All tools were executed sequentially to control browser and server load.'}
-                      </div>
-                    </div>
-                    <button onClick={downloadDiagnosticReport} className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-[10px] font-bold cursor-pointer">
-                      {isFa ? 'دانلود JSON' : 'Download JSON'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {offlineSummary && (
-                <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-black text-white">{isFa ? 'نتیجه کنترل آمادگی آفلاین سرور' : 'Offline Server Readiness Result'}</div>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {isFa ? 'امتیاز ' + offlineSummary.score + '/100 • سالم ' + offlineSummary.healthyCount + ' • نیازمند بررسی ' + offlineSummary.warningCount + ' • خطا ' + offlineSummary.errorCount : 'Score ' + offlineSummary.score + '/100 • Healthy ' + offlineSummary.healthyCount + ' • Warning ' + offlineSummary.warningCount + ' • Error ' + offlineSummary.errorCount}
-                      </div>
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-300">{offlineSummary.durationMs}ms</div>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {allModules.map(mod => {
-                  const result = allResults[mod.id];
-                  const isHealthy = result?.status === 'healthy';
-                  return (
-                    <div key={mod.id} className={
-                      'p-3 rounded-2xl bg-white/[0.02] border transition flex flex-col justify-between gap-2 ' +
-                      (isHealthy ? 'border-emerald-500/20 hover:border-emerald-500/40' : 'border-amber-500/20 hover:border-amber-500/40')
-                    }>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-white text-[11px] block leading-tight">{isFa ? mod.titleFa : mod.titleEn}</span>
-                          <span className="text-[10px] text-slate-500 block">{isFa ? mod.categoryNameFa : mod.categoryNameEn}</span>
-                        </div>
-                        {isHealthy ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
-                      </div>
-                      <div className="space-y-1.5 pt-2 border-t border-white/[0.04]">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className={isHealthy ? 'font-mono text-emerald-400 font-bold' : 'font-mono text-amber-400 font-bold'}>{isHealthy ? '✓' : '⚠'} {result?.score ?? 0}/100</span>
-                          <span className="text-slate-500">{result?.operational === false ? (isFa ? 'نیازمند توجه' : 'Needs attention') : (isFa ? 'Backend OK' : 'Backend OK')}</span>
-                        </div>
-                        {result?.summaryFa && <p className="text-[10px] text-slate-500 leading-relaxed line-clamp-2">{isFa ? result.summaryFa : result.summaryEn}</p>}
-                      </div>
-                      <div className="flex items-center justify-end pt-1 text-[10px]">
-                        <button onClick={() => { if (onNavigateToTool) { onNavigateToTool(mod.id); onClose(); } }} className="text-violet-400 hover:text-violet-300 font-bold flex items-center gap-0.5 cursor-pointer">
-                          <span>{isFa ? 'مشاهده ابزار' : 'Open'}</span>
-                          <ArrowRight className={isFa ? 'w-3 h-3 rotate-180' : 'w-3 h-3'} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+              {offlineSummary && <div className='p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10 text-xs text-slate-300'>{offlineSummary.score}/100 · {offlineSummary.healthyCount} healthy · {offlineSummary.warningCount} warning · {offlineSummary.errorCount} error · {offlineSummary.durationMs}ms</div>}
+              {diagnosticReport && <div className='p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 text-xs text-emerald-200'>{isFa ? 'گزارش آماده است؛ می‌توانید JSON را کپی یا دانلود و برای من ارسال کنید.' : 'Report ready. Copy or download the JSON and send it here.'}</div>}
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5'>
+                {allModules.map(mod => { const result = allResults[mod.id]; const good = result?.status === 'healthy'; return <div key={mod.id} className='p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]'>
+                  <div className='flex items-start justify-between gap-2'><div><div className='text-[11px] font-bold text-white'>{isFa ? mod.titleFa : mod.titleEn}</div><div className='text-[10px] text-slate-500'>{isFa ? mod.categoryNameFa : mod.categoryNameEn}</div></div>{good ? <CheckCircle2 className='w-4 h-4 text-emerald-400' /> : <AlertTriangle className='w-4 h-4 text-amber-400' />}</div>
+                  <div className='mt-2 text-[10px] font-mono text-slate-300'>{result ? result.score + '/100' : '—'}</div>
+                  {result?.summaryFa && <div className='mt-1 text-[10px] text-slate-500 line-clamp-2'>{isFa ? result.summaryFa : result.summaryEn}</div>}
+                  <button onClick={() => { if (onNavigateToTool) { onNavigateToTool(mod.id); onClose(); } }} className='mt-2 text-[10px] text-violet-400 cursor-pointer'>{isFa ? 'باز کردن ابزار' : 'Open tool'} <ArrowRight className='w-3 h-3 inline' /></button>
+                </div>; })}
               </div>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 bg-[#090c14] border-t border-white/[0.08] flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[11px] text-slate-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>{isFa
-              ? 'گزارش جامع شامل اجرای مرحله‌ای همه ابزارها، command، stdout/stderr، exit code و خطاهای واقعی است.'
-              : 'The comprehensive report contains sequential validation of all tools, command evidence, stdout/stderr, exit codes and real failures.'}</span>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold transition cursor-pointer"
-          >
-            {isFa ? 'بستن' : 'Close'}
-          </button>
         </div>
       </div>
     </div>
   );
 };
+
+const ZapLabel: React.FC<{ isFa: boolean }> = ({ isFa }) => <>⚡ {isFa ? 'ابزار فعلی' : 'Current Tool'}</>;
+
+const ResultCard: React.FC<{ result: ToolValidationResult; isFa: boolean; module: Props['allModules'][number] }> = ({ result, isFa, module }) => (
+  <div className='p-5 rounded-2xl border border-white/[0.08] bg-white/[0.02] space-y-3'>
+    <div className='flex items-center justify-between gap-3'>
+      <div><div className='text-sm font-black text-white'>{isFa ? module?.titleFa : module?.titleEn}</div><div className='text-[10px] text-slate-400 mt-1'>{isFa ? result.summaryFa : result.summaryEn}</div></div>
+      <div className='font-mono text-sm text-white'>{result.score}/100</div>
+    </div>
+    <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
+      {result.checks.map((c, i) => <div key={i} className='p-3 rounded-xl border border-white/[0.06] bg-black/20'>
+        <div className='flex items-center gap-2'>{c.status === 'pass' ? <CheckCircle2 className='w-4 h-4 text-emerald-400' /> : <AlertTriangle className='w-4 h-4 text-amber-400' />}<span className='text-[11px] font-bold text-white'>{isFa ? c.nameFa : c.nameEn}</span></div>
+        <div className='text-[10px] text-slate-400 mt-1'>{isFa ? c.detailFa : c.detailEn}</div>
+        {c.command && <pre className='mt-2 text-[9px] text-cyan-300 whitespace-pre-wrap break-words'>$ {c.command}\n{c.stdout || ''}{c.stderr ? '\n' + c.stderr : ''}{c.exitCode !== undefined ? '\nexit ' + c.exitCode : ''}</pre>}
+      </div>)}
+    </div>
+  </div>
+);
+
 export default ToolValidationModal;
