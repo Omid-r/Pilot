@@ -114,7 +114,7 @@ jobs:
           set -euo pipefail
           rm -rf release
           mkdir -p release/splunk-doctor/node-runtime/bin
-          cp -a dist scripts package.json README.md metadata.json offline-prereqs release/splunk-doctor/
+          cp -a dist scripts setup.sh package.json README.md metadata.json offline-prereqs release/splunk-doctor/
           cp -a node_modules release/splunk-doctor/
           cp "$(command -v node)" release/splunk-doctor/node-runtime/bin/node
           chmod 0755 release/splunk-doctor/node-runtime/bin/node
@@ -142,6 +142,7 @@ jobs:
 
           grep -Fq 'splunk-doctor/dist/server.cjs' "${manifest}"
           grep -Fq 'splunk-doctor/dist/index.html' "${manifest}"
+          grep -Fq 'splunk-doctor/setup.sh' "${manifest}"
           grep -Fq 'splunk-doctor/node-runtime/bin/node' "${manifest}"
           grep -Fq 'splunk-doctor/node_modules/express/' "${manifest}"
           grep -Eq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/[^[:space:]]+\.rpm$' "${manifest}"
@@ -174,6 +175,7 @@ jobs:
                 tar -xzf /media/app.tar.gz -C /work
                 app=/work/splunk-doctor
                 test -x "${app}/node-runtime/bin/node"
+                test -f "${app}/setup.sh"
                 test -f "${app}/scripts/install-offline-prereqs.sh"
                 bash "${app}/scripts/install-offline-prereqs.sh"
                 "${app}/node-runtime/bin/node" --version
