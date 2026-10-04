@@ -169,7 +169,13 @@ for cmd in "${OPTIONAL_CMDS[@]}"; do
 done
 
 echo "[+] Node.js runtime bundled with the application:"
-"${APP_DIR}/node-runtime/bin/node" --version
+NODE_BIN="${APP_DIR}/node-runtime/bin/node"
+# The package may have crossed a filesystem boundary that strips execute bits.
+# Normalize the private runtime before its first execution; setup.sh also
+# restores this mode after its safe recursive permission normalization.
+chmod 0755 "${NODE_BIN}"
+test -x "${NODE_BIN}"
+"${NODE_BIN}" --version
 
 if command -v podman >/dev/null 2>&1; then
   echo "[+] Podman:   $(podman --version)"
