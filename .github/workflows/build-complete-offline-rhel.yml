@@ -57,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           docker pull rockylinux:8
-          docker run --rm             -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool'             -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out"             rockylinux:8             bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core createrepo_c; dnf download --resolve --alldeps --arch=x86_64,noarch --destdir /out ${PACKAGES}; rm -rf /out/repodata /out/.repodata; createrepo_c /out; if [ -f /out/.repodata/repomd.xml ] && [ ! -f /out/repodata/repomd.xml ]; then mv /out/.repodata /out/repodata; fi; test -f /out/repodata/repomd.xml'
+          docker run --rm             -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool'             -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out"             rockylinux:8             bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --arch=x86_64,noarch --destdir /out ${PACKAGES}'
 
       - name: Build RHEL 9 offline RPM closure
         working-directory: ${{ env.APP_ROOT }}
@@ -65,6 +65,21 @@ jobs:
           set -euo pipefail
           docker pull rockylinux:9
           docker run --rm             -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool'             -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out"             rockylinux:9             bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
+
+      - name: Persist offline DNF repository metadata
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          for rhel in 8 9; do
+            repo_dir="offline-prereqs/rhel${rhel}/x86_64/rpms"
+            rm -rf "${repo_dir}/repodata" "${repo_dir}/.repodata"
+            docker run --rm \
+              -v "${PWD}/${repo_dir}:/out" \
+              "rockylinux:${rhel}" \
+              bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core createrepo_c >/dev/null; createrepo_c /out >/tmp/createrepo.log 2>&1; test -f /out/repodata/repomd.xml; tar -C /out -cf - repodata' > "/tmp/rhel${rhel}-repodata.tar"
+            tar -xf "/tmp/rhel${rhel}-repodata.tar" -C "${repo_dir}"
+            test -f "${repo_dir}/repodata/repomd.xml"
+          done
 
       - name: Download kubectl and verify checksum
         working-directory: ${{ env.APP_ROOT }}
@@ -89,8 +104,8 @@ jobs:
           test "$(find offline-prereqs/rhel9/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)" -gt 0
           test -x offline-prereqs/rhel8/x86_64/bin/kubectl
           test -x offline-prereqs/rhel9/x86_64/bin/kubectl
-          test -f offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml || test -f offline-prereqs/rhel8/x86_64/rpms/.repodata/repomd.xml
-          test -f offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml || test -f offline-prereqs/rhel9/x86_64/rpms/.repodata/repomd.xml
+          test -f offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml
+          test -f offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml
           test -f scripts/install-offline-prereqs.sh
           chmod 0755 scripts/install-offline-prereqs.sh
 
@@ -134,8 +149,8 @@ jobs:
           grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/[^[:space:]]+\.rpm$' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/bin/kubectl' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl' "${manifest}"
-          grep -Eq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/(repodata|\.repodata)/repomd.xml' "${manifest}"
-          grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/(repodata|\.repodata)/repomd.xml' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml' "${manifest}"
 
           if grep -Eq '(security-db\.json|master-signing\.key|bootstrap-admin-password)$' "${manifest}"; then
             echo "Runtime secret leaked into release archive."
