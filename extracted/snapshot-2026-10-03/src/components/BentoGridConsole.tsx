@@ -107,7 +107,7 @@ const nf = new Intl.NumberFormat('fa-IR');
 const fmtBytes = (bytes: number) => {
   if (!Number.isFinite(bytes)) return '—';
   const gb = bytes / (1024 ** 3);
-  return \`\${gb.toFixed(1)} GB\`;
+  return `${gb.toFixed(1)} GB`;
 };
 
 const fmtUptime = (seconds: number) => {
@@ -115,7 +115,7 @@ const fmtUptime = (seconds: number) => {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  return d > 0 ? \`\${d}d \${h}h \${m}m\` : \`\${h}h \${m}m\`;
+  return d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`;
 };
 
 export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
@@ -154,7 +154,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || \`HTTP \${res.status}\`);
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
       setLive(data);
     } catch (e: any) {
@@ -204,7 +204,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2 max-w-3xl">
             <div className="flex items-center gap-2 text-xs">
-              <span className={\`w-2 h-2 rounded-full \${live ? 'bg-[#30d158] animate-pulse' : 'bg-[#ff9f0a]'}\`} />
+              <span className={`w-2 h-2 rounded-full ${live ? 'bg-[#30d158] animate-pulse' : 'bg-[#ff9f0a]'}`} />
               <span className="font-semibold text-white/70 uppercase tracking-wider text-[11px]">
                 {live ? (isFa ? 'داده زنده سرور' : 'Live Server Telemetry') : (isFa ? 'در حال دریافت داده' : 'Loading live telemetry')}
               </span>
@@ -228,12 +228,12 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button onClick={() => { void loadLive(); void loadLogs(); }} disabled={loading}
               className="apple-btn-secondary py-2 px-3 text-xs font-medium flex items-center gap-1.5">
-              <RefreshCw className={\`w-3.5 h-3.5 \${loading ? 'animate-spin' : ''}\`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               {isFa ? 'به‌روزرسانی واقعی' : 'Refresh Live'}
             </button>
             <button onClick={probeCluster} disabled={isProbingCluster}
               className="apple-btn-secondary py-2 px-3 text-xs font-medium flex items-center gap-1.5">
-              <Wifi className={\`w-3.5 h-3.5 \${isProbingCluster ? 'animate-pulse' : ''}\`} />
+              <Wifi className={`w-3.5 h-3.5 ${isProbingCluster ? 'animate-pulse' : ''}`} />
               {isProbingCluster ? (isFa ? 'در حال تست...' : 'Probing...') : (isFa ? 'پروب نودها' : 'Probe Nodes')}
             </button>
             <button onClick={() => onNavigateTab('architecture_auditor')}
@@ -250,7 +250,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               key: 'health',
               icon: ShieldCheck,
               label: isFa ? 'امتیاز سلامت واقعی' : 'Real Health Score',
-              value: live ? \`\${live.health.score} / 100\` : '—',
+              value: live ? `${live.health.score} / 100` : '—',
               sub: isFa ? 'کلیک برای گزارش' : 'Click for report',
               color: 'text-[#30d158]',
               onClick: () => live && setReport({ kind: 'health', title: isFa ? 'گزارش سلامت واقعی سرور' : 'Real Server Health Report', data: live.health.report }),
@@ -268,7 +268,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               key: 'nodes',
               icon: Server,
               label: isFa ? 'نودهای تنظیم‌شده' : 'Configured Nodes',
-              value: \`\${openCount} / \${totalNodes || 0}\`,
+              value: `${openCount} / ${totalNodes || 0}`,
               sub: isFa ? 'قابل کلیک' : 'Clickable',
               color: 'text-white',
               onClick: () => onNavigateTab('heartbeat_radar'),
@@ -277,7 +277,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               key: 'sockets',
               icon: Wifi,
               label: isFa ? 'سوکت‌های اصلی' : 'Core Sockets',
-              value: \`\${socketOpenCount} / \${socketTotal || 0}\`,
+              value: `${socketOpenCount} / ${socketTotal || 0}`,
               sub: isFa ? 'کلیک برای جزئیات' : 'Click for details',
               color: 'text-[#ff9f0a]',
               onClick: () => live && setReport({
@@ -291,9 +291,9 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               className="text-start p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.12] transition group cursor-pointer">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">{item.label}</span>
-                <item.icon className={\`w-4 h-4 \${item.color} opacity-80 group-hover:opacity-100\`} />
+                <item.icon className={`w-4 h-4 ${item.color} opacity-80 group-hover:opacity-100`} />
               </div>
-              <div className={\`text-xl font-bold font-mono tabular-nums mt-1 \${item.color}\`}>{item.value}</div>
+              <div className={`text-xl font-bold font-mono tabular-nums mt-1 ${item.color}`}>{item.value}</div>
               <div className="text-[10px] text-white/30 mt-0.5">{item.sub}</div>
             </button>
           ))}
@@ -311,7 +311,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               </div>
             </div>
             <button onClick={() => onNavigateTab('heartbeat_radar')} className="text-xs text-[#0a84ff] flex items-center gap-1">
-              {isFa ? 'رادار کامل' : 'Full Radar'} <ChevronRight className={\`w-3.5 h-3.5 \${isFa ? 'rotate-180' : ''}\`} />
+              {isFa ? 'رادار کامل' : 'Full Radar'} <ChevronRight className={`w-3.5 h-3.5 ${isFa ? 'rotate-180' : ''}`} />
             </button>
           </div>
 
@@ -320,7 +320,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               <div className="relative w-48 h-48 rounded-full border border-white/10 bg-black/40 overflow-hidden">
                 {[0,1,2,3].map(i => (
                   <div key={i} className="absolute inset-0 rounded-full border border-white/[0.05]"
-                    style={{ inset: \`\${16*i + 8}px\` }} />
+                    style={{ inset: `${16*i + 8}px` }} />
                 ))}
                 <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/[0.05]" />
                 <div className="absolute top-1/2 left-0 right-0 h-px bg-white/[0.05]" />
@@ -332,11 +332,11 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
                   const top = 50 + Math.sin(angle) * (radius / 2.1);
                   return (
                     <button key={n.id}
-                      title={\`\${n.name} — \${n.host}:\${n.port}\`}
-                      onClick={() => setReport({ kind: 'node', title: isFa ? \`گزارش ضربان \${n.name}\` : \`Heartbeat Report — \${n.name}\`, node: n })}
+                      title={`${n.name} — ${n.host}:${n.port}`}
+                      onClick={() => setReport({ kind: 'node', title: isFa ? `گزارش ضربان ${n.name}` : `Heartbeat Report — ${n.name}`, node: n })}
                       className="absolute -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
-                      style={{ left: \`\${left}%\`, top: \`\${top}%\` }}>
-                      <span className={\`block w-3.5 h-3.5 rounded-full border-2 border-black \${n.open ? 'bg-[#30d158] shadow-[0_0_12px_rgba(48,209,88,.8)]' : 'bg-[#ff453a] shadow-[0_0_12px_rgba(255,69,58,.7)]'}\`} />
+                      style={{ left: `${left}%`, top: `${top}%` }}>
+                      <span className={`block w-3.5 h-3.5 rounded-full border-2 border-black ${n.open ? 'bg-[#30d158] shadow-[0_0_12px_rgba(48,209,88,.8)]' : 'bg-[#ff453a] shadow-[0_0_12px_rgba(255,69,58,.7)]'}`} />
                       <span className="absolute z-20 hidden group-hover:block whitespace-nowrap bottom-5 left-1/2 -translate-x-1/2 px-2 py-1 rounded bg-black/90 border border-white/10 text-[9px] font-mono text-white">
                         {n.name}
                       </span>
@@ -354,10 +354,10 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
             <div className="md:col-span-7 space-y-1.5">
               {(live?.nodes || []).slice(0, 8).map(n => (
                 <button key={n.id}
-                  onClick={() => setReport({ kind: 'node', title: isFa ? \`گزارش ضربان \${n.name}\` : \`Heartbeat Report — \${n.name}\`, node: n })}
+                  onClick={() => setReport({ kind: 'node', title: isFa ? `گزارش ضربان ${n.name}` : `Heartbeat Report — ${n.name}`, node: n })}
                   className="w-full p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] flex items-center justify-between text-start cursor-pointer">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className={\`w-2 h-2 rounded-full shrink-0 \${n.open ? 'bg-[#30d158]' : 'bg-[#ff453a]'}\`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${n.open ? 'bg-[#30d158]' : 'bg-[#ff453a]'}`} />
                     <div className="min-w-0">
                       <span className="font-mono font-medium text-white/90 text-xs block truncate">{n.name}</span>
                       <span className="text-[10px] text-white/40 truncate block">{n.host}:{n.port} · {n.role || 'node'}</span>
@@ -389,12 +389,12 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
             className="w-full text-start p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] transition cursor-pointer">
             <div className="flex items-center justify-between">
               <span className="text-sm text-white/70">{isFa ? 'امتیاز ممیزی' : 'Audit Score'}</span>
-              <span className={\`text-2xl font-bold font-mono \${(live?.architecture.score ?? 0) >= 80 ? 'text-[#30d158]' : 'text-[#ff9f0a]'}\`}>
-                {live ? \`\${live.architecture.score}%\` : '—'}
+              <span className={`text-2xl font-bold font-mono ${(live?.architecture.score ?? 0) >= 80 ? 'text-[#30d158]' : 'text-[#ff9f0a]'}`}>
+                {live ? `${live.architecture.score}%` : '—'}
               </span>
             </div>
             <div className="mt-3 h-2 rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full bg-current rounded-full" style={{ width: \`\${live?.architecture.score ?? 0}%\`, color: (live?.architecture.score ?? 0) >= 80 ? '#30d158' : '#ff9f0a' }} />
+              <div className="h-full bg-current rounded-full" style={{ width: `${live?.architecture.score ?? 0}%`, color: (live?.architecture.score ?? 0) >= 80 ? '#30d158' : '#ff9f0a' }} />
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {(live?.architecture.checks || []).slice(0, 6).map(c => (
@@ -415,7 +415,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
             </div>
             <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
               <span className="text-[10px] text-white/40 block">{isFa ? 'مصرف دیسک / RAM' : 'Disk / RAM'}</span>
-              <span className="text-xs font-mono text-white mt-1 block">{live ? \`\${live.system.diskUsagePercent}% / \${fmtBytes(live.system.memoryTotalBytes - live.system.memoryFreeBytes)}\` : '—'}</span>
+              <span className="text-xs font-mono text-white mt-1 block">{live ? `${live.system.diskUsagePercent}% / ${fmtBytes(live.system.memoryTotalBytes - live.system.memoryFreeBytes)}` : '—'}</span>
             </div>
           </div>
         </section>
@@ -429,7 +429,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
                 <span className="text-[10px] text-white/40">{isFa ? 'از kernel socket state؛ بدون process scan' : 'Kernel socket state only; no process scanning'}</span>
               </div>
             </div>
-            <button onClick={() => { probeCluster(); void loadLive(); }} className="text-[#0a84ff]"><RefreshCw className={\`w-3.5 h-3.5 \${isProbingCluster ? 'animate-spin' : ''}\`} /></button>
+            <button onClick={() => { probeCluster(); void loadLive(); }} className="text-[#0a84ff]"><RefreshCw className={`w-3.5 h-3.5 ${isProbingCluster ? 'animate-spin' : ''}`} /></button>
           </div>
 
           <div className="space-y-1.5">
@@ -438,10 +438,10 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
               const effectiveOpen = remoteProbe ? remoteProbe.open : s.open;
               return (
                 <button key={s.port}
-                  onClick={() => setReport({ kind: 'socket', title: isFa ? \`پورت \${s.port} — \${s.name}\` : \`Port \${s.port} — \${s.name}\`, socket: { ...s, open: effectiveOpen } })}
+                  onClick={() => setReport({ kind: 'socket', title: isFa ? `پورت ${s.port} — ${s.name}` : `Port ${s.port} — ${s.name}`, socket: { ...s, open: effectiveOpen } })}
                   className="w-full p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] flex items-center justify-between gap-3 text-start cursor-pointer">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className={\`w-2 h-2 rounded-full shrink-0 \${effectiveOpen ? 'bg-[#30d158]' : 'bg-[#ff453a]'}\`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${effectiveOpen ? 'bg-[#30d158]' : 'bg-[#ff453a]'}`} />
                     <span className="font-mono font-bold text-white text-xs">{s.port}</span>
                     <span className="text-white/45 text-[11px] truncate">{s.name}</span>
                   </div>
@@ -457,8 +457,8 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
           </div>
 
           <div className="pt-3 border-t border-white/[0.06] text-[10px] text-white/35">
-            {isFa ? \`سرور: \${live?.host.hostname || '—'} · IP: \${live?.host.primaryIp || '—'} · آخرین بررسی: \${live?.checkedAt ? new Date(live.checkedAt).toLocaleTimeString() : '—'}\`
-              : \`Server: \${live?.host.hostname || '—'} · IP: \${live?.host.primaryIp || '—'} · Last check: \${live?.checkedAt ? new Date(live.checkedAt).toLocaleTimeString() : '—'}\`}
+            {isFa ? `سرور: ${live?.host.hostname || '—'} · IP: ${live?.host.primaryIp || '—'} · آخرین بررسی: ${live?.checkedAt ? new Date(live.checkedAt).toLocaleTimeString() : '—'}`
+              : `Server: ${live?.host.hostname || '—'} · IP: ${live?.host.primaryIp || '—'} · Last check: ${live?.checkedAt ? new Date(live.checkedAt).toLocaleTimeString() : '—'}`}
           </div>
         </section>
 
@@ -516,7 +516,7 @@ export const BentoGridConsole: React.FC<BentoGridConsoleProps> = ({
                     ['Host', report.node.host],
                     ['Port', String(report.node.port)],
                     ['Heartbeat', report.node.heartbeat],
-                    ['Latency', \`\${report.node.latencyMs}ms\`],
+                    ['Latency', `${report.node.latencyMs}ms`],
                     ['Checked', new Date(report.node.checkedAt).toLocaleTimeString()],
                   ].map(([k,v]) => <div key={k} className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.05]"><div className="text-[9px] text-white/35">{k}</div><div className="text-xs text-white font-mono mt-1 break-all">{v}</div></div>)}
                 </div>
