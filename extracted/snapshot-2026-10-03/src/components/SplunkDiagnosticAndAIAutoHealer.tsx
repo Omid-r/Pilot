@@ -283,7 +283,8 @@ export const SplunkDiagnosticAndAIAutoHealer: React.FC<SplunkDiagnosticAndAIAuto
           ? `آزمون واقعی عیب‌یابی اجرا نشد یا backend با خطای ${err?.message || 'نامشخص'} پاسخ داد. هیچ نتیجه شبیه‌سازی‌شده‌ای نمایش داده نمی‌شود.`
           : `Real diagnostics did not complete: ${err?.message || 'unknown backend error'}. No simulated result is shown.`
       );
-    }    } finally {
+    }
+    } finally {
       setIsScanning(false);
     }
   };
