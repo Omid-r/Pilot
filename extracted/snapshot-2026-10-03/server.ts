@@ -4729,6 +4729,156 @@ disabled = 0
     }
   });
 
+  // API: Comprehensive diagnostic report for human/AI troubleshooting.
+  // Runs every tool validation sequentially, captures real command evidence and
+  // produces a bounded, shareable JSON report. No secrets are intentionally included.
+  app.post('/api/tools/diagnostic-report', async (_req, res) => {
+    const started = Date.now();
+    const allToolIds = [
+      'architect_overseer',
+      'autonomous_agent',
+      'ai_diagnostics',
+      'bento_overview',
+      'cluster_deployer',
+      'architecture_auditor',
+      'topology',
+      'management_nodes',
+      'commercial_license',
+      'docker_k8s',
+      'health_audit',
+      'live_logs',
+      'config_editor',
+      'doc_reference',
+      'heartbeat_radar',
+      'alert_manager',
+      'network_sources',
+      'component_agents',
+      'remote_gateway',
+      'package_center',
+      'backup_archive',
+      'network_toolbox',
+      'admin_security'
+    ];
+
+    const redact = (value: unknown): string => {
+      let s = String(value ?? '');
+      s = s.replace(/(password|passwd|token|authorization|cookie|secret|private[_ -]?key|api[_ -]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
+      s = s.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED]');
+      s = s.replace(/-----BEGIN [^-]+ PRIVATE KEY-----[\\s\\S]*?-----END [^-]+ PRIVATE KEY-----/g, '[PRIVATE KEY REDACTED]');
+      return s.length > 8000 ? s.slice(0, 8000) + '\\n...[truncated]...' : s;
+    };
+
+    const results: Record<string, any> = {};
+    for (const toolId of allToolIds) {
+      try {
+        const result = await validateToolInternal(toolId);
+        results[toolId] = {
+          ...result,
+          checks: result.checks.map((check: any) => ({
+            ...check,
+            detailFa: redact(check.detailFa),
+            detailEn: redact(check.detailEn),
+            command: redact(check.command),
+            stdout: redact(check.stdout),
+            stderr: redact(check.stderr)
+          }))
+        };
+      } catch (err: any) {
+        results[toolId] = {
+          toolId,
+          status: 'error',
+          score: 0,
+          latencyMs: 0,
+          installed: false,
+          operational: false,
+          checks: [{
+            nameFa: 'خطای اجرایی گزارش',
+            nameEn: 'Diagnostic execution error',
+            status: 'warn',
+            detailFa: redact(err?.message || String(err)),
+            detailEn: redact(err?.message || String(err)),
+            stderr: redact(err?.stack || String(err)),
+            exitCode: 1
+          }],
+          summaryFa: 'اجرای ممیزی این ابزار با خطای اجرایی متوقف شد.',
+          summaryEn: 'Diagnostic execution for this tool stopped with a runtime error.'
+        };
+      }
+    }
+
+    const values = Object.values(results) as any[];
+    const healthyCount = values.filter(r => r.status === 'healthy').length;
+    const warningCount = values.filter(r => r.status === 'warning').length;
+    const errorCount = values.filter(r => r.status === 'error').length;
+    const overallScore = values.length
+      ? Math.round(values.reduce((sum, r) => sum + Number(r.score || 0), 0) / values.length)
+      : 0;
+
+    let health = null;
+    try {
+      const audit = getSystemAudit();
+      const net = getSystemNetworkInfo();
+      health = {
+        hostname: net.hostname,
+        primaryIp: net.primaryIp,
+        ipv4: net.ipv4List,
+        platform: process.platform,
+        arch: process.arch,
+        node: process.version,
+        runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
+        memoryTotalBytes: os.totalmem(),
+        memoryFreeBytes: os.freemem(),
+        loadAverage: os.loadavg(),
+        uptimeSeconds: os.uptime(),
+        splunkHome: audit.splunkHome.path,
+        splunkDetected: audit.splunkHome.detected
+      };
+    } catch (_) {}
+
+    const failedTools = values
+      .filter(r => r.status !== 'healthy')
+      .map(r => ({
+        toolId: r.toolId,
+        status: r.status,
+        score: r.score,
+        summaryFa: redact(r.summaryFa),
+        summaryEn: redact(r.summaryEn),
+        failedChecks: r.checks.filter((c:any) => c.status !== 'pass').map((c:any) => ({
+          nameFa: c.nameFa,
+          nameEn: c.nameEn,
+          command: redact(c.command),
+          stdout: redact(c.stdout),
+          stderr: redact(c.stderr),
+          exitCode: c.exitCode,
+          detailFa: redact(c.detailFa),
+          detailEn: redact(c.detailEn)
+        }))
+      }));
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.json({
+      success: true,
+      reportType: 'PILOT_COMPREHENSIVE_TOOL_DIAGNOSTIC',
+      reportVersion: '1.0',
+      generatedAt: new Date().toISOString(),
+      durationMs: Date.now() - started,
+      executionMode: 'SEQUENTIAL_REAL_READ_ONLY',
+      totalTools: values.length,
+      healthyCount,
+      warningCount,
+      errorCount,
+      overallScore,
+      host: health,
+      failedTools,
+      tools: results,
+      notes: [
+        'All tool validations were executed sequentially to avoid browser/server overload.',
+        'Command evidence is read-only unless a tool itself exposes an explicit write action; this report invokes validation paths only.',
+        'Secrets found in common key/value patterns are redacted before the report is returned.'
+      ]
+    });
+  });
+
   // API: Validate all tools across the entire platform
   app.post('/api/tools/validate-all', async (req, res) => {
     try {
