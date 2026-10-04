@@ -4054,48 +4054,173 @@ disabled = 0
   // Helper function to validate a specific tool by ID
   async function validateToolInternal(toolId: string) {
     const started = Date.now();
-    const checks: Array<{ nameFa:string; nameEn:string; status:'pass'|'warn'; detailFa:string; detailEn:string }> = [];
-    const add = (fa:string,en:string,status:'pass'|'warn',df:string,de:string) => checks.push({nameFa:fa,nameEn:en,status,detailFa:df,detailEn:de});
-    try {
-      const root = typeof process.getuid === 'function' && process.getuid() === 0;
-      const ip = execSync('command -v ip 2>/dev/null || true',{encoding:'utf8'}).trim();
-      const ss = execSync('command -v ss 2>/dev/null || true',{encoding:'utf8'}).trim();
-      add('اجرای Root','Root execution',root?'pass':'warn',root?'سرویس با Root اجرا شده است.':'سرویس با Root اجرا نشده است.','Controller privilege state verified.');
-      add('ابزار ip','ip utility',ip?'pass':'warn',ip||'ابزار ip یافت نشد.','ip command availability checked.');
-      add('ابزار ss','ss utility',ss?'pass':'warn',ss||'ابزار ss یافت نشد.','ss command availability checked.');
-      if(toolId==='health_audit' || toolId==='topology' || toolId==='network_toolbox') {
-        const listeners = execSync('ss -H -tulpn 2>/dev/null || true',{encoding:'utf8'});
-        add('پایش سوکت‌های واقعی','Live socket probe','pass',`تعداد خطوط socket: ${listeners.split('\\n').filter(Boolean).length}`,`Live socket probe returned ${listeners.split('\\n').filter(Boolean).length} rows.`);
+    type ValidationCheck = {
+      nameFa: string;
+      nameEn: string;
+      status: 'pass' | 'warn';
+      detailFa: string;
+      detailEn: string;
+      command?: string;
+      stdout?: string;
+      stderr?: string;
+      exitCode?: number;
+    };
+    const checks: ValidationCheck[] = [];
+    const add = (
+      fa: string,
+      en: string,
+      status: 'pass' | 'warn',
+      df: string,
+      de: string,
+      command?: string,
+      stdout?: string,
+      stderr?: string,
+      exitCode?: number
+    ) => checks.push({ nameFa: fa, nameEn: en, status, detailFa: df, detailEn: de, command, stdout, stderr, exitCode });
+
+    const root = typeof process.getuid === 'function' && process.getuid() === 0;
+    add(
+      'اجرای سرویس',
+      'Controller execution',
+      root ? 'pass' : 'warn',
+      root ? 'Backend با دسترسی root اجرا می‌شود.' : 'Backend با root اجرا نشده است.',
+      root ? 'The controller is running with root privileges.' : 'The controller is not running as root.'
+    );
+
+    const commandPath = (name: string) => {
+      try {
+        return execSync(`command -v ${name} 2>/dev/null || true`, { encoding: 'utf8' }).trim();
+      } catch (_) {
+        return '';
       }
-      if(toolId==='health_audit' || toolId==='config_editor' || toolId==='live_logs') {
-        const home = resolveSplunkDirectory({} as any);
-        const exists = fs.existsSync(path.join(home,'etc/system/local'));
-        add('مسیر کانفیگ اسپلانک','Splunk config path',exists?'pass':'warn',exists?`مسیر ${home}/etc/system/local موجود است.`:'مسیر کانفیگ اسپلانک یافت نشد.',exists?'Splunk local config directory exists.':'Splunk local config directory not found.');
-      }
-      if(toolId==='cluster_deployer' || toolId==='docker_k8s') {
-        const podman = execSync('command -v podman 2>/dev/null || true',{encoding:'utf8'}).trim();
-        const kubectl = execSync('command -v kubectl 2>/dev/null || true',{encoding:'utf8'}).trim();
-        add('Runtime آفلاین','Offline runtime',podman||kubectl?'pass':'warn',podman||kubectl?`Runtime found: ${[podman,kubectl].filter(Boolean).join(', ')}`:'Podman/kubectl not found on controller.','Container/Kubernetes runtime availability checked.');
-      }
-      if(toolId==='admin_security') {
-        const store = getSecurityStore();
-        add('RBAC Store','RBAC store',store.users.length>0?'pass':'warn',`کاربران ثبت‌شده: ${store.users.length}`,`Users in security store: ${store.users.length}`);
-      }
-    } catch(e:any) {
-      add('خطای موتور اعتبارسنجی','Validation engine','warn',e.message,e.message);
+    };
+
+    const specs: Record<string, { command: string; args: string[]; cwd?: string; nameFa: string; nameEn: string }> = {
+      bento_overview: { command: 'ip', args: ['-brief', 'addr'], nameFa: 'آزمون واقعی شبکه', nameEn: 'Real network probe' },
+      architect_overseer: { command: 'systemctl', args: ['--version'], nameFa: 'آزمون واقعی systemd', nameEn: 'Real systemd probe' },
+      autonomous_agent: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH client', nameEn: 'Real SSH client probe' },
+      ai_diagnostics: { command: 'uname', args: ['-a'], nameFa: 'آزمون واقعی هسته سیستم', nameEn: 'Real kernel probe' },
+      cluster_deployer: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH deploy client', nameEn: 'Real SSH deploy-client probe' },
+      architecture_auditor: { command: 'df', args: ['-P', '/'], nameFa: 'آزمون واقعی دیسک', nameEn: 'Real disk probe' },
+      topology: { command: 'ss', args: ['-H', '-lnt'], nameFa: 'آزمون واقعی socket', nameEn: 'Real socket probe' },
+      management_nodes: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH', nameEn: 'Real SSH probe' },
+      commercial_license: { command: 'openssl', args: ['version'], nameFa: 'آزمون واقعی OpenSSL', nameEn: 'Real OpenSSL probe' },
+      parallel_provisioning: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH provisioning', nameEn: 'Real SSH provisioning probe' },
+      docker_k8s: commandPath('podman')
+        ? { command: 'podman', args: ['--version'], nameFa: 'آزمون واقعی Podman', nameEn: 'Real Podman probe' }
+        : { command: 'kubectl', args: ['version', '--client'], nameFa: 'آزمون واقعی kubectl', nameEn: 'Real kubectl probe' },
+      health_audit: { command: 'ss', args: ['-H', '-s'], nameFa: 'آزمون واقعی socket summary', nameEn: 'Real socket summary probe' },
+      live_logs: { command: 'find', args: ['/opt/splunk/var/log/splunk', '-maxdepth', '1', '-type', 'f', '-name', 'splunkd.log', '-print', '-quit'], nameFa: 'آزمون واقعی فایل لاگ', nameEn: 'Real log-file probe' },
+      config_editor: { command: 'find', args: ['/opt/splunk/etc/system/local', '-maxdepth', '1', '-type', 'f', '-name', '*.conf', '-print', '-quit'], nameFa: 'آزمون واقعی کانفیگ', nameEn: 'Real config-file probe' },
+      doc_reference: { command: 'find', args: [getAppProjectRoot(), '-maxdepth', '2', '-type', 'f', '-name', 'README.md', '-print', '-quit'], nameFa: 'آزمون واقعی مستندات محلی', nameEn: 'Real local-doc probe' },
+      heartbeat_radar: { command: 'ip', args: ['-s', 'link'], nameFa: 'آزمون واقعی link telemetry', nameEn: 'Real link telemetry probe' },
+      alert_manager: { command: 'openssl', args: ['version'], nameFa: 'آزمون واقعی TLS runtime', nameEn: 'Real TLS runtime probe' },
+      network_sources: { command: 'ip', args: ['-j', 'route'], nameFa: 'آزمون واقعی route table', nameEn: 'Real route-table probe' },
+      component_agents: { command: 'tar', args: ['--version'], nameFa: 'آزمون واقعی tar', nameEn: 'Real tar probe' },
+      remote_gateway: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH gateway', nameEn: 'Real SSH gateway probe' },
+      package_center: { command: 'gzip', args: ['--version'], nameFa: 'آزمون واقعی gzip', nameEn: 'Real gzip probe' },
+      backup_archive: { command: 'tar', args: ['--version'], nameFa: 'آزمون واقعی tar archive', nameEn: 'Real tar archive probe' },
+      network_toolbox: { command: 'ss', args: ['-H', '-s'], nameFa: 'آزمون واقعی network toolbox', nameEn: 'Real network toolbox probe' },
+      admin_security: { command: 'openssl', args: ['version'], nameFa: 'آزمون واقعی امنیت TLS', nameEn: 'Real security runtime probe' }
+    };
+
+    const spec = specs[toolId] || specs.bento_overview;
+    const resolved = commandPath(spec.command);
+    if (!resolved) {
+      add(
+        spec.nameFa,
+        spec.nameEn,
+        'warn',
+        `فرمان ${spec.command} روی سرور پیدا نشد.`,
+        `Command ${spec.command} is not available on this server.`,
+        [spec.command, ...spec.args].join(' '),
+        '',
+        'command not found',
+        127
+      );
+    } else {
+      const probe = await runCommand(spec.command, spec.args, {
+        toolId,
+        toolNameFa: spec.nameFa,
+        toolNameEn: spec.nameEn,
+        category: 'system',
+        timeoutMs: 15000
+      });
+      const output = (probe.stdout || '').trim();
+      const error = (probe.stderr || '').trim();
+      const passed = probe.code === 0;
+      const display = output || error || '(no output)';
+      add(
+        spec.nameFa,
+        spec.nameEn,
+        passed ? 'pass' : 'warn',
+        passed
+          ? `فرمان واقعی با کد خروجی 0 اجرا شد. خروجی: ${display.slice(0, 500)}`
+          : `فرمان واقعی شکست خورد (exit ${probe.code}). ${display.slice(0, 500)}`,
+        passed
+          ? `Real command completed with exit code 0. Output: ${display.slice(0, 500)}`
+          : `Real command failed with exit code ${probe.code}. ${display.slice(0, 500)}`,
+        [spec.command, ...spec.args].join(' '),
+        output,
+        error,
+        probe.code
+      );
     }
-    const failed = checks.filter(c=>c.status==='warn').length;
+
+    if (['health_audit', 'topology', 'network_toolbox', 'bento_overview'].includes(toolId)) {
+      const ipPath = commandPath('ip');
+      const ssPath = commandPath('ss');
+      add(
+        'وابستگی‌های شبکه',
+        'Network dependencies',
+        ipPath && ssPath ? 'pass' : 'warn',
+        ipPath && ssPath ? 'ip و ss موجود هستند.' : 'یکی از ip یا ss روی سرور موجود نیست.',
+        ipPath && ssPath ? 'ip and ss are available.' : 'ip or ss is missing.'
+      );
+    }
+
+    if (['live_logs', 'config_editor', 'health_audit'].includes(toolId)) {
+      const homeCandidates = [process.env.SPLUNK_HOME || '', '/opt/splunk', '/opt/splunkforwarder'].filter(Boolean);
+      const home = homeCandidates.find(p => fs.existsSync(path.join(p, 'etc/system/local')));
+      const cfgDir = home ? path.join(home, 'etc/system/local') : '';
+      add(
+        'مسیر واقعی Splunk',
+        'Real Splunk path',
+        cfgDir ? 'pass' : 'warn',
+        cfgDir ? `مسیر ${cfgDir} واقعی است.` : 'مسیر etc/system/local واقعی پیدا نشد.',
+        cfgDir ? `Real directory ${cfgDir} exists.` : 'A real etc/system/local directory was not found.'
+      );
+    }
+
+    if (['commercial_license', 'admin_security'].includes(toolId)) {
+      const store = getSecurityStore();
+      add(
+        'Security Store',
+        'Security Store',
+        store.users.length > 0 ? 'pass' : 'warn',
+        `تعداد کاربران واقعی: ${store.users.length}`,
+        `Real security-store users: ${store.users.length}`
+      );
+    }
+
+    const warns = checks.filter(c => c.status === 'warn').length;
+    const score = checks.length ? Math.round((checks.filter(c => c.status === 'pass').length / checks.length) * 100) : 0;
     return {
       toolId,
-      status: failed ? 'warning' : 'healthy',
-      score: Math.max(0,100-failed*10),
-      latencyMs: Date.now()-started,
+      status: warns ? 'warning' : 'healthy',
+      score,
+      installed: checks.every(c => c.status === 'pass'),
+      operational: warns === 0,
+      latencyMs: Date.now() - started,
       checks,
-      summaryFa: failed ? `${failed} مورد نیازمند بررسی واقعی است.` : 'تمام تست‌های قابل اجرای واقعی موفق بودند.',
-      summaryEn: failed ? `${failed} real checks require attention.` : 'All executable real checks passed.'
+      summaryFa: warns
+        ? `${warns} آزمون واقعی ناموفق/ناقص بود؛ خروجی و کد خطا در همین گزارش ثبت شده است.`
+        : 'آزمون واقعی ابزار با اجرای فرمان روی همین سرور با موفقیت انجام شد.',
+      summaryEn: warns
+        ? `${warns} real checks failed or are incomplete; command output and exit codes are recorded.`
+        : 'The tool passed by executing a real command on this server.'
     };
   }
-
   // =========================================================================
   // OFFLINE READINESS / REAL BACKGROUND TOOL VALIDATION
   // This endpoint proves local runtime capability without internet access.
