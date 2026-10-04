@@ -291,7 +291,9 @@ export interface ToolboxConnection {
   remoteIp: string;
   remotePort: string;
   localPort: string;
+  localIp?: string;
   proto: string;
+  state: string;
   dir: 'IN' | 'OUT' | '-';
   action: 'ACCEPT' | 'ACCEPT*' | 'DENY' | 'BLOCK' | '-';
   packets: number;
