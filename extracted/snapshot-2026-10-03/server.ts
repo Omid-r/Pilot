@@ -575,14 +575,21 @@ async function startServer() {
 
     return { path: '/opt/splunk', detected: false, source: 'no real Splunk binary found' };
   }
-  // Detect active listening ports directly on host OS using ss and kernel procfs
+  // Detect active listening ports directly on host OS using socket state only.
+  // No process-table inspection is performed.
+  type DetectedPort = {
+    port: number;
+    protocol: 'TCP' | 'UDP';
+    address: string;
+    isSplunk: boolean;
+  };
   function detectListeningPorts(): DetectedPort[] {
     const results: DetectedPort[] = [];
     const seen = new Set<string>();
 
     // Method A: Run ss -tuln / ss -tulpn
     try {
-      const ssOutput = execSync('ss -tulpn 2>/dev/null || ss -tuln 2>/dev/null || true', { encoding: 'utf8' });
+      const ssOutput = execSync('ss -tuln 2>/dev/null || true', { encoding: 'utf8' });
       const lines = ssOutput.split('\n');
       for (const line of lines) {
         const parts = line.trim().split(/\s+/);
@@ -604,14 +611,12 @@ async function startServer() {
         if (seen.has(key)) continue;
         seen.add(key);
 
-        const processInfo = parts.slice(5).join(' ');
-        const isSplunk = /splunkd/i.test(processInfo) || [8000, 8089, 9997, 8088, 514, 1514].includes(port);
+        const isSplunk = [8000, 8089, 9997, 8088, 514, 1514].includes(port);
 
         results.push({
           port,
           protocol: proto.includes('UDP') ? 'UDP' : 'TCP',
           address,
-          process: processInfo || undefined,
           isSplunk
         });
       }
@@ -3598,11 +3603,11 @@ async function startServer() {
 
   // API: Get Live Connections & Peers — parse the kernel socket table.
   app.get('/api/toolbox/connections', async (_req,res) => {
-    const r=await runCommand('ss',['-H','-tanp']);
+    const r=await runCommand('ss',['-H','-tan']);
     if(r.code!==0 && !r.stdout) return res.status(500).json({success:false,error:r.stderr||'ss failed'});
     const rows=r.stdout.split('\\n').map(l=>l.trim()).filter(Boolean).map(line=>{
       const parts=line.split(/\\s+/);
-      return {state:parts[0]||'',local:parts[3]||'',remote:parts[4]||'',process:parts.slice(5).join(' ')};
+      return {state:parts[0]||'',local:parts[3]||'',remote:parts[4]||''};
     });
     res.json({success:true,connections:rows,checkedAt:new Date().toISOString()});
   });
@@ -3614,7 +3619,7 @@ async function startServer() {
     if(conn.code===0 && conn.stdout.trim()){
       return res.json({success:true,source:'conntrack',filters:f,raw:conn.stdout,flows:conn.stdout.split('\\n').filter(Boolean)});
     }
-    const sockets=await runCommand('ss',['-H','-tanp'],{timeoutMs:10000});
+    const sockets=await runCommand('ss',['-H','-tan'],{timeoutMs:10000});
     return res.json({success:true,source:'ss',filters:f,raw:sockets.stdout,flows:sockets.stdout.split('\\n').filter(Boolean)});
   });
 
