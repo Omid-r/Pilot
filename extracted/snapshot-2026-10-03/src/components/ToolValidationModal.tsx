@@ -88,6 +88,8 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
   const [allResults, setAllResults] = useState<Record<string, ToolValidationResult>>({});
   const [totalTested, setTotalTested] = useState<number>(0);
   const [offlineSummary, setOfflineSummary] = useState<OfflineReadinessSummary | null>(null);
+  const [diagnosticReport, setDiagnosticReport] = useState<any | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -127,6 +129,71 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
     } finally {
       setIsValidating(false);
     }
+  };
+
+  const generateDiagnosticReport = async () => {
+    setIsGeneratingReport(true);
+    setDiagnosticReport(null);
+    try {
+      const res = await fetch('/api/tools/diagnostic-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+
+      setDiagnosticReport(data);
+      setAllResults(data.tools || {});
+      setTotalTested(Number(data.totalTools || 0));
+      setOfflineSummary({
+        overallStatus: data.errorCount > 0 ? 'error' : data.warningCount > 0 ? 'warning' : 'healthy',
+        score: Number(data.overallScore || 0),
+        totalTools: Number(data.totalTools || 0),
+        healthyCount: Number(data.healthyCount || 0),
+        warningCount: Number(data.warningCount || 0),
+        errorCount: Number(data.errorCount || 0),
+        checkedAt: data.generatedAt || new Date().toISOString(),
+        durationMs: Number(data.durationMs || 0),
+        messageFa: `گزارش جامع ${data.totalTools || 0} ابزار تکمیل شد. سالم: ${data.healthyCount || 0}، هشدار: ${data.warningCount || 0}، خطا: ${data.errorCount || 0}.`,
+        messageEn: `Comprehensive report completed for ${data.totalTools || 0} tools. Healthy: ${data.healthyCount || 0}, warning: ${data.warningCount || 0}, error: ${data.errorCount || 0}.`
+      });
+    } catch (e: any) {
+      setDiagnosticReport(null);
+      setOfflineSummary({
+        overallStatus: 'error',
+        score: 0,
+        totalTools: 0,
+        healthyCount: 0,
+        warningCount: 0,
+        errorCount: 1,
+        checkedAt: new Date().toISOString(),
+        durationMs: 0,
+        messageFa: 'ساخت گزارش جامع ناموفق بود: ' + (e?.message || 'خطای backend'),
+        messageEn: 'Comprehensive report failed: ' + (e?.message || 'backend error')
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const downloadDiagnosticReport = () => {
+    if (!diagnosticReport) return;
+    const json = JSON.stringify(diagnosticReport, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `pilot-comprehensive-tool-diagnostic-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const runValidateAll = async () => {
@@ -381,15 +448,54 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
                         : 'Validation uses only local server files, runtime, routes and installed dependencies.')}
                   </p>
                 </div>
-                <button
-                  onClick={runValidateAll}
-                  disabled={isValidating}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={generateDiagnosticReport}
+                    disabled={isValidating || isGeneratingReport}
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <FileCheck className={`w-3.5 h-3.5 ${isGeneratingReport ? 'animate-spin' : ''}`} />
+                    <span>{isGeneratingReport ? (isFa ? 'در حال ساخت گزارش...' : 'Building report...') : (isFa ? 'اجرای همه و ساخت گزارش' : 'Run All + Build Report')}</span>
+                  </button>
+                  {diagnosticReport && (
+                    <button
+                      onClick={downloadDiagnosticReport}
+                      className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"
+                      title={isFa ? 'دانلود گزارش JSON برای ارسال به پشتیبان/هوش مصنوعی' : 'Download JSON report for support/AI analysis'}
+                    >
+                      <ArrowRight className="w-3.5 h-3.5 rotate-90" />
+                      <span>{isFa ? 'دانلود گزارش' : 'Download Report'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={runValidateAll}
+                    disabled={isValidating || isGeneratingReport}
                   className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isValidating ? 'animate-spin' : ''}`} />
                   <span>{isValidating ? (isFa ? 'درحال آزمون...' : 'Testing...') : (isFa ? 'اجرای مجدد آزمون جامع' : 'Re-run Full Audit')}</span>
                 </button>
               </div>
+
+              {diagnosticReport && (
+                <div className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/10">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-black text-white">
+                        {isFa ? 'گزارش آماده ارسال به ChatGPT / پشتیبان' : 'Report ready for ChatGPT / Support'}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        {isFa
+                          ? 'تمام ابزارها به صورت مرحله‌ای اجرا شده‌اند تا فشار روی سرور و مرورگر کنترل شود.'
+                          : 'All tools were executed sequentially to control browser and server load.'}
+                      </div>
+                    </div>
+                    <button onClick={downloadDiagnosticReport} className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 text-[10px] font-bold cursor-pointer">
+                      {isFa ? 'دانلود JSON' : 'Download JSON'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {offlineSummary && (
                 <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10">
@@ -447,8 +553,8 @@ export const ToolValidationModal: React.FC<ToolValidationModalProps> = ({
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span>{isFa
-              ? 'این گزارش فقط از وضعیت واقعی همین سرور و بدون دسترسی اینترنت ساخته شده است.'
-              : 'This report is based only on this server’s real local state; no internet access is used.'}</span>
+              ? 'گزارش جامع شامل اجرای مرحله‌ای همه ابزارها، command، stdout/stderr، exit code و خطاهای واقعی است.'
+              : 'The comprehensive report contains sequential validation of all tools, command evidence, stdout/stderr, exit codes and real failures.'}</span>
           </div>
 
           <button
