@@ -51,6 +51,31 @@ async function startServer() {
     return requireAuth(req, res, next);
   });
 
+  // Public controller health/version endpoint. No browser cache is permitted.
+  app.get('/api/health', (_req, res) => {
+    let version = 'unknown';
+    let buildId = 'unknown';
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+      version = String(pkg.version || 'unknown');
+      const indexPath = path.join(process.cwd(), 'dist', 'index.html');
+      if (fs.existsSync(indexPath)) {
+        buildId = String(Math.round(fs.statSync(indexPath).mtimeMs));
+      }
+    } catch (_) {}
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.json({
+      success: true,
+      status: 'ok',
+      service: 'splunk-doctor',
+      version,
+      buildId,
+      node: process.version,
+      pid: process.pid,
+      startedAt: new Date().toISOString()
+    });
+  });
+
   // PuTTY Live SSH Stream for all UI Button Clicks & Web API Actions
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/') && !req.path.includes('/command-stream') && !req.path.includes('/status-poll')) {
@@ -516,61 +541,41 @@ async function startServer() {
   });
 
   // Helper to discover Splunk installation path across common environments and process table
+  // Discover a real Splunk installation from configured/installed binaries.
+  // Process-table inspection is intentionally not used by the product.
   function findSplunkHome(): { path: string; detected: boolean; source: string } {
-    // 1. Explicit env
-    if (process.env.SPLUNK_HOME && fs.existsSync(process.env.SPLUNK_HOME)) {
-      return { path: process.env.SPLUNK_HOME, detected: true, source: 'SPLUNK_HOME environment variable' };
+    const candidates: Array<{ path: string; source: string }> = [];
+
+    if (process.env.SPLUNK_HOME) {
+      candidates.push({ path: process.env.SPLUNK_HOME, source: 'SPLUNK_HOME environment variable' });
     }
 
-    // 2. Check running process splunkd
-    try {
-      const psOut = execSync("pgrep -a splunkd 2>/dev/null || ps -ef | grep '[s]plunkd' || true", { encoding: 'utf8' }).trim();
-      if (psOut) {
-        const match = psOut.match(/(\/[^\s]+)\/bin\/splunkd/);
-        if (match && fs.existsSync(match[1])) {
-          return { path: match[1], detected: true, source: `Running process (${match[1]})` };
-        }
-      }
-    } catch (_) {}
+    candidates.push(
+      { path: '/opt/splunk', source: 'standard /opt/splunk path' },
+      { path: '/opt/splunkforwarder', source: 'standard /opt/splunkforwarder path' }
+    );
 
-    // 3. which splunk
     try {
-      const whichOut = execSync('which splunk 2>/dev/null || true', { encoding: 'utf8' }).trim();
+      const whichOut = execSync('command -v splunk 2>/dev/null || true', { encoding: 'utf8' }).trim();
       if (whichOut) {
         const realPath = fs.realpathSync(whichOut);
-        const homePath = path.dirname(path.dirname(realPath));
-        if (fs.existsSync(homePath)) {
-          return { path: homePath, detected: true, source: `which splunk binary (${homePath})` };
-        }
+        candidates.push({
+          path: path.dirname(path.dirname(realPath)),
+          source: 'installed splunk executable'
+        });
       }
     } catch (_) {}
 
-    // 4. Standard filesystem candidate paths
-    const candidates = [
-      '/opt/splunk',
-      '/opt/splunkforwarder',
-      '/opt/SplunkForwarder',
-      '/var/opt/splunk',
-      '/usr/local/splunk',
-      '/data/splunk'
-    ];
-    for (const c of candidates) {
-      if (fs.existsSync(path.join(c, 'etc')) || fs.existsSync(path.join(c, 'bin/splunk'))) {
-        return { path: c, detected: true, source: `Filesystem scan (${c})` };
+    for (const candidate of candidates) {
+      const home = path.resolve(candidate.path);
+      const binary = path.join(home, 'bin', 'splunk');
+      if (fs.existsSync(binary)) {
+        return { path: home, detected: true, source: candidate.source };
       }
     }
 
-    return { path: process.env.SPLUNK_HOME || '/opt/splunk', detected: false, source: 'Default fallback (/opt/splunk)' };
+    return { path: '/opt/splunk', detected: false, source: 'no real Splunk binary found' };
   }
-
-  interface DetectedPort {
-    port: number;
-    protocol: 'TCP' | 'UDP';
-    address: string;
-    process?: string;
-    isSplunk: boolean;
-  }
-
   // Detect active listening ports directly on host OS using ss and kernel procfs
   function detectListeningPorts(): DetectedPort[] {
     const results: DetectedPort[] = [];
@@ -2957,17 +2962,8 @@ async function startServer() {
       }
     );
 
-    // Execute Process & Daemon Discovery
-    await runCommand(
-      `pgrep -fl splunkd || ps aux | grep -E "splunkd|python3.*splunk" | head -n 8`,
-      {
-        toolId: 'splunk_diagnostics',
-        toolNameFa: 'خطایاب عمیق - پایش پروسه‌های سرور',
-        toolNameEn: 'Splunk Deep Diagnostic - Process & Daemon Check',
-        cwd: targetDir,
-        category: 'splunk'
-      }
-    );
+    // Process-table inspection intentionally removed. Live health is inferred from sockets,
+    // HTTP/REST probes, configuration files, and real command results.
 
     // 1. Check HTTP reachability of Web port
     let httpStatus = '000';
