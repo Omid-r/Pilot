@@ -70,7 +70,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
   const [connections, setConnections] = useState<ToolboxConnection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [connSearch, setConnSearch] = useState('');
-  const [actionFilter, setActionFilter] = useState<'ALL' | 'ACCEPT' | 'ACCEPT*' | 'DENY' | 'BLOCK'>('ALL');
+  const [connStateFilter, setConnStateFilter] = useState<'ALL' | 'ESTAB' | 'LISTEN' | 'TIME-WAIT' | 'CLOSE-WAIT' | 'SYN-SENT'>('ALL');
   const [protoFilter, setProtoFilter] = useState<'ALL' | 'TCP' | 'UDP' | 'ICMP'>('ALL');
 
   // 2. Flows State
@@ -136,7 +136,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
       const res = await fetch('/api/toolbox/connections');
       if (res.ok) {
         const data = await res.json();
-        setConnections(data);
+        setConnections(data.connections || []);
       }
     } catch (e) {
       console.error('Failed to fetch connections:', e);
@@ -160,7 +160,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
       });
       if (res.ok) {
         const data = await res.json();
-        setFlows(data);
+        setFlows(data.flows || []);
       }
     } catch (e) {
       console.error('Failed to fetch flows:', e);
@@ -263,7 +263,7 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
       const res = await fetch('/api/toolbox/network-map');
       if (res.ok) {
         const data = await res.json();
-        setMapNodes(data);
+        setMapNodes(data.nodes || []);
       }
     } catch (e) {
       console.error('Failed to fetch network map:', e);
@@ -323,11 +323,11 @@ export const NetworkToolbox: React.FC<NetworkToolboxProps> = ({ lang, clusterSet
 
   // Filtered connections
   const filteredConnections = connections.filter(c => {
-    if (actionFilter !== 'ALL' && c.action !== actionFilter) return false;
+    if (connStateFilter !== 'ALL' && c.state !== connStateFilter) return false;
     if (protoFilter !== 'ALL' && c.proto !== protoFilter) return false;
     if (connSearch) {
       const q = connSearch.toLowerCase();
-      const combined = `${c.remoteIp} ${c.remotePort} ${c.localPort} ${c.proc} ${c.purpose}`.toLowerCase();
+      const combined = `${c.remoteIp} ${c.remotePort} ${c.localIp || ''} ${c.localPort} ${c.state} ${c.purpose}`.toLowerCase();
       if (!combined.includes(q)) return false;
     }
     return true;
@@ -586,19 +586,19 @@ print(json.dumps({"engine": "Unified Traffic Gateway", "version": "v5-parity"}))
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-bold">{isFa ? 'فیلتر اکشن فایروال:' : 'Verdict:'}</span>
-              {(['ALL', 'ACCEPT', 'ACCEPT*', 'DENY', 'BLOCK'] as const).map(act => (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-slate-500 font-bold">{isFa ? 'فیلتر وضعیت socket:' : 'Socket State:'}</span>
+              {(['ALL', 'ESTAB', 'LISTEN', 'TIME-WAIT', 'CLOSE-WAIT', 'SYN-SENT'] as const).map(state => (
                 <button
-                  key={act}
-                  onClick={() => setActionFilter(act)}
+                  key={state}
+                  onClick={() => setConnStateFilter(state)}
                   className={`px-2 py-1 rounded text-[11px] font-bold border transition cursor-pointer ${
-                    actionFilter === act
+                    connStateFilter === state
                       ? 'bg-cyan-500 text-black border-cyan-400'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
                   }`}
                 >
-                  {act}
+                  {state}
                 </button>
               ))}
             </div>
@@ -627,47 +627,43 @@ print(json.dumps({"engine": "Unified Traffic Gateway", "version": "v5-parity"}))
               <table className="w-full text-left font-mono text-xs" dir="ltr">
                 <thead className="bg-[#0e1624] text-slate-400 border-b border-slate-800 sticky top-0 z-10 text-[11px]">
                   <tr>
+                    <th className="p-3">STATE</th>
                     <th className="p-3">DIRECTION</th>
                     <th className="p-3">PROTO</th>
                     <th className="p-3">REMOTE IP:PORT</th>
-                    <th className="p-3">LOCAL PORT</th>
-                    <th className="p-3">ACTION</th>
-                    <th className="p-3">PROCESS</th>
-                    <th className="p-3">PURPOSE / CLUSTER ROLE</th>
+                    <th className="p-3">LOCAL IP:PORT</th>
+                    <th className="p-3">PURPOSE</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-slate-300">
                   {filteredConnections.length > 0 ? (
                     filteredConnections.map((c, idx) => (
                       <tr key={idx} className="hover:bg-slate-800/40 transition">
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            c.state === 'ESTAB' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                            : c.state === 'LISTEN' ? 'bg-cyan-950/60 text-cyan-300 border-cyan-700/60'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}>{c.state || 'UNKNOWN'}</span>
+                        </td>
                         <td className="p-3 font-bold">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            c.dir === 'OUT' 
-                              ? 'bg-amber-950/50 text-amber-300 border-amber-700/60' 
-                              : 'bg-cyan-950/50 text-cyan-300 border-cyan-700/60'
+                            c.dir === 'OUT' ? 'bg-amber-950/50 text-amber-300 border-amber-700/60' 
+                            : c.dir === 'IN' ? 'bg-cyan-950/50 text-cyan-300 border-cyan-700/60'
+                            : 'bg-slate-800 text-slate-400 border-slate-700'
                           }`}>
-                            {c.dir === 'OUT' ? 'OUT →' : 'IN ←'}
+                            {c.dir === 'OUT' ? 'OUT →' : c.dir === 'IN' ? 'IN ←' : 'LOCAL / -'}
                           </span>
                         </td>
                         <td className="p-3 text-indigo-300">{c.proto}</td>
-                        <td className="p-3 font-bold text-slate-100">
-                          {c.remoteIp}:{c.remotePort}
-                        </td>
-                        <td className="p-3 text-cyan-400 font-bold">:{c.localPort}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getActionBadgeClass(c.action)}`}>
-                            {c.action}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-amber-400">{c.proc}</td>
-                        <td className="p-3 text-slate-400 text-[11px] font-sans">
-                          {c.purpose}
-                        </td>
+                        <td className="p-3 font-bold text-slate-100">{c.remoteIp}:{c.remotePort}</td>
+                        <td className="p-3 text-cyan-400 font-mono font-bold">{c.localIp || '*'}:{c.localPort}</td>
+                        <td className="p-3 text-slate-400 text-[11px] font-sans">{c.purpose}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500 font-sans">
+                      <td colSpan={6} className="p-8 text-center text-slate-500 font-sans">
                         {isFa ? 'هیچ اتصالی مطابق فیلترهای اعمال‌شده یافت نشد.' : 'No connections matched current filters.'}
                       </td>
                     </tr>
