@@ -44,19 +44,8 @@ Connected to the Pilot controller on this server.
 Commands are executed by the authenticated backend on the selected host context.
 Ready.`
   );
-  const [execHistory, setExecHistory] = useState<RemoteCommandExecutionLog[]>([
-    {
-      id: 'h1',
-      timestamp: '23:40:11',
-      nodeHostname: 'uf-appserver-prod-01.corp.internal',
-      commandExecuted: '/opt/splunkforwarder/bin/splunk status',
-      output: 'splunkd is running (PID 14201).',
-      exitCode: 0,
-      executedBy: 'soc_admin',
-      durationMs: 140
-    }
-  ]);
-  const [copied, setCopied] = useState(false);
+  const [execHistory, setExecHistory] = useState<RemoteCommandExecutionLog[]>([]);
+ const [copied, setCopied] = useState(false);
 
   const activeNode = nodes.find(n => n.id === activeNodeId) || nodes[0];
 
