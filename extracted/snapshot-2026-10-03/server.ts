@@ -1759,6 +1759,27 @@ async function startServer() {
     }
   });
 
+  // Read only a bounded tail of a file. This avoids loading multi-GB Splunk logs into RAM.
+  function readFileTailBounded(filePath: string, maxBytes = 1024 * 1024): string {
+    try {
+      const stat = fs.statSync(filePath);
+      const size = Number(stat.size) || 0;
+      if (size <= 0) return '';
+      const start = Math.max(0, size - maxBytes);
+      const length = Math.min(maxBytes, size);
+      const buffer = Buffer.alloc(length);
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        fs.readSync(fd, buffer, 0, length, start);
+      } finally {
+        fs.closeSync(fd);
+      }
+      const raw = buffer.toString('utf8');
+      return start > 0 ? raw.slice(Math.max(0, raw.indexOf('\n') + 1)) : raw;
+    } catch (_) {
+      return '';
+    }
+  }
   // API: Read local splunkd.log tail for diagnostic auditing
   app.get('/api/splunk/logs', (req, res) => {
     const splunkHome = resolveSplunkDirectory(req);
@@ -1769,7 +1790,7 @@ async function startServer() {
     const found = candidates.find(p => fs.existsSync(p));
     if (!found) return res.status(404).json({exists:false,path:candidates[0],targetDir:splunkHome,logs:'',error:'splunkd.log not found on target host.'});
     try {
-      const content=fs.readFileSync(found,'utf8');
+      const content=readFileTailBounded(found, 1024 * 1024);
       const lines=content.split('\\n').filter(Boolean);
       return res.json({exists:true,path:found,targetDir:splunkHome,logs:lines.slice(-300).join('\\n')});
     } catch(e:any) {
@@ -3475,7 +3496,7 @@ async function startServer() {
     const logPath = logPaths.find(p => fs.existsSync(p));
     if (logPath) {
       try {
-        const lines = fs.readFileSync(logPath, 'utf8').split(/\n/).filter(Boolean).slice(-3000);
+        const lines = readFileTailBounded(logPath, 2 * 1024 * 1024).split(/\n/).filter(Boolean).slice(-3000);
         const ingestLines = lines.filter(line => /TcpInputProc|HTTPEventCollector|ExecProcessor|indexing|ingest/i.test(line));
         observedEps = Math.max(0, Math.round(ingestLines.length / 60));
         ingestSource = 'splunkd.log observed lines / 60s window';
