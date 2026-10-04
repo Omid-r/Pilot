@@ -39,11 +39,10 @@ export const RemoteManagementGateway: React.FC<RemoteManagementGatewayProps> = (
   const [customCommand, setCustomCommand] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string>(
-    `[mTLS 1.3 SECURE GATEWAY INITIALIZED]
-Connected to Agent Gateway Daemon: splunk-doctor.internal:8443
-Mutual TLS Session: ECDHE-ECDSA-AES256-GCM-SHA384
-Zero-Trust Local Anonymization Filter: ACTIVE
-Ready to dispatch authenticated operational commands.`
+    `[LIVE SERVER TERMINAL]
+Connected to the Pilot controller on this server.
+Commands are executed by the authenticated backend on the selected host context.
+Ready.`
   );
   const [execHistory, setExecHistory] = useState<RemoteCommandExecutionLog[]>([
     {
@@ -74,44 +73,59 @@ Ready to dispatch authenticated operational commands.`
   const handleRunCommand = async (cmdToRun: string) => {
     if (!cmdToRun.trim() || isRunning) return;
     setIsRunning(true);
+    setTerminalOutput(prev => `${prev}\n\n[root@${activeNode?.hostname || 'server'} ~]# ${cmdToRun}`);
     const start = Date.now();
 
-    setTerminalOutput(prev => `${prev}\n\n[USER@${activeNode?.hostname || 'node'}]$ ${cmdToRun}\nDispatching encrypted command over mTLS tunnel...`);
-
-    // Simulate real remote execution
-    setTimeout(() => {
-      let result = '';
-      if (cmdToRun.includes('status')) {
-        result = `splunkd is running (PID ${Math.floor(10000 + Math.random() * 20000)}).\nsplunk helpers are running.\nMemory: 842MB RSS | CPU: 1.4% | mTLS Telemetry: Active.`;
-      } else if (cmdToRun.includes('btool outputs')) {
-        result = `[tcpout:primary_indexers]\nserver = 10.20.30.50:9997, 10.20.30.51:9997\nuseSSL = true\nsslVerifyServerCert = true\nsendCookedData = true\ncompressed = true\n# BTOOL Verified OK. No syntax errors.`;
-      } else if (cmdToRun.includes('list forward-server')) {
-        result = `Active forwards:\n\t10.20.30.50:9997 (Connected - Queue: 12%)\n\t10.20.30.51:9997 (Connected - Queue: 14%)\nConfigured but inactive forwards:\n\tNone`;
-      } else if (cmdToRun.includes('restart')) {
-        result = `Stopping splunkd...\nShutting down. [OK]\nStarting splunkd...\nChecking prerequisites...\nChecking conf files for problems...\nValidating databases...\nAll checks passed.\nsplunkd started successfully (PID ${Math.floor(20000 + Math.random() * 10000)}).`;
-      } else if (cmdToRun.includes('tail')) {
-        result = `2026-09-20 23:42:01.120 INFO  TcpOutputProc - Connected to idx-cluster-peer-01:9997 using TLSv1.3\n2026-09-20 23:42:05.450 INFO  Metrics - group=thruput, name=thruput, instantaneous_eps=1450.00, instantaneous_kbps=840.12\n2026-09-20 23:42:10.890 INFO  BucketReplicator - All buckets replicated with factor SF=2, RF=3\n2026-09-20 23:42:15.002 INFO  HealthCheck - System status: HEALTHY`;
-      } else {
-        result = `Command executed successfully on node ${activeNode?.hostname}.\nExit Code: 0\n[Zero-Trust Anonymizer]: Filtered local telemetry fields.`;
-      }
-
+    try {
+      const res = await fetch('/api/system/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: cmdToRun,
+          cwd: '/opt/splunk',
+          toolId: 'remote_gateway',
+          toolNameFa: 'ترمینال واقعی سرور',
+          toolNameEn: 'Real Server Terminal'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
       const duration = Date.now() - start;
-      setTerminalOutput(prev => `${prev}\n${result}\n(Completed in ${duration}ms, Exit Code: 0)`);
+      const output = [data.stdout || '', data.stderr || ''].filter(Boolean).join('\n');
+      const exitCode = data.exitCode ?? (data.success ? 0 : 1);
+
+      setTerminalOutput(prev =>
+        `${prev}\n${output || '(no output)'}\n[exit ${exitCode}] [${duration}ms]`
+      );
 
       const newLog: RemoteCommandExecutionLog = {
-        id: `exec-${Date.now()}`,
+        id: data.entryId || `exec-${Date.now()}`,
         timestamp: new Date().toLocaleTimeString(),
-        nodeHostname: activeNode?.hostname || 'unknown-host',
+        nodeHostname: activeNode?.hostname || 'local-server',
         commandExecuted: cmdToRun,
-        output: result,
-        exitCode: 0,
-        executedBy: 'soc_admin',
+        output: output || '(no output)',
+        exitCode,
+        executedBy: 'authenticated-user',
         durationMs: duration
       };
-      setExecHistory(prev => [newLog, ...prev.slice(0, 9)]);
-      setIsRunning(false);
+      setExecHistory(prev => [newLog, ...prev.slice(0, 19)]);
       setCustomCommand('');
-    }, 900);
+    } catch (err: any) {
+      const duration = Date.now() - start;
+      const message = err?.message || 'Backend execution failed';
+      setTerminalOutput(prev => `${prev}\n${message}\n[exit 1] [${duration}ms]`);
+      setExecHistory(prev => [{
+        id: `exec-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        nodeHostname: activeNode?.hostname || 'local-server',
+        commandExecuted: cmdToRun,
+        output: message,
+        exitCode: 1,
+        executedBy: 'authenticated-user',
+        durationMs: duration
+      }, ...prev.slice(0, 19)]);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const copyTerminalOutput = () => {
@@ -136,13 +150,13 @@ Ready to dispatch authenticated operational commands.`
               {isFa ? 'درگاه اتصال و مدیریت امن از راه دور (Secure Remote Management Gateway)' : 'Encrypted Remote Splunk Management Gateway'}
             </h2>
             <span className="sirene-badge text-[10px] font-mono px-3 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/25">
-              mTLS WSS Tunnel Active
+              LIVE SERVER EXECUTION
             </span>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
             {isFa
-              ? 'اتصال مستقیم و رمزنگاری‌شده به تمامی فورواردرها، سرورهای سیسلاگ و کلاستر ایندکسرها جهت اعمال فرامین عیب‌یابی، بررسی سلامت کانفیگ‌ها و ری‌استارت امن بدون نیاز به باز کردن پورت SSH در فایروال.'
-              : 'Direct bidirectional management tunnel to all deployed agents. Perform live diagnostics, btool validation, and remote service restarts securely.'}
+              ? 'اجرای مستقیم و واقعی فرمان‌ها روی همین سرور از طریق backend احراز هویت‌شده؛ خروجی stdout/stderr و کد خروجی همان‌جا نمایش داده می‌شود.'
+              : 'Run real diagnostics and administration commands on this server; every command and its real stdout/stderr are recorded and shown.'}
           </p>
         </div>
 
@@ -150,8 +164,8 @@ Ready to dispatch authenticated operational commands.`
         <div className="p-3.5 bg-[#07090e] border border-white/[0.08] rounded-2xl flex items-center gap-3 relative z-10 shadow-inner">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></div>
           <div className="text-xs">
-            <span className="text-white font-bold block">{isFa ? 'تونل ریموت برقرار است' : 'mTLS Tunnel Online'}</span>
-            <span className="text-slate-400 text-[10px] font-mono">Port 8443 (Mutual TLS)</span>
+            <span className="text-white font-bold block">{isFa ? 'اجرای واقعی سرور فعال است' : 'LIVE SERVER ONLINE'}</span>
+            <span className="text-slate-400 text-[10px] font-mono">Backend /api/system/terminal/exec</span>
           </div>
         </div>
       </div>
