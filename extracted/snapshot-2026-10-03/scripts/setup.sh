@@ -56,23 +56,17 @@ echo "==> [۴.۵/۶] اعمال مجوزهای امن و اجرایی..."
 find "${TARGET_DIR}" -type d -exec chmod 755 {} +
 find "${TARGET_DIR}" -type f -exec chmod 644 {} +
 chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
-# Preserve execute permission on the bundled private Node.js runtime.
-NODE_BIN="${TARGET_DIR}/node-runtime/bin/node"
-if [ -f "${NODE_BIN}" ]; then
-  chmod 0755 "${NODE_BIN}"
-fi
-
 # Private runtime state and secrets live outside the application tree.
 mkdir -p "${DATA_DIR}"
 chmod 700 "${DATA_DIR}"
 
-# Use the Node runtime packaged with the offline bundle.
-NODE_BIN="${TARGET_DIR}/node-runtime/bin/node"
+# Use the Node runtime staged by the offline prerequisite installer.
+NODE_BIN="/usr/local/bin/splunk-doctor-node"
 if [ ! -x "$NODE_BIN" ]; then
-  echo "[-] Bundled Node.js runtime is missing or not executable."
+  echo "[-] Staged bundled Node.js runtime is missing or not executable: ${NODE_BIN}"
   exit 1
 fi
-echo "  -> Node.js: $("$NODE_BIN" --version) ($NODE_BIN)"
+echo "  -> Node.js: $("${NODE_BIN}" --version) (${NODE_BIN})"
 
 if command -v restorecon >/dev/null 2>&1; then
   restorecon -RF "${TARGET_DIR}" "${DATA_DIR}" || true
