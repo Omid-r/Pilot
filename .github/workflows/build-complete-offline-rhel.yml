@@ -174,16 +174,17 @@ jobs:
                 mkdir -p /work
                 tar -xzf /media/app.tar.gz -C /work
                 app=/work/splunk-doctor
-                test -x "${app}/node-runtime/bin/node"
+                test -f "${app}/node-runtime/bin/node"
                 test -f "${app}/setup.sh"
                 test -f "${app}/scripts/install-offline-prereqs.sh"
                 bash "${app}/scripts/install-offline-prereqs.sh"
-                "${app}/node-runtime/bin/node" --version
+                test -x /usr/local/bin/splunk-doctor-node
+                /usr/local/bin/splunk-doctor-node --version
                 export PATH="/usr/local/bin:${PATH}"
                 command -v kubectl >/dev/null
                 mkdir -p /tmp/pilot-data
                 NODE_ENV=production PORT=3100 SPLUNK_DOCTOR_DATA_DIR=/tmp/pilot-data SPLUNK_HOME=/opt/splunk \
-                  "${app}/node-runtime/bin/node" "${app}/dist/server.cjs" >/tmp/pilot-server.log 2>&1 &
+                  /usr/local/bin/splunk-doctor-node "${app}/dist/server.cjs" >/tmp/pilot-server.log 2>&1 &
                 pid=$!
                 trap "kill $pid 2>/dev/null || true" EXIT
                 code=000
