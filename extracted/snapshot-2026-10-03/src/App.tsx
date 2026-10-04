@@ -56,6 +56,7 @@ import { SplunkWebModal } from './components/SplunkWebModal';
 import { BentoGridConsole } from './components/BentoGridConsole';
 import { VirtualServerWipeModal } from './components/VirtualServerWipeModal';
 import { ToolValidationModal } from './components/ToolValidationModal';
+import { PuTTYLiveShellConsole } from './components/PuTTYLiveShellConsole';
 import { BackendOperationInspectorModal, BackendOperationRecord } from './components/BackendOperationInspectorModal';
 import { FloatingMiniWindow } from './components/FloatingMiniWindow';
 import { SplunkArchitectOverseerEngine } from './components/SplunkArchitectOverseerEngine';
@@ -682,6 +683,7 @@ export default function App() {
   const [isVirtualWipeModalOpen, setIsVirtualWipeModalOpen] = useState<boolean>(false);
   // Tool Validation & Diagnostic Health Modal State (اعتبار سنجی ابزارهای سامانه)
   const [isToolValidationModalOpen, setIsToolValidationModalOpen] = useState<boolean>(false);
+  const [isGlobalTerminalOpen, setIsGlobalTerminalOpen] = useState<boolean>(false);
   const [validatingToolId, setValidatingToolId] = useState<string>('bento_overview');
 
   // Splunk System Debugger & Telemetry Modal State
@@ -1021,6 +1023,7 @@ export default function App() {
     if (!sessionValidated || !authToken || !currentUser) return;
     setValidatingToolId('bento_overview');
     setIsToolValidationModalOpen(true);
+    setIsGlobalTerminalOpen(true);
   }, [sessionValidated, authToken, currentUser]);
 
   const handleLoginSuccess = (session: AuthSession) => {
@@ -3499,6 +3502,14 @@ export default function App() {
           <footer className="border-t border-white/[0.06] bg-[#111216] py-2.5 px-6 text-xs text-white/50 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3">
               <button
+                onClick={() => setIsGlobalTerminalOpen(prev => !prev)}
+                className="flex items-center gap-1.5 hover:text-cyan-300 transition cursor-pointer text-cyan-400"
+                title={isFa ? 'نمایش ترمینال زنده و خروجی واقعی همه فرامین' : 'Show live terminal and real command output'}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="font-medium">{isFa ? 'ترمینال زنده سرور' : 'Live Server Terminal'}</span>
+              </button>
+              <button
                 onClick={() => {
                   setValidatingToolId('bento_overview');
                   setIsToolValidationModalOpen(true);
@@ -3607,6 +3618,19 @@ export default function App() {
           onResetBaseline={handleResetToBaselineAudit}
           onAutoFixAll={() => handleApplyAllRemediations(activeEnvironment)}
         />
+      )}
+
+      {/* Global PuTTY-style terminal: automatically available after login.
+          It receives every central command-bus execution via SSE. */}
+      {isGlobalTerminalOpen && activeTab !== 'parallel_provisioning' && (
+        <div className="fixed bottom-4 right-4 z-[70] w-[min(920px,calc(100vw-2rem))] h-[min(620px,calc(100vh-6rem))] min-h-[360px] shadow-2xl">
+          <PuTTYLiveShellConsole
+            lang={lang}
+            isFloating={true}
+            onClose={() => setIsGlobalTerminalOpen(false)}
+            onToggleFloating={() => setIsGlobalTerminalOpen(false)}
+          />
+        </div>
       )}
 
       {/* Picture-in-Picture Floating Mini-Windows */}
