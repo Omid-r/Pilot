@@ -4271,7 +4271,10 @@ disabled = 0
       }
 
       const bundledNode = path.join(root, 'node-runtime/bin/node');
-      const effectiveNode = fs.existsSync(bundledNode) ? bundledNode : process.execPath;
+      const stagedNode = '/usr/local/bin/splunk-doctor-node';
+      const effectiveNode = fs.existsSync(stagedNode)
+        ? stagedNode
+        : (fs.existsSync(bundledNode) ? bundledNode : process.execPath);
       const nodeProbe = runReadOnly(`"${effectiveNode}" -v`);
       const appFiles = [
         path.join(root, 'dist/server.cjs'),
@@ -4414,6 +4417,12 @@ disabled = 0
             detailEn: cfgDir && fs.existsSync(cfgDir) ? `Directory ${cfgDir} exists.` : 'Real Splunk etc/system/local directory was not found.'
           });
         }
+
+        // Execute one real, read-only probe for every tool. The command is sent
+        // through the central command bus so the PuTTY-style console receives
+        // the exact command, stdout/stderr and exit code.
+        const realProbe = await validateToolInternal(toolId);
+        checks.push(...realProbe.checks);
 
         const hasWarning = checks.some(c => c.status === 'warn');
         const requiredCommandCount = spec.commands.length;
