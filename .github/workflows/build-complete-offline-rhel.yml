@@ -76,8 +76,7 @@ jobs:
             docker run --rm \
               -v "${PWD}/${repo_dir}:/out" \
               "rockylinux:${rhel}" \
-              bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core createrepo_c >/dev/null; createrepo_c /out >/tmp/createrepo.log 2>&1; test -f /out/repodata/repomd.xml; tar -C /out -cf - repodata' > "/tmp/rhel${rhel}-repodata.tar"
-            tar -xf "/tmp/rhel${rhel}-repodata.tar" -C "${repo_dir}"
+              bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core createrepo_c >/dev/null; createrepo_c /out >/tmp/createrepo.log 2>&1; test -f /out/repodata/repomd.xml'
             test -f "${repo_dir}/repodata/repomd.xml"
           done
 
