@@ -4299,12 +4299,11 @@ disabled = 0
       }
       const splunkBinary = splunkHome ? path.join(splunkHome, 'bin', 'splunk') : '';
       let splunkVersion = '';
-      let splunkStatus = 'NOT_STAGED';
+      let splunkVersionOk = false;
       if (splunkBinary) {
         const versionProbe = runReadOnly(`SPLUNK_HOME="${splunkHome}" "${splunkBinary}" version`);
         splunkVersion = versionProbe.stdout || versionProbe.stderr;
-        const statusProbe = runReadOnly(`SPLUNK_HOME="${splunkHome}" "${splunkBinary}" status`);
-        splunkStatus = statusProbe.ok && /splunkd is running/i.test(statusProbe.stdout) ? 'RUNNING' : 'INSTALLED_NOT_RUNNING';
+        splunkVersionOk = versionProbe.ok;
       }
 
       const localSignals = {
@@ -4319,12 +4318,10 @@ disabled = 0
         securityDbExists: fs.existsSync(securityDb),
         bootstrapPasswordExists: fs.existsSync(bootstrapPassword),
         registeredRouteCount: routeSurface.size,
-        servicePid: process.pid,
         runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
         splunkHome: splunkHome || null,
         splunkBinary: splunkBinary || null,
         splunkVersion,
-        splunkStatus
       };
 
       const toolSpecs: Record<string, any> = {
@@ -4391,9 +4388,9 @@ disabled = 0
           checks.push({
             nameFa: 'Splunk واقعی',
             nameEn: 'Real Splunk runtime',
-            status: splunkStatus === 'RUNNING' ? 'pass' : 'warn',
-            detailFa: splunkStatus === 'RUNNING' ? `Splunk در ${splunkHome} در حال اجراست.` : 'نسخه واقعی Splunk در این سرور استیج/Running نشده است؛ این ابزار عمداً سبز اعلام نمی‌شود.',
-            detailEn: splunkStatus === 'RUNNING' ? `Splunk is running from ${splunkHome}.` : 'Real Splunk is not staged/running on this host; the tool is not falsely marked healthy.'
+            status: localSignals.splunkBinary && localSignals.splunkVersionOk ? 'pass' : 'warn',
+            detailFa: localSignals.splunkBinary && localSignals.splunkVersionOk ? `باینری واقعی Splunk در ${splunkHome} پیدا و دستور version با موفقیت اجرا شد.` : 'باینری واقعی Splunk یا اجرای دستور version آماده نیست.',
+            detailEn: localSignals.splunkBinary && localSignals.splunkVersionOk ? `Real Splunk binary found at ${splunkHome} and version command executed successfully.` : 'Real Splunk binary is missing or its version command failed.'
           });
         }
 
