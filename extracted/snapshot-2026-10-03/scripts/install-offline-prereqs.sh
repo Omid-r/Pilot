@@ -145,6 +145,20 @@ else
   echo "[i] All core controller commands are already present; no OS upgrade is attempted."
 fi
 
+# Install the bundled Kubernetes client as a portable binary; unlike OS RPMs,
+# this never upgrades or replaces host packages.
+export PATH="/usr/local/bin:${PATH}"
+if [ ! -x "${KUBECTL_BIN}" ]; then
+  echo "[-] Bundled kubectl is missing from the installation media: ${KUBECTL_BIN}"
+  exit 1
+fi
+install -d -m 0755 /usr/local/bin
+install -m 0755 "${KUBECTL_BIN}" /usr/local/bin/kubectl
+hash -r 2>/dev/null || true
+test -x /usr/local/bin/kubectl
+kubectl version --client >/dev/null 2>&1
+echo "[+] Bundled kubectl installed: $(command -v kubectl)"
+
 echo "[+] Optional capability status:"
 for cmd in "${OPTIONAL_CMDS[@]}"; do
   if command -v "${cmd}" >/dev/null 2>&1; then
