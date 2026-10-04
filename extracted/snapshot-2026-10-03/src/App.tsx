@@ -2654,6 +2654,13 @@ export default function App() {
             probeCluster={probeCluster}
             isProbingCluster={isProbingCluster}
             clusterProbeResults={clusterProbeResults}
+            clusterTargets={[
+              { id: 'hf', name: 'Heavy Forwarder', host: clusterSettings.hfHost, port: 8089, role: 'heavy_forwarder' },
+              { id: 'idx1', name: 'Indexer 1', host: clusterSettings.idx1Host, port: 8089, role: 'indexer_peer' },
+              { id: 'idx2', name: 'Indexer 2', host: clusterSettings.idx2Host, port: 8089, role: 'indexer_peer' },
+              { id: 'sh', name: 'Search Head', host: clusterSettings.shHost, port: 8000, role: 'search_head' },
+              { id: 'ds', name: 'Deployment Server', host: clusterSettings.dsHost, port: 8089, role: 'deployment_server' }
+            ]}
           />
         );
       default: {
