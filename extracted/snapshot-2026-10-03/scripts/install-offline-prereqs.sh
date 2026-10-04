@@ -98,29 +98,51 @@ metadata_expire=-1
 EOF
 trap 'rm -f "${OFFLINE_REPO_FILE}"' EXIT
 
-REQUIRED_PACKAGES=(
-  curl openssl openssh-clients iproute iputils gawk sed grep findutils
-  coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools
-  tar gzip ca-certificates firewalld iptables policycoreutils
-  policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool
+declare -A COMMAND_TO_PACKAGE=(
+  [bash]=bash [sh]=bash [tar]=tar [gzip]=gzip [openssl]=openssl [curl]=curl
+  [ip]=iproute [ss]=iproute [ssh]=openssh-clients [awk]=gawk [sed]=sed [grep]=grep
+  [find]=findutils [df]=coreutils [uname]=coreutils [fuser]=psmisc
+  [hostname]=hostname [which]=which [nc]=nmap-ncat [ping]=iputils
+  [lsof]=lsof [netstat]=net-tools [conntrack]=conntrack-tools
+  [chronyc]=chrony [ipmitool]=ipmitool [python3]=python3
+  [firewall-cmd]=firewalld [iptables]=iptables [getenforce]=policycoreutils
+  [restorecon]=policycoreutils [semanage]=policycoreutils-python-utils
+  [podman]=podman
 )
 
-echo "[+] Installing required packages exclusively from offline DNF media..."
-dnf \
-  --disablerepo='*' \
-  --enablerepo="${OFFLINE_REPO_ID}" \
-  --setopt=install_weak_deps=False \
-  --setopt=keepcache=True \
-  -y install "${REQUIRED_PACKAGES[@]}"
+REQUIRED_CMDS=(
+  bash sh tar gzip openssl curl ip ss ssh awk sed grep find df uname fuser
+  hostname which nc ping lsof netstat conntrack chronyc ipmitool python3
+  firewall-cmd iptables getenforce restorecon semanage podman
+)
 
-if [ -f "${KUBECTL_BIN}" ]; then
-  install -d -m 0755 /usr/local/bin
-  install -m 0755 "${KUBECTL_BIN}" /usr/local/bin/kubectl
-fi
+MISSING_PACKAGES=()
+declare -A PACKAGE_SEEN=()
+for cmd in "${REQUIRED_CMDS[@]}"; do
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    pkg="${COMMAND_TO_PACKAGE[${cmd}]:-}"
+    if [ -z "${pkg}" ]; then
+      echo "[-] No offline package mapping exists for missing command: ${cmd}"
+      exit 1
+    fi
+    if [ -z "${PACKAGE_SEEN[${pkg}]:-}" ]; then
+      MISSING_PACKAGES+=("${pkg}")
+      PACKAGE_SEEN[${pkg}]=1
+    fi
+  fi
+done
 
-# Refresh SELinux labels when SELinux tooling is available.
-if command -v restorecon >/dev/null 2>&1; then
-  restorecon -v /usr/local/bin/kubectl 2>/dev/null || true
+echo "[+] Required commands missing before install: ${#MISSING_PACKAGES[@]}"
+if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
+  printf '    - %s\n' "${MISSING_PACKAGES[@]}"
+  dnf \
+    --disablerepo='*' \
+    --enablerepo="${OFFLINE_REPO_ID}" \
+    --setopt=install_weak_deps=False \
+    --setopt=keepcache=True \
+    -y install "${MISSING_PACKAGES[@]}"
+else
+  echo "[i] All required command-line tools are already present; no OS package upgrades are attempted."
 fi
 
 echo "[+] Verifying required command-line tools..."
