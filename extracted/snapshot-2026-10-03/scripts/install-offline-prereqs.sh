@@ -99,30 +99,30 @@ EOF
 trap 'rm -f "${OFFLINE_REPO_FILE}"' EXIT
 
 declare -A COMMAND_TO_PACKAGE=(
-  [bash]=bash [sh]=bash [tar]=tar [gzip]=gzip [openssl]=openssl [curl]=curl
+  [bash]=bash [sh]=bash [tar]=tar [gzip]=gzip [curl]=curl
   [ip]=iproute [ss]=iproute [ssh]=openssh-clients [awk]=gawk [sed]=sed [grep]=grep
-  [find]=findutils [df]=coreutils [uname]=coreutils [fuser]=psmisc
-  [hostname]=hostname [which]=which [nc]=nmap-ncat [ping]=iputils
-  [lsof]=lsof [netstat]=net-tools [conntrack]=conntrack-tools
-  [chronyc]=chrony [ipmitool]=ipmitool [python3]=python3
-  [firewall-cmd]=firewalld [iptables]=iptables [getenforce]=policycoreutils
-  [restorecon]=policycoreutils [semanage]=policycoreutils-python-utils
-  [podman]=podman
+  [find]=findutils [fuser]=psmisc [hostname]=hostname [nc]=nmap-ncat
+  [ping]=iputils [lsof]=lsof [netstat]=net-tools
 )
 
-REQUIRED_CMDS=(
-  bash sh tar gzip openssl curl ip ss ssh awk sed grep find df uname fuser
-  hostname which nc ping lsof netstat conntrack chronyc ipmitool python3
-  firewall-cmd iptables getenforce restorecon semanage podman
+# Only these packages are required for the Pilot controller/installer itself.
+# They are intentionally kept small so installation never upgrades the host
+# package-manager/SELinux/container stack merely to start the application.
+CORE_CMDS=(
+  bash sh tar gzip curl ip ss ssh awk sed grep find fuser hostname nc ping lsof netstat
+)
+
+OPTIONAL_CMDS=(
+  openssl chronyc ipmitool python3 firewall-cmd iptables getenforce restorecon semanage podman kubectl
 )
 
 MISSING_PACKAGES=()
 declare -A PACKAGE_SEEN=()
-for cmd in "${REQUIRED_CMDS[@]}"; do
+for cmd in "${CORE_CMDS[@]}"; do
   if ! command -v "${cmd}" >/dev/null 2>&1; then
     pkg="${COMMAND_TO_PACKAGE[${cmd}]:-}"
     if [ -z "${pkg}" ]; then
-      echo "[-] No offline package mapping exists for missing command: ${cmd}"
+      echo "[-] No offline package mapping exists for missing core command: ${cmd}"
       exit 1
     fi
     if [ -z "${PACKAGE_SEEN[${pkg}]:-}" ]; then
@@ -132,7 +132,7 @@ for cmd in "${REQUIRED_CMDS[@]}"; do
   fi
 done
 
-echo "[+] Required commands missing before install: ${#MISSING_PACKAGES[@]}"
+echo "[+] Core commands missing before install: ${#MISSING_PACKAGES[@]}"
 if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
   printf '    - %s\n' "${MISSING_PACKAGES[@]}"
   dnf \
@@ -142,37 +142,17 @@ if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
     --setopt=keepcache=True \
     -y install "${MISSING_PACKAGES[@]}"
 else
-  echo "[i] All required command-line tools are already present; no OS package upgrades are attempted."
+  echo "[i] All core controller commands are already present; no OS upgrade is attempted."
 fi
 
-echo "[+] Verifying required command-line tools..."
-
-REQUIRED_CMDS=(
-  bash sh tar gzip openssl curl ip ss ssh
-  awk sed grep find df uname fuser
-  hostname which nc ping lsof netstat conntrack chronyc ipmitool
-  python3
-  firewall-cmd iptables
-  getenforce restorecon semanage
-)
-
-for cmd in "${REQUIRED_CMDS[@]}"; do
-  if ! command -v "${cmd}" >/dev/null 2>&1; then
-    echo "[-] Missing command after offline installation: ${cmd}"
-    exit 1
+echo "[+] Optional capability status:"
+for cmd in "${OPTIONAL_CMDS[@]}"; do
+  if command -v "${cmd}" >/dev/null 2>&1; then
+    echo "    [present] ${cmd}"
+  else
+    echo "    [optional/missing] ${cmd}"
   fi
 done
-
-# The application can use either container engine; this release installs Podman.
-if ! command -v podman >/dev/null 2>&1; then
-  echo "[-] Podman was not installed from the offline media."
-  exit 1
-fi
-
-if ! command -v kubectl >/dev/null 2>&1; then
-  echo "[-] kubectl was not installed from the offline media."
-  exit 1
-fi
 
 echo "[+] Node.js runtime bundled with the application:"
 "${APP_DIR}/node-runtime/bin/node" --version
