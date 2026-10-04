@@ -56,6 +56,11 @@ echo "==> [۴.۵/۶] اعمال مجوزهای امن و اجرایی..."
 find "${TARGET_DIR}" -type d -exec chmod 755 {} +
 find "${TARGET_DIR}" -type f -exec chmod 644 {} +
 chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
+# Preserve execute permission on the bundled private Node.js runtime.
+NODE_BIN="${TARGET_DIR}/node-runtime/bin/node"
+if [ -f "${NODE_BIN}" ]; then
+  chmod 0755 "${NODE_BIN}"
+fi
 
 # Private runtime state and secrets live outside the application tree.
 mkdir -p "${DATA_DIR}"
