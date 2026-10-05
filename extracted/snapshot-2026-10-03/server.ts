@@ -4418,6 +4418,27 @@ disabled = 0
       ...extractTargets(outputsConf),
     ])];
 
+    const discoverEffectiveSplunkTargets = async () => {
+      if (!splunkBin) return [] as string[];
+      const found = new Set<string>();
+      const commands = [
+        'SPLUNK_HOME="' + splunkHome + '" "' + splunkBin + '" btool outputs list tcpout --debug',
+        'SPLUNK_HOME="' + splunkHome + '" "' + splunkBin + '" btool deploymentclient list --debug',
+        'SPLUNK_HOME="' + splunkHome + '" "' + splunkBin + '" btool server list --debug'
+      ];
+      for (const command of commands) {
+        try {
+          const p = await runCommand('bash',['-lc',command],{toolId,toolNameFa:'کشف مقصدهای مؤثر Splunk',toolNameEn:'Effective Splunk target discovery',category:'splunk',timeoutMs:12000});
+          for (const m of String(p.stdout || '').matchAll(/(?:server|target-broker|manager_uri|master_uri|uri)\s*=\s*([^\s,#]+)/gi)) {
+            let value = String(m[1] || '').replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/\/$/,'');
+            value = value.split(',')[0];
+            if (/^[A-Za-z0-9_.:-]+:\d+$/.test(value)) found.add(value);
+          }
+        } catch (_) {}
+      }
+      return [...found].slice(0,16);
+    };
+
     const testLocalTcp = async (port: number, labelFa: string, labelEn: string) => {
       const probe = await testTcpPort('127.0.0.1', port, 1500);
       add(
@@ -4460,6 +4481,7 @@ disabled = 0
       add('safety',fa,en,'warn',reasonFa,reasonEn,command,'','',0);
     };
 
+    const effectiveTargets = [...new Set([...configuredTargets, ...(await discoverEffectiveSplunkTargets())])];
     switch (toolId) {
       case 'bento_overview': {
         const ip = await run('ip',['-brief','addr'],'شبکه واقعی Bento','Bento real network');
@@ -4492,12 +4514,12 @@ disabled = 0
             'ssh -o BatchMode=yes -o ConnectTimeout=2 localhost true',live?.stdout||'',live?.stderr||'',live?.code
           );
         }
-        if (configuredTargets.length === 0) {
+        if (effectiveTargets.length === 0) {
           addPartial('نود هدف پیکربندی‌شده','Configured remote target',
             'هیچ مقصد مدیریتی واقعی از کانفیگ Splunk استخراج نشد؛ تست remote روی مقصد واقعی انجام نشده است.',
             'No real management target was found in Splunk configuration; a real remote-node test was not performed.');
         } else {
-          const target = configuredTargets[0];
+          const target = effectiveTargets[0];
           const host = target.replace(/:\\d+$/,'');
           const port = Number((target.match(/:(\\d+)$/)||[])[1] || 22);
           const probe = await testTcpPort(host, port, 1800);
@@ -4554,7 +4576,7 @@ disabled = 0
             'هیچ node واقعی از کانفیگ استخراج نشد؛ فقط link telemetry محلی تست شد.',
             'No real cluster node was found in configuration; only local link telemetry was tested.');
         } else {
-          for(const target of configuredTargets.slice(0,4)){
+          for(const target of effectiveTargets.slice(0,4)){
             const host=target.replace(/:\\d+$/,'');
             const port=Number((target.match(/:(\\d+)$/)||[])[1]||8089);
             const p=await testTcpPort(host,port,1800);
