@@ -4679,12 +4679,35 @@ disabled = 0
         const f=await run('free',['-m'],'Memory health واقعی','Real memory health');
         const up=await run('uptime',[],'Uptime واقعی','Real uptime');
         const healthOk=Boolean(s&&d&&f&&up&&[s,d,f,up].every((x:any)=>x.code===0));
+        const splunkLogPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
+        const splunkLogTail = fs.existsSync(splunkLogPath) ? readFileTailBounded(splunkLogPath, 512 * 1024) : '';
+        const refusedCount = (splunkLogTail.match(/Connection refused/gi) || []).length;
+        const timeoutCount = (splunkLogTail.match(/timed out|timeout/gi) || []).length;
+        const malformedCount = (splunkLogTail.match(/Missing or malformed messages\.conf stanza/gi) || []).length;
+        const splunkErrorCount = (splunkLogTail.match(/\bERROR\b/g) || []).length;
+        const logIssueTotal = refusedCount + timeoutCount + malformedCount;
+
         add('functional','Health telemetry واقعی','Real health telemetry',healthOk?'pass':'warn',
           healthOk?'socket/disk/memory/uptime telemetry خوانده شد.':'یکی از signalهای اصلی سلامت جمع‌آوری نشد.',
           healthOk?'Socket/disk/memory/uptime telemetry was collected.':'One or more core health signals could not be collected.',
           'ss -H -s; df -P /; free -m; uptime',
           [s,d,f,up].map((x:any)=>String(x?.stdout||'')).filter(Boolean).join('\n').slice(0,7000),
           [s,d,f,up].map((x:any)=>String(x?.stderr||'')).filter(Boolean).join('\n').slice(0,3000),healthOk?0:1);
+        if (splunkLogTail) {
+          const logStatus = logIssueTotal === 0 ? 'pass' : 'warn';
+          add('functional','خطاهای واقعی Splunk در لاگ','Real Splunk runtime log findings',logStatus,
+            logIssueTotal === 0
+              ? 'در tail لاگ واقعی Splunk الگوی Connection refused/timeout/malformed messages.conf پیدا نشد.'
+              : 'در لاگ واقعی Splunk خطاهای شبکه/forwarding یا messages.conf مشاهده شد؛ نیاز به بررسی topology و config وجود دارد.',
+            logIssueTotal === 0
+              ? 'No connection-refused/timeout/malformed-messages patterns were found in the real Splunk log tail.'
+              : 'Real Splunk logs contain network/forwarding or messages.conf failures; topology/config review is required.',
+            'tail -n 5000 "'+splunkLogPath+'"',
+            ('Connection refused='+refusedCount+'\nTimeout='+timeoutCount+'\nMalformed messages.conf='+malformedCount+'\nERROR='+splunkErrorCount),
+            '',
+            logIssueTotal === 0 ? 0 : 1
+          );
+        }
         break;
       }
       case 'live_logs': {
@@ -5190,6 +5213,98 @@ disabled = 0
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+
+  // API: Real notification-channel test. Never fabricate delivery success.
+  app.post('/api/alerts/test-dispatch', async (req, res) => {
+    const started = Date.now();
+    try {
+      const type = String(req.body?.type || 'WEBHOOK').toUpperCase();
+      const endpoint = String(req.body?.endpoint || '').trim();
+      const secret = String(req.body?.secret || '').trim();
+      const name = String(req.body?.name || 'Pilot Alert Test').trim().slice(0, 120);
+      if (!endpoint) return res.status(400).json({ success:false, status:'NOT_CONFIGURED', error:'Notification endpoint/target is required.' });
+
+      if (type === 'WEBHOOK' || type === 'TEAMS_SLACK') {
+        if (!/^https?:\/\/\S+$/i.test(endpoint)) {
+          return res.status(400).json({ success:false, status:'NOT_CONFIGURED', error:'Webhook endpoint must be an http(s) URL.' });
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+          const headers: Record<string,string> = { 'Content-Type':'application/json', 'Accept':'application/json' };
+          if (secret) headers.Authorization = 'Bearer ' + secret;
+          const response = await fetch(endpoint, {
+            method:'POST',
+            headers,
+            body:JSON.stringify({
+              source:'Splunk Cluster Doctor',
+              type:'TEST',
+              severity:'INFO',
+              message:'REAL notification channel test — no synthetic delivery result.',
+              timestamp:new Date().toISOString(),
+              channel:name
+            }),
+            signal:controller.signal
+          });
+          const body = await response.text().catch(()=> '');
+          const ok = response.ok;
+          return res.status(ok ? 200 : 502).json({
+            success:ok,
+            status: ok ? 'DELIVERED_SUCCESS' : 'DELIVERY_FAILED',
+            httpStatus:response.status,
+            latencyMs:Date.now()-started,
+            response:body.slice(0,2000),
+            checkedAt:new Date().toISOString()
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      if (type === 'EMAIL') {
+        const m = endpoint.match(/(?:^|\\b)([A-Za-z0-9.-]+)(?::(\\d{1,5}))?\\b/);
+        const provider = String(req.body?.providerDetails || '');
+        const pm = provider.match(/([A-Za-z0-9.-]+):(\\d{1,5})/);
+        const host = pm?.[1] || m?.[1] || '';
+        const port = Number(pm?.[2] || 587);
+        if (!host) return res.status(400).json({ success:false,status:'NOT_CONFIGURED',error:'SMTP relay host is not configured.' });
+        const probe = await testTcpPort(host,port,5000);
+        return res.status(probe.open?200:502).json({
+          success:probe.open,
+          status:probe.open?'TRANSPORT_REACHABLE':'DELIVERY_FAILED',
+          transport:'SMTP',
+          host,port,
+          latencyMs:probe.latencyMs,
+          message:probe.open?'SMTP relay TCP transport is reachable. Message delivery was not attempted without SMTP credentials.':(probe.error||'SMTP relay unavailable.'),
+          checkedAt:new Date().toISOString()
+        });
+      }
+
+      if (type === 'SMS') {
+        if (/^https?:\\/\\//i.test(endpoint)) {
+          const response = await fetch(endpoint,{
+            method:'POST',
+            headers:{'Content-Type':'application/json',...(secret?{Authorization:'Bearer '+secret}:{})},
+            body:JSON.stringify({source:'Splunk Cluster Doctor',type:'TEST',severity:'INFO',message:'REAL SMS provider test',to:null,timestamp:new Date().toISOString()})
+          });
+          const body=await response.text().catch(()=> '');
+          return res.status(response.ok?200:502).json({
+            success:response.ok,status:response.ok?'DELIVERED_SUCCESS':'DELIVERY_FAILED',httpStatus:response.status,
+            latencyMs:Date.now()-started,response:body.slice(0,2000),checkedAt:new Date().toISOString()
+          });
+        }
+        return res.status(400).json({
+          success:false,status:'NOT_CONFIGURED',
+          error:'SMS target is a phone-number list, but no SMS provider HTTP endpoint is configured; no fake delivery is reported.'
+        });
+      }
+
+      return res.status(400).json({ success:false,status:'NOT_CONFIGURED',error:'Unsupported notification channel type.' });
+    } catch (e:any) {
+      return res.status(502).json({ success:false,status:'DELIVERY_FAILED',error:e?.name==='AbortError'?'Notification request timed out.':(e?.message||String(e)),latencyMs:Date.now()-started });
     }
   });
 
