@@ -4498,11 +4498,24 @@ disabled = 0
         const files = String(listing.stdout || '').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,160);
         for (const file of files) { try { collectTargetsFromText(readFileTailBounded(file,256*1024),found); } catch (_) {} }
       } catch (_) {}
+      // Runtime logs are only a fallback source. Ignore stale entries outside
+      // the current health window so a historical outage cannot become the
+      // current management-node target.
       try {
         const logPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
         if (fs.existsSync(logPath)) {
           const tail = readFileTailBounded(logPath, 2 * 1024 * 1024);
+          const nowMs = Date.now();
+          const recentWindowMs = 30 * 60 * 1000;
+          const parseSplunkLogTimestamp = (line: string) => {
+            const m = String(line || '').match(/^(\d{2}-\d{2}-\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+            if (!m) return 0;
+            const ts = Date.parse(m[1] + ' ' + m[2]);
+            return Number.isFinite(ts) ? ts : 0;
+          };
           for (const line of tail.split('\n')) {
+            const ts = parseSplunkLogTimestamp(line);
+            if (!ts || nowMs - ts < 0 || nowMs - ts > recentWindowMs) continue;
             for (const marker of ['server=','uri_host_port="https://']) {
               const pos = line.indexOf(marker);
               if (pos < 0) continue;
@@ -4714,7 +4727,11 @@ disabled = 0
           );
           const noSpecOnly = btoolLines.length > 0 &&
             btoolLines.every((line:string)=>/^Checking:/i.test(line) || /^No spec file for:/i.test(line));
-          const onlyNoSpec = b.code !== 0 && noSpecOnly && !hasExplicitBtoolError && !meaningfulStderr;
+          const onlyNoSpec = b.code !== 0
+            && btoolLines.some((line:string)=>/^No spec file for:/i.test(line))
+            && noSpecOnly
+            && !hasExplicitBtoolError
+            && !meaningfulStderr;
           const btoolStatus = (b.code===0 || onlyNoSpec) ? 'pass' : 'warn';
           const btoolFa = b.code===0
             ? 'btool check بدون خطای syntax/config پایان یافت.'
@@ -4911,6 +4928,7 @@ disabled = 0
               && !/^No spec file for:/i.test(line)
             );
             const btoolOnlyNoSpec = normalizedBtoolLines.length > 0
+              && normalizedBtoolLines.some((line:string)=>/^No spec file for:/i.test(line))
               && normalizedBtoolLines.every((line:string)=>/^Checking:/i.test(line) || /^No spec file for:/i.test(line))
               && btoolActualErrors.length === 0
               && normalizedStderrLines.length === 0;
