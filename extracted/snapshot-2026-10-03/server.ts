@@ -4456,7 +4456,7 @@ disabled = 0
         'sh01.corp.net:8000','ds01.corp.net:8089','10.20.30.45:8089','10.20.30.50:8089',
         '10.20.30.51:8089','10.20.30.40:8000','10.20.30.60:8089',
         'self:8089','self:22','localhost:8089'
-      ].has(v));
+      ]).includes(v));
     };
     const extractTargets = (text: string) => {
       const candidates = new Set<string>();
@@ -4888,7 +4888,7 @@ disabled = 0
             );
             const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 &&
               btoolActualErrors.length === 0 && !normalizedStderr;
-            if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
+            if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(btoolStdout + '\n' + normalizedStderr);
           }
         }
         addPartial('ویرایش واقعی config','Real config edit',
