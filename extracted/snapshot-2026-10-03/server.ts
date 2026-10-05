@@ -4634,20 +4634,28 @@ disabled = 0
           sshProbe.open?`SSH transport ${host}:${sshPort} is reachable; latency=${sshProbe.latencyMs}ms.`:`SSH transport ${host}:${sshPort} is not reachable: ${sshProbe.error||'timeout'}`,
           `TCP ${host}:${sshPort}`,sshProbe.open?String(sshProbe.latencyMs)+'ms':'',sshProbe.error||'',sshProbe.open?0:1
         );
-        const auth = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],`احراز هویت SSH واقعی ${host}`,`Real SSH authentication ${host}`,9000);
-        if (auth?.code===0) {
-          add('functional','احراز هویت SSH واقعی','Real SSH authentication',
-            'pass',
-            `احراز هویت non-interactive روی ${host} موفق شد.`,
-            `Non-interactive SSH authentication to ${host} succeeded.`,
-            `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`,auth?.stdout||'',auth?.stderr||'',auth?.code
+        if (!sshProbe.open) {
+          addPartial('Credential SSH ریموت','Remote SSH credentials',
+            `به دلیل عدم دسترسی پورت SSH روی ${host}:${sshPort}، احراز هویت non-interactive قابل آزمایش نبود؛ این محدودیت پوشش diagnostic است، نه نتیجه درباره credential.`,
+            `Because SSH transport on ${host}:${sshPort} is unreachable, non-interactive authentication could not be tested; this is a diagnostic coverage limitation, not a credential verdict.`,
+            `TCP ${host}:${sshPort}`
           );
         } else {
-          addPartial('Credential SSH ریموت','Remote SSH credentials',
-            `اتصال شبکه‌ای مقصد بررسی شد، اما احراز هویت غیرتعاملی روی ${host} بدون credential معتبر انجام نشد؛ این محدودیت پوشش diagnostic است، نه failure خود ابزار.`,
-            `Network reachability was tested, but non-interactive SSH authentication to ${host} could not be proven without valid credentials; this is a diagnostic coverage limitation, not a tool failure.`,
-            `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`
-          );
+          const auth = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],`احراز هویت SSH واقعی ${host}`,`Real SSH authentication ${host}`,9000);
+          if (auth?.code===0) {
+            add('functional','احراز هویت SSH واقعی','Real SSH authentication',
+              'pass',
+              `احراز هویت non-interactive روی ${host} موفق شد.`,
+              `Non-interactive SSH authentication to ${host} succeeded.`,
+              `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`,auth?.stdout||'',auth?.stderr||'',auth?.code
+            );
+          } else {
+            addPartial('Credential SSH ریموت','Remote SSH credentials',
+              `اتصال SSH به ${host} برقرار بود اما احراز هویت non-interactive اثبات نشد؛ این محدودیت پوشش diagnostic است، نه failure خود ابزار.`,
+              `SSH transport to ${host} was reachable, but non-interactive authentication could not be proven; this is a diagnostic coverage limitation, not a tool failure.`,
+              `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`
+            );
+          }
         }
         if (toolId === 'remote_gateway') {
           const mgmt = await testTcpPort(host,managementPort,1800);
