@@ -4483,6 +4483,22 @@ disabled = 0
         const files = String(listing.stdout || '').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,160);
         for (const file of files) { try { collectTargetsFromText(readFileTailBounded(file,256*1024),found); } catch (_) {} }
       } catch (_) {}
+      // Runtime fallback: prefer destinations actually observed by Splunk when
+      // static config discovery is incomplete.
+      try {
+        const logPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
+        if (fs.existsSync(logPath)) {
+          const tail = readFileTailBounded(logPath, 2 * 1024 * 1024);
+          for (const m of tail.matchAll(/(?:server=|uri_host_port="https?:\\/\\/)([A-Za-z0-9_.:-]+:\\d+)/g)) {
+            const value = String(m[1] || '').trim();
+            if (/^[A-Za-z0-9_.-]+:\\d+$/.test(value) && !isPlaceholderTarget(value)) found.add(value);
+          }
+          for (const m of tail.matchAll(/ip=([A-Za-z0-9_.-]+):(\\d+)/g)) {
+            const value = m[1] + ':' + m[2];
+            if (!isPlaceholderTarget(value)) found.add(value);
+          }
+        }
+      } catch (_) {}
       return [...found].slice(0,16);
     };
 
