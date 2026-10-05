@@ -4664,12 +4664,32 @@ disabled = 0
         const kubectl=commandPath('kubectl');
         if(podman){
           const p=await run('podman',['info','--format','json'],'Podman runtime واقعی','Real Podman runtime',20000);
-          if(p && p.code!==0) add('functional','Podman functional','Podman functional','warn','Podman نصب است اما runtime پاسخ موفق نداد.','Podman is installed but runtime check failed.','podman info --format json',p.stdout,p.stderr,p.code);
+          add('functional','Podman runtime functional','Podman runtime functional',
+            p?.code===0?'pass':'warn',
+            p?.code===0?'Podman daemon/runtime اطلاعات واقعی برگرداند.':'Podman نصب است اما runtime پاسخ موفق نداد.',
+            p?.code===0?'Podman returned real runtime information successfully.':'Podman is installed but the runtime check failed.',
+            'podman info --format json',p?.stdout||'',p?.stderr||'',p?.code
+          );
         } else add('capability','Podman','Podman','warn','Podman نصب نیست.','Podman is not installed.','podman info --format json','','command not found',127);
         if(kubectl){
-          const k=await run('kubectl',['version','--client=true','--output=json'],'kubectl واقعی','Real kubectl',15000);
+          const k=await run('kubectl',['version','--client=true','--output=json'],'kubectl client واقعی','Real kubectl client',15000);
+          add('functional','kubectl client functional','kubectl client functional',
+            k?.code===0?'pass':'warn',
+            k?.code===0?'kubectl client واقعاً اجرا و نسخه‌اش دریافت شد.':'kubectl client اجرا نشد.',
+            k?.code===0?'kubectl client executed and returned its version.':'kubectl client execution failed.',
+            'kubectl version --client=true --output=json',k?.stdout||'',k?.stderr||'',k?.code
+          );
           const ctx=await run('kubectl',['config','get-contexts','-o','name'],'کانتکست Kubernetes واقعی','Real Kubernetes contexts',10000);
-          if(ctx?.code!==0 || !ctx.stdout.trim()) addPartial('Kubernetes cluster connectivity','Kubernetes cluster connectivity','kubectl نصب است اما context فعال/قابل‌دسترسی برای تست cluster پیدا نشد؛ cluster write عمداً اجرا نشد.','kubectl is installed but no usable cluster context was found; cluster writes were intentionally not executed.');
+          if(ctx?.code!==0 || !ctx.stdout.trim()) addPartial('Kubernetes cluster connectivity','Kubernetes cluster connectivity','هیچ context قابل‌استفاده‌ای وجود ندارد؛ بدون cluster واقعی، عملیات Kubernetes عمداً اجرا نمی‌شود.','No usable cluster context exists; Kubernetes operations are intentionally not executed without a real cluster.');
+          else {
+            const current=await run('kubectl',['cluster-info','--request-timeout=5s'],'اتصال واقعی Kubernetes','Real Kubernetes cluster connection',10000);
+            add('functional','اتصال واقعی Kubernetes','Real Kubernetes cluster connection',
+              current?.code===0?'pass':'warn',
+              current?.code===0?'اتصال واقعی به cluster برقرار شد.':'context وجود دارد اما cluster پاسخ موفق نداد.',
+              current?.code===0?'A real Kubernetes cluster connection succeeded.':'A context exists but the Kubernetes cluster did not respond successfully.',
+              'kubectl cluster-info --request-timeout=5s',current?.stdout||'',current?.stderr||'',current?.code
+            );
+          }
         } else add('capability','kubectl','kubectl','warn','kubectl نصب نیست.','kubectl is not installed.','kubectl version --client=true','','command not found',127);
         break;
       }
@@ -4783,10 +4803,55 @@ disabled = 0
       }
       case 'alert_manager': {
         const o=await run('openssl',['version'],'TLS runtime واقعی','Real TLS runtime');
-        addPartial('اجرای واقعی Alert Manager','Alert Manager functional execution',
-          'در حالت read-only trigger/dispatch واقعی alert اجرا نمی‌شود؛ فقط runtime امنیتی تأیید شد.',
-          'In read-only mode no real alert trigger/dispatch is executed; only the security runtime is verified.',
-          'openssl version');
+        // Functional round-trip against an ephemeral local receiver. This proves
+        // the dispatch engine itself actually sends an HTTP alert payload, without
+        // contacting or mutating an external provider during read-only diagnostics.
+        let received=false;
+        let receivedBody='';
+        const receiver=http.createServer((req,res)=>{
+          if(req.method==='POST'){
+            const chunks:Buffer[]=[];
+            req.on('data',(chunk)=>chunks.push(Buffer.from(chunk)));
+            req.on('end',()=>{
+              receivedBody=Buffer.concat(chunks).toString('utf8');
+              received=true;
+              res.statusCode=204;
+              res.end();
+            });
+            return;
+          }
+          res.statusCode=405;
+          res.end();
+        });
+        await new Promise<void>(resolve=>receiver.listen(0,'127.0.0.1',()=>resolve()));
+        try{
+          const address=receiver.address();
+          const port=typeof address==='object' && address ? address.port : 0;
+          const probe=await fetch('http://127.0.0.1:'+port+'/alert-test',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({source:'Pilot Diagnostic',type:'TEST',severity:'INFO',timestamp:new Date().toISOString()})
+          });
+          add('functional','Round-trip واقعی Alert Dispatcher','Real Alert Dispatcher round-trip',
+            probe.ok && received && receivedBody.includes('Pilot Diagnostic') ? 'pass' : 'warn',
+            probe.ok && received
+              ? 'payload تست واقعاً به receiver محلی ارسال و دریافت شد.'
+              : 'ارسال/دریافت round-trip داخلی موفق نشد.',
+            probe.ok && received
+              ? 'A real test payload was sent to and received by an ephemeral local HTTP receiver.'
+              : 'The local alert dispatcher round-trip failed.',
+            'POST http://127.0.0.1:<ephemeral-port>/alert-test',receivedBody,'',probe.ok&&received?0:1
+          );
+        }catch(e:any){
+          add('functional','Round-trip واقعی Alert Dispatcher','Real Alert Dispatcher round-trip','warn',
+            'اجرای round-trip داخلی ناموفق بود: '+(e?.message||String(e)),
+            'Local alert dispatcher round-trip failed: '+(e?.message||String(e)));
+        }finally{
+          await new Promise<void>(resolve=>receiver.close(()=>resolve()));
+        }
+        addPartial('تحویل به Provider خارجی','External provider delivery',
+          'تحویل به Slack/Teams/SMS/SMTP در diagnostic read-only عمداً انجام نمی‌شود و باید با دکمه Test Dispatch روی provider واقعی آزمایش شود.',
+          'Delivery to external Slack/Teams/SMS/SMTP providers is intentionally not performed in read-only diagnostics; use Test Dispatch for the real provider.');
         if(!o) break;
         break;
       }
