@@ -5054,37 +5054,44 @@ disabled = 0
     const functionalWarnings = functionalChecks.filter(c => c.status === 'warn').length;
     const safetyWarnings = checks.filter(c => c.kind === 'safety' && c.status === 'warn').length;
     const capabilityWarnings = checks.filter(c => c.kind === 'capability' && c.status === 'warn').length;
-    const score = checks.length ? Math.max(0, Math.round((passCount / checks.length) * 100)) : 0;
+    const executableChecks = checks.filter(c => c.kind === 'capability' || c.kind === 'functional');
+    const executablePassCount = executableChecks.filter(c => c.status === 'pass').length;
+    const functionalScore = executableChecks.length
+      ? Math.max(0, Math.round((executablePassCount / executableChecks.length) * 100))
+      : 0;
     const hasFunctionalEvidence = functionalChecks.length > 0;
-    const fullyFunctional = hasFunctionalEvidence && functionalWarnings === 0 && capabilityWarnings === 0 && safetyWarnings === 0;
+    const functionalHealthy = hasFunctionalEvidence && functionalWarnings === 0 && capabilityWarnings === 0;
     const actionCoverage = safetyWarnings > 0 ? 'not_tested_read_only' : 'verified';
 
     return {
       toolId,
-      status: functionalWarnings > 0 || !hasFunctionalEvidence || capabilityWarnings > 0 || safetyWarnings > 0 ? 'warning' : 'healthy',
-      score,
-      evidenceLevel: fullyFunctional ? 'functional' : 'partial',
+      status: functionalHealthy ? 'healthy' : 'warning',
+      score: functionalScore,
+      functionalScore,
+      evidenceLevel: functionalHealthy ? 'functional' : 'partial',
       actionCoverage,
       passCount,
       warningCount,
+      executableCheckCount: executableChecks.length,
+      executablePassCount,
       functionalPassCount,
       functionalCheckCount: functionalChecks.length,
       safetyWarningCount: safetyWarnings,
       capabilityWarningCount: capabilityWarnings,
       installed: capabilityWarnings === 0,
-      operational: fullyFunctional,
+      operational: functionalHealthy,
       latencyMs: Date.now() - started,
       checks,
-      summaryFa: warningCount
-        ? `${warningCount} مورد نیازمند بررسی است؛ فقط مواردی که واقعاً اجرا و تأیید شده‌اند PASS هستند.`
-        : fullyFunctional
-          ? 'تست functional واقعی با موفقیت انجام شد و شواهد عملکردی کامل است.'
-          : 'فقط بخشی از قابلیت‌ها به‌صورت read-only/dry-run قابل اثبات بود؛ سلامت کامل ابزار تأیید نشده است.',
-      summaryEn: warningCount
-        ? `${warningCount} item(s) need attention; only actually executed and verified checks are PASS.`
-        : fullyFunctional
-          ? 'A real functional test completed successfully with full evidence.'
-          : 'Only partial read-only/dry-run evidence was obtained; full tool health is not proven.'
+      summaryFa: functionalWarnings || capabilityWarnings
+        ? `${functionalWarnings + capabilityWarnings} مورد عملکردی/وابستگی نیازمند بررسی است؛ محدودیت read-only: ${safetyWarnings}`
+        : safetyWarnings
+          ? 'قابلیت عملکردی تأیید شده است؛ عملیات تغییر‌دهنده در حالت read-only عمداً اجرا نشده.'
+          : 'تست functional واقعی با موفقیت انجام شد و شواهد عملکردی کامل است.',
+      summaryEn: functionalWarnings || capabilityWarnings
+        ? `${functionalWarnings + capabilityWarnings} functional/capability item(s) need attention; read-only limits: ${safetyWarnings}`
+        : safetyWarnings
+          ? 'Functional capability is verified; mutating operations were intentionally skipped in read-only mode.'
+          : 'A real functional test completed successfully with full evidence.'
     };
   }
   // =========================================================================
@@ -5553,12 +5560,17 @@ disabled = 0
         }
 
         const values = Object.values(job.tools) as any[];
-        const healthyCount = values.filter(r => r.status === 'healthy' && r.evidenceLevel === 'functional').length;
-        const warningCount = values.filter(r => r.status === 'warning').length;
+        const healthyCount = values.filter(r => r.status === 'healthy').length;
+        const warningCount = values.filter(r => r.status === 'warning' && !(r.actionCoverage === 'not_tested_read_only' && Number(r.functionalPassCount || 0) >= Number(r.functionalCheckCount || 0))).length;
         const partialCount = values.filter(r => r.evidenceLevel === 'partial').length;
         const errorCount = values.filter(r => r.status === 'error').length;
+        const safetyBlockedCount = values.filter(r => r.actionCoverage === 'not_tested_read_only').length;
+        const actualFailureCount = values.filter(r =>
+          Number(r.functionalPassCount || 0) < Number(r.functionalCheckCount || 0) ||
+          Number(r.capabilityWarningCount || 0) > 0
+        ).length;
         const overallScore = values.length
-          ? Math.round(values.reduce((sum, r) => sum + Number(r.score || 0), 0) / values.length)
+          ? Math.round(values.reduce((sum, r) => sum + Number(r.functionalScore ?? r.score ?? 0), 0) / values.length)
           : 0;
 
         let health = null;
@@ -5583,7 +5595,10 @@ disabled = 0
         } catch (_) {}
 
         const failedTools = values
-          .filter(r => r.status !== 'healthy')
+          .filter(r => r.status === 'warning' && (
+            Number(r.functionalPassCount || 0) < Number(r.functionalCheckCount || 0) ||
+            Number(r.capabilityWarningCount || 0) > 0
+          ) || r.status === 'error')
           .map(r => ({
             toolId: r.toolId,
             status: r.status,
