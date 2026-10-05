@@ -4441,7 +4441,7 @@ disabled = 0
       for (const m of text.matchAll(/(?:manager_uri|master_uri|target-broker|server|uri)\s*=\s*([^\s,#]+)/gi)) {
         let value = String(m[1] || '').replace(/^https?:\/\//, '').replace(/^tcp:\/\//, '');
         value = value.split(',')[0].trim().replace(/\/$/, '');
-        if (/^[A-Za-z0-9_.:-]+:\\d+$/.test(value)) candidates.add(value);
+        if (/^[A-Za-z0-9_.:-]+:\d+$/.test(value)) candidates.add(value);
       }
       return [...candidates].slice(0, 16);
     };
@@ -5390,9 +5390,9 @@ disabled = 0
       }
 
       if (type === 'EMAIL') {
-        const m = endpoint.match(/(?:^|\\b)([A-Za-z0-9.-]+)(?::(\\d{1,5}))?\\b/);
+        const m = endpoint.match(/(?:^|\b)([A-Za-z0-9.-]+)(?::(\d{1,5}))?\b/);
         const provider = String(req.body?.providerDetails || '');
-        const pm = provider.match(/([A-Za-z0-9.-]+):(\\d{1,5})/);
+        const pm = provider.match(/([A-Za-z0-9.-]+):(\d{1,5})/);
         const host = pm?.[1] || m?.[1] || '';
         const port = Number(pm?.[2] || 587);
         if (!host) return res.status(400).json({ success:false,status:'NOT_CONFIGURED',error:'SMTP relay host is not configured.' });
@@ -5409,7 +5409,7 @@ disabled = 0
       }
 
       if (type === 'SMS') {
-        if (/^https?:\\/\\//i.test(endpoint)) {
+        if (/^https?:\/\//i.test(endpoint)) {
           const response = await fetch(endpoint,{
             method:'POST',
             headers:{'Content-Type':'application/json',...(secret?{Authorization:'Bearer '+secret}:{})},
