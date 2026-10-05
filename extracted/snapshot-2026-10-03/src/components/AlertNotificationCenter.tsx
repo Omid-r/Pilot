@@ -61,30 +61,52 @@ export const AlertNotificationCenter: React.FC<AlertNotificationCenterProps> = (
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
   };
 
-  const handleTestDispatch = (channel: AlertNotificationChannel) => {
+  const handleTestDispatch = async (channel: AlertNotificationChannel) => {
     setTestingChannelId(channel.id);
     setTestStatusMessage(null);
 
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/alerts/test-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          type: channel.type,
+          name: channel.name,
+          endpoint: channel.endpointOrTarget,
+          secret: channel.authSecretOrToken || '',
+          providerDetails: channel.providerDetails || ''
+        })
+      });
+      const data = await res.json().catch(() => ({}));
       const now = new Date().toTimeString().split(' ')[0];
+      const ok = Boolean(data.success);
+
       const newLog: DispatchedAlertLog = {
-        id: `disp-${Date.now()}`,
+        id: \`disp-\${Date.now()}\`,
         timestamp: now,
-        ruleTitle: isFa ? `تست آنی کانال ${channel.name}` : `Test Dispatch for ${channel.name}`,
+        ruleTitle: isFa ? \`تست کانال \${channel.name}\` : \`Channel Test — \${channel.name}\`,
         channelType: channel.type === 'TEAMS_SLACK' ? 'WEBHOOK' : channel.type as any,
         targetRecipient: channel.endpointOrTarget,
         severity: 'INFO',
-        messagePreview: `[TEST LIVE DISPATCH] ${channel.name} verified successfully via Splunk Cluster Doctor Gateway.`,
-        deliveryStatus: 'DELIVERED_SUCCESS',
-        latencyMs: Math.floor(Math.random() * 200) + 80
+        messagePreview: ok
+          ? String(data.message || data.response || (data.status === 'TRANSPORT_REACHABLE' ? 'Transport reachable; delivery not attempted.' : 'Real dispatch completed.')).slice(0, 240)
+          : String(data.error || 'Real notification test failed.').slice(0, 240),
+        deliveryStatus: ok ? 'DELIVERED_SUCCESS' : 'FAILED',
+        latencyMs: Number(data.latencyMs || 0)
       };
 
       setLogs(prev => [newLog, ...prev]);
+      setTestStatusMessage(
+        ok
+          ? (isFa ? \`تست واقعی کانال \${channel.name} موفق بود. وضعیت: \${data.status}\` : \`Real channel test succeeded: \${data.status}\`)
+          : (isFa ? \`تست واقعی کانال ناموفق بود: \${data.error || 'خطای ناشناخته'}\` : \`Real channel test failed: \${data.error || 'Unknown error'}\`)
+      );
+    } catch (e: any) {
+      setTestStatusMessage(isFa ? \`اجرای تست واقعی ناموفق بود: \${e?.message || e}\` : \`Real test failed: \${e?.message || e}\`);
+    } finally {
       setTestingChannelId(null);
-      setTestStatusMessage(isFa ? `پیام تست با موفقیت به ${channel.name} ارسال و تحویل شد!` : `Test dispatched successfully to ${channel.name}!`);
-
-      setTimeout(() => setTestStatusMessage(null), 4000);
-    }, 800);
+    }
   };
 
   const handleCreateChannel = (e: React.FormEvent) => {
