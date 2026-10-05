@@ -4766,31 +4766,42 @@ disabled = 0
       }
     }
 
-    const warns = checks.filter(c => c.status === 'warn').length;
-    const functionalWarnings = checks.filter(c => c.kind === 'functional' && c.status === 'warn').length;
+    const passCount = checks.filter(c => c.status === 'pass').length;
+    const warningCount = checks.filter(c => c.status === 'warn').length;
+    const functionalChecks = checks.filter(c => c.kind === 'functional');
+    const functionalPassCount = functionalChecks.filter(c => c.status === 'pass').length;
+    const functionalWarnings = functionalChecks.filter(c => c.status === 'warn').length;
     const safetyWarnings = checks.filter(c => c.kind === 'safety' && c.status === 'warn').length;
-    const score = checks.length ? Math.max(0, Math.round((checks.filter(c => c.status === 'pass').length / checks.length) * 100)) : 0;
-    const fullyFunctional = functionalWarnings === 0 && safetyWarnings === 0 && checks.some(c => c.kind === 'functional');
+    const capabilityWarnings = checks.filter(c => c.kind === 'capability' && c.status === 'warn').length;
+    const score = checks.length ? Math.max(0, Math.round((passCount / checks.length) * 100)) : 0;
+    const hasFunctionalEvidence = functionalChecks.length > 0;
+    const fullyFunctional = hasFunctionalEvidence && functionalWarnings === 0 && safetyWarnings === 0 && capabilityWarnings === 0;
 
     return {
       toolId,
-      status: warns ? 'warning' : 'healthy',
+      status: fullyFunctional ? 'healthy' : 'warning',
       score,
       evidenceLevel: fullyFunctional ? 'functional' : 'partial',
-      installed: !checks.some(c => c.kind === 'capability' && c.status === 'warn'),
-      operational: warns === 0 && fullyFunctional,
+      passCount,
+      warningCount,
+      functionalPassCount,
+      functionalCheckCount: functionalChecks.length,
+      safetyWarningCount: safetyWarnings,
+      capabilityWarningCount: capabilityWarnings,
+      installed: capabilityWarnings === 0,
+      operational: fullyFunctional,
       latencyMs: Date.now() - started,
       checks,
       summaryFa: warns
         ? `${warns} مورد نیازمند بررسی است؛ فقط مواردی که واقعاً اجرا و تأیید شده‌اند PASS هستند.`
         : fullyFunctional
-          ? 'تست functional واقعی با موفقیت انجام شد.'
-          : 'قابلیت‌های محلی تأیید شدند، اما تست functional کامل این ابزار در گزارش read-only ممکن نیست.',
+          ? 'تست functional واقعی با موفقیت انجام شد و شواهد عملکردی کامل است.'
+          : 'فقط بخشی از قابلیت‌ها به‌صورت read-only/dry-run قابل اثبات بود؛ سلامت کامل ابزار تأیید نشده است.',
       summaryEn: warns
         ? `${warns} item(s) need attention; only actually executed and verified checks are PASS.`
         : fullyFunctional
-          ? 'Real functional test completed successfully.'
-          : 'Local capabilities are verified, but a full functional test is not possible in the read-only diagnostic.'
+          ? 'A real functional test completed successfully with full evidence.'
+          : 'Only partial read-only/dry-run evidence was obtained; full tool health is not proven.'
     };
   }
   // =========================================================================
