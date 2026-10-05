@@ -4600,12 +4600,25 @@ disabled = 0
         await splunkVersion();
         if (splunkBin) {
           const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
-          add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',b.code===0?'pass':'warn',
-            b.code===0?'btool check بدون خطای syntax/config پایان یافت.':`btool check خطا داد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
-            b.code===0?'btool check completed without config errors.':`btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
-            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
+          const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
+          const btoolLines = combinedBtool.split('\n').map((x:string)=>x.trim()).filter(Boolean);
+          const onlyNoSpec = b.code !== 0 && btoolLines.length > 0 &&
+            btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
+          const btoolStatus = (b.code===0 || onlyNoSpec) ? 'pass' : 'warn';
+          const btoolFa = b.code===0
+            ? 'btool check بدون خطای syntax/config پایان یافت.'
+            : onlyNoSpec
+              ? 'btool فقط برای custom confهای بدون spec file هشدار داد؛ خطای syntax/config واقعی مشاهده نشد.'
+              : \`btool check خطا داد: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`;
+          const btoolEn = b.code===0
+            ? 'btool check completed without config errors.'
+            : onlyNoSpec
+              ? 'btool only reported custom conf files without spec files; no syntax/config error was observed.'
+              : \`btool check failed: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`;
+          add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',btoolStatus,btoolFa,btoolEn,
+            \`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`,String(b.stdout||''),String(b.stderr||''),b.code
           );
-          if (b.code !== 0) addBtoolIssueDetails(String(b.stdout || '') + '\n' + String(b.stderr || ''));
+          if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
         }
         break;
       }
@@ -4703,12 +4716,17 @@ disabled = 0
           );
           if(splunkBin){
             const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
-            add('functional','Syntax کانفیگ Splunk','Splunk config syntax',b.code===0?'pass':'warn',
-              b.code===0?'syntax/config validation موفق بود.':`validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
-              b.code===0?'config validation passed.':`config validation failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
-              `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
+            const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
+            const btoolLines = combinedBtool.split('\n').map((x:string)=>x.trim()).filter(Boolean);
+            const onlyNoSpec = b.code !== 0 && btoolLines.length > 0 &&
+              btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
+            add('functional','Syntax کانفیگ Splunk','Splunk config syntax',
+              (b.code===0 || onlyNoSpec) ? 'pass' : 'warn',
+              b.code===0 ? 'syntax/config validation موفق بود.' : onlyNoSpec ? 'فقط custom conf بدون spec file گزارش شد؛ خطای syntax/config واقعی مشاهده نشد.' : \`validation شکست خورد: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`,
+              b.code===0 ? 'config validation passed.' : onlyNoSpec ? 'Only custom conf without spec files were reported; no real syntax/config error was observed.' : \`config validation failed: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`,
+              \`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`,String(b.stdout||''),String(b.stderr||''),b.code
             );
-            if (b.code !== 0) addBtoolIssueDetails(String(b.stdout || '') + '\n' + String(b.stderr || ''));
+            if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
           }
         }
         addPartial('ویرایش واقعی config','Real config edit',
@@ -4718,15 +4736,26 @@ disabled = 0
       }
       case 'doc_reference': {
         const rootPath=getAppProjectRoot();
-        const p=await run('find',[rootPath,'-maxdepth','2','-type','f','-name','README.md','-print','-quit'],'مستندات واقعی','Real documentation');
-        if(p?.code===0 && p.stdout.trim()){
-          const g=await run('grep',['-Eqi','splunk|cluster|doctor',p.stdout.trim()],'محتوای واقعی مستندات','Real documentation content',5000);
-          add('functional','جستجوی واقعی مستندات','Real documentation search',g?.code===0?'pass':'warn',
-            g?.code===0?'README واقعی پیدا و قابل جستجو است.':'README پیدا شد اما محتوای مورد انتظار تأیید نشد.',
-            g?.code===0?'Real README found and searchable.':'README was found but expected content was not verified.',
-            `grep -qi splunk "${p.stdout.trim()}"`,g?.stdout||'',g?.stderr||'',g?.code
+        const p=await run('find',[rootPath,'-maxdepth','5','-type','f','(','-name','README.md','-o','-name','README.txt','-o','-name','README.rst',')','-print'],'مستندات واقعی','Real documentation',8000);
+        const docs=String(p?.stdout||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,40);
+        let matched='';
+        for(const doc of docs){
+          const g=await run('grep',['-Eqi','splunk|cluster|doctor|offline|installation',doc],'محتوای واقعی مستندات','Real documentation content',5000);
+          if(g?.code===0){ matched=doc; break; }
+        }
+        if(matched){
+          add('functional','جستجوی واقعی مستندات','Real documentation search','pass',
+            \`مستندات واقعی پیدا و جستجو شد: \${matched}\`,
+            \`Real documentation found and searched successfully: \${matched}\`,
+            \`grep -Eqi "splunk|cluster|doctor|offline|installation" "\${matched}"\`,matched,'',0
           );
-        } else add('functional','مستندات محلی','Local documentation','warn','README واقعی پیدا نشد.','Real README was not found.');
+        } else {
+          add('functional','جستجوی واقعی مستندات','Real documentation search','warn',
+            docs.length?'فایل README پیدا شد ولی هیچ محتوای مرتبط تأیید نشد.':'README محلی پیدا نشد.',
+            docs.length?'README was found but no relevant content was verified.':'No local README was found.',
+            'find README files',docs.join('\n'),' ',1
+          );
+        }
         break;
       }
       case 'alert_manager': {
