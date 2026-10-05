@@ -3521,13 +3521,45 @@ async function startServer() {
       } catch (_) {}
     }
 
-    const nodeTargets = targets.filter((t: any) => t && t.host).slice(0, 32).map((t: any) => ({
-      id: String(t.id || t.host),
-      name: String(t.name || t.host),
-      host: String(t.host),
-      port: Number(t.port || (String(t.role || '').includes('search') ? 8000 : 8089)),
-      role: String(t.role || 'node')
-    }));
+    const nodeTargetSet = new Map<string, any>();
+    for (const t of targets.filter((x: any) => x && x.host).slice(0,32)) {
+      const host=String(t.host).trim();
+      if (!host) continue;
+      const port=Number(t.port || (String(t.role || '').includes('search') ? 8000 : 8089));
+      nodeTargetSet.set(host+':'+port,{
+        id:String(t.id || host),
+        name:String(t.name || host),
+        host,
+        port,
+        role:String(t.role || 'node')
+      });
+    }
+
+    // When the UI has no manually configured nodes, discover actual Splunk
+    // management/forwarding targets from the installed config.
+    if (nodeTargetSet.size === 0 && splunkBin) {
+      const found = new Set<string>();
+      const collect=(text:string)=>{
+        for(const m of String(text||'').matchAll(/(?:server|target-broker|manager_uri|master_uri|uri)\s*=\s*([^\s,#]+)/gi)){
+          let value=String(m[1]||'').replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/\/$/,'').split(',')[0].trim();
+          if(/^[A-Za-z0-9_.:-]+:\d+$/.test(value)) found.add(value);
+        }
+      };
+      const files=[];
+      try{
+        const listing=await runCommand('find',[path.join(splunkHome,'etc'),'-type','f','(','-name','outputs.conf','-o','-name','deploymentclient.conf','-o','-name','server.conf',')','-print'],{
+          toolId:'bento_target_discovery',toolNameFa:'Bento — کشف نودهای واقعی',toolNameEn:'Bento — Real node discovery',category:'splunk',timeoutMs:10000
+        });
+        files.push(...String(listing.stdout||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,120));
+      }catch(_){}
+      for(const file of files){ try{ collect(readFileTailBounded(file,128*1024)); }catch(_){} }
+      for(const value of [...found].slice(0,16)){
+        const m=value.match(/^(.+):(\d+)$/);
+        if(!m) continue;
+        nodeTargetSet.set(value,{id:'auto-'+value,name:value,host:m[1],port:Number(m[2]),role:Number(m[2])===9997?'indexer/forwarding':'splunk_node'});
+      }
+    }
+    const nodeTargets=[...nodeTargetSet.values()].slice(0,32);
     const nodes = await Promise.all(nodeTargets.map(async (n: any) => {
       const p = await testTcpPort(n.host, n.port, 1800);
       return { ...n, open: p.open, latencyMs: p.latencyMs, error: p.error || null, heartbeat: p.open ? 'healthy' : 'offline', checkedAt: new Date().toISOString() };
