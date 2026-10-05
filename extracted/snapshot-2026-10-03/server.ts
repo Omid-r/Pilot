@@ -4793,8 +4793,11 @@ disabled = 0
             const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
             const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
             const btoolLines = combinedBtool.split('\n').map((x:string)=>x.trim()).filter(Boolean);
-            const onlyNoSpec = b.code !== 0 && btoolLines.length > 0 &&
-              btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
+            const normalizedBtoolLines = btoolLines
+              .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').replace(/^.*?(Checking:|No spec file for:)/,'$1').trim())
+              .filter(Boolean);
+            const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 &&
+              normalizedBtoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
             add('functional','Syntax کانفیگ Splunk','Splunk config syntax',
               (b.code===0 || onlyNoSpec) ? 'pass' : 'warn',
               b.code===0 ? 'syntax/config validation موفق بود.' : onlyNoSpec ? 'فقط custom conf بدون spec file گزارش شد؛ خطای syntax/config واقعی مشاهده نشد.' : `validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
@@ -4811,26 +4814,31 @@ disabled = 0
       }
       case 'doc_reference': {
         const rootPath=getAppProjectRoot();
-        const p=await run('find',[rootPath,'-maxdepth','5','-type','f','(','-name','README.md','-o','-name','README.txt','-o','-name','README.rst',')','-print'],'مستندات واقعی','Real documentation',8000);
-        const docs=String(p?.stdout||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,40);
-        let matched='';
-        for(const doc of docs){
-          const g=await run('grep',['-Eqi','splunk|cluster|doctor|offline|installation',doc],'محتوای واقعی مستندات','Real documentation content',5000);
-          if(g?.code===0){ matched=doc; break; }
-        }
-        if(matched){
-          add('functional','جستجوی واقعی مستندات','Real documentation search','pass',
-            `مستندات واقعی پیدا و جستجو شد: ${matched}`,
-            `Real documentation found and searched successfully: ${matched}`,
-            `grep -Eqi "splunk|cluster|doctor|offline|installation" "${matched}"`,matched,'',0
-          );
-        } else {
-          add('functional','جستجوی واقعی مستندات','Real documentation search','warn',
-            docs.length?'فایل README پیدا شد ولی هیچ محتوای مرتبط تأیید نشد.':'README محلی پیدا نشد.',
-            docs.length?'README was found but no relevant content was verified.':'No local README was found.',
-            'find README files',docs.join('\n'),' ',1
-          );
-        }
+        const docFiles = [
+          path.join(rootPath,'src/data/splunkDocs.ts'),
+          path.join(rootPath,'src/data/splunkArchitectureDocs.ts'),
+          path.join(rootPath,'src/components/SplunkDocReference.tsx')
+        ];
+        const existing = docFiles.filter(file => fs.existsSync(file));
+        const evidence = existing.map(file => {
+          let size = 0;
+          let valid = false;
+          try {
+            size = fs.statSync(file).size;
+            valid = size > 1024 && /Splunk|Indexer|Search Head|cluster|outputs\.conf|btool/i.test(readFileTailBounded(file, 512 * 1024));
+          } catch (_) {}
+          return { file, size, valid };
+        });
+        const validCount = evidence.filter(x => x.valid).length;
+        add('functional','مخزن واقعی مستندات آفلاین','Real offline documentation corpus',
+          validCount > 0 ? 'pass' : 'warn',
+          validCount > 0 ? 'منبع واقعی مستندات آفلاین مورد استفاده UI تأیید شد.' : 'منبع واقعی مستندات آفلاین یا محتوای معتبر Splunk پیدا نشد.',
+          validCount > 0 ? 'The offline documentation corpus used by the UI was verified.' : 'The offline documentation corpus or valid Splunk content was not found.',
+          'offline documentation corpus validation',
+          JSON.stringify(evidence),
+          '',
+          validCount > 0 ? 0 : 1
+        );
         break;
       }
       case 'alert_manager': {
