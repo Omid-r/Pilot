@@ -4690,15 +4690,28 @@ disabled = 0
           const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
           const btoolStdout = String(b.stdout || '');
           const btoolStderr = String(b.stderr || '');
-          const btoolLines = btoolStdout.split('\n').map((x:string)=>x.trim()).filter(Boolean);
-          const meaningfulStderr = btoolStderr.replace(/^Command failed:\s*bash -lc\s+SPLUNK_HOME=.*$/gim,'').trim();
-          const onlyNoSpec = b.code !== 0 && btoolLines.length > 0 &&
-            btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:')) && !meaningfulStderr;
+          const btoolLines = btoolStdout
+            .split(/\r?\n/)
+            .map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim())
+            .filter(Boolean);
+          const meaningfulStderrLines = btoolStderr
+            .split(/\r?\n/)
+            .map((x:string)=>x.trim())
+            .filter(Boolean)
+            .filter((line:string)=>!/^Command failed:\s*bash -lc\b/i.test(line));
+          const meaningfulStderr = meaningfulStderrLines.join('\n');
+          const hasExplicitBtoolError = btoolLines.some((line:string)=>
+            /(?:^|\s)(?:ERROR|FATAL|Invalid|Unknown|Failed|Unable|Cannot|malformed|syntax error|not a valid)(?:\b|:)/i.test(line)
+            && !/^No spec file for:/i.test(line)
+          );
+          const noSpecOnly = btoolLines.length > 0 &&
+            btoolLines.every((line:string)=>/^Checking:/i.test(line) || /^No spec file for:/i.test(line));
+          const onlyNoSpec = b.code !== 0 && noSpecOnly && !hasExplicitBtoolError && !meaningfulStderr;
           const btoolStatus = (b.code===0 || onlyNoSpec) ? 'pass' : 'warn';
           const btoolFa = b.code===0
             ? 'btool check بدون خطای syntax/config پایان یافت.'
             : onlyNoSpec
-              ? 'btool فقط برای custom confهای بدون spec file هشدار داد؛ خطای syntax/config واقعی مشاهده نشد.'
+              ? 'btool فقط فایل‌های custom بدون spec file را گزارش کرد؛ این مورد خطای syntax/config محسوب نمی‌شود.'
               : `btool check خطا داد: ${meaningfulStderr||btoolStdout||`exit ${b.code}`}`;
           const btoolEn = b.code===0
             ? 'btool check completed without config errors.'
