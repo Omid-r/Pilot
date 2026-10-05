@@ -4369,7 +4369,7 @@ disabled = 0
         toolId,
         toolNameFa: nameFa,
         toolNameEn: nameEn,
-        category: 'diagnostic',
+        category: 'system',
         timeoutMs
       });
       const stdout = String(result.stdout || '').trim();
@@ -4530,7 +4530,7 @@ disabled = 0
       case 'architecture_auditor': {
         await splunkVersion();
         if (splunkBin) {
-          const b=await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
+          const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
           add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',b.code===0?'pass':'warn',
             b.code===0?'btool check بدون خطای syntax/config پایان یافت.':`btool check خطا داد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
             b.code===0?'btool check completed without config errors.':`btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
@@ -4617,7 +4617,7 @@ disabled = 0
             files.length?0:1
           );
           if(splunkBin){
-            const b=await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
+            const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
             add('functional','Syntax کانفیگ Splunk','Splunk config syntax',b.code===0?'pass':'warn',
               b.code===0?'syntax/config validation موفق بود.':`validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
               b.code===0?'config validation passed.':`config validation failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
@@ -4655,7 +4655,7 @@ disabled = 0
       case 'commercial_license': {
         await splunkVersion();
         if(splunkBin){
-          const b=await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool license list --debug`],'پیکربندی واقعی License','Real license configuration',20000);
+          const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool license list --debug`],'پیکربندی واقعی License','Real license configuration',20000);
           add('functional','پیکربندی License واقعی','Real license configuration',b.code===0?'pass':'warn',
             b.code===0?'پیکربندی license قابل‌خواندن است.':'btool license شکست خورد یا license configuration قابل‌خواندن نیست.',
             b.code===0?'License configuration is readable.':'License configuration could not be validated.',
@@ -4675,7 +4675,7 @@ disabled = 0
         if(scripts.length){
           const sample=scripts.slice(0,8);
           for(const file of sample){
-            const b=await runCommand('bash',['-n',path.join(scriptsDir,file)],'','');
+            const b=await run('bash',['-n',path.join(scriptsDir,file)],`Syntax ${file}`,`Syntax ${file}`);
             add('functional',`Syntax ${file}`,`Syntax ${file}`,b.code===0?'pass':'warn',
               b.code===0?`bash -n ${file} موفق بود.`:`bash -n ${file} شکست خورد.`,
               b.code===0?`bash -n ${file} passed.`:`bash -n ${file} failed.`,
@@ -4702,8 +4702,8 @@ disabled = 0
           const source=path.join(tmp,'probe.txt');
           const archive=path.join(tmp,'probe.tar.gz');
           fs.writeFileSync(source,'pilot-backup-diagnostic-ok\n','utf8');
-          const t=await runCommand('tar',['-czf',archive,'-C',tmp,'probe.txt'],'ساخت archive واقعی','Real backup archive',10000);
-          const list=await runCommand('tar',['-tzf',archive],'اعتبار archive واقعی','Real archive validation',10000);
+          const t=await run('tar',['-czf',archive,'-C',tmp,'probe.txt'],'ساخت archive واقعی','Real backup archive',10000);
+          const list=await run('tar',['-tzf',archive],'اعتبار archive واقعی','Real archive validation',10000);
           add('functional','backup/create/verify واقعی','Real backup/create/verify',
             t.code===0 && list.code===0 && /probe\.txt/.test(list.stdout) ? 'pass':'warn',
             t.code===0 && list.code===0 ? 'archive آزمایشی ساخته و استخراج‌پذیری آن تأیید شد.' : 'ساخت یا بررسی archive آزمایشی شکست خورد.',
@@ -4718,7 +4718,7 @@ disabled = 0
       }
       case 'network_toolbox': {
         const s=await run('ss',['-H','-s'],'Socket summary واقعی','Real socket summary');
-        const ping=await runCommand('ping',['-n','-c','1','-W','1','127.0.0.1'],{toolId,toolNameFa:'Ping واقعی',toolNameEn:'Real ping',category:'diagnostic',timeoutMs:5000});
+        const ping=await run('ping',['-n','-c','1','-W','1','127.0.0.1'],'Ping واقعی','Real ping',5000);
         add('functional','Ping واقعی','Real ICMP ping',ping.code===0?'pass':'warn',
           ping.code===0?'ICMP ping به loopback موفق شد.':'ICMP ping به loopback شکست خورد.',
           ping.code===0?'ICMP ping to loopback succeeded.':'ICMP ping to loopback failed.',
@@ -4728,8 +4728,8 @@ disabled = 0
         const traceTool=commandPath('traceroute')||commandPath('tracepath');
         if(traceTool){
           const t=traceTool.endsWith('traceroute')
-            ? await runCommand('traceroute',['-m','3','-n','-w','1','127.0.0.1'],{toolId,toolNameFa:'Traceroute واقعی',toolNameEn:'Real traceroute',category:'diagnostic',timeoutMs:10000})
-            : await runCommand('tracepath',['-m','3','-n','127.0.0.1'],{toolId,toolNameFa:'Tracepath واقعی',toolNameEn:'Real tracepath',category:'diagnostic',timeoutMs:10000});
+            ? await run('traceroute',['-m','3','-n','-w','1','127.0.0.1'],'Traceroute واقعی','Real traceroute',10000)
+            : await run('tracepath',['-m','3','-n','127.0.0.1'],'Tracepath واقعی','Real tracepath',10000);
           add('functional','Traceroute واقعی','Real route-path probe',t.code===0?'pass':'warn',
             t.code===0?'مسیر loopback واقعاً probe شد.':'Traceroute/tracepath شکست خورد.',
             t.code===0?'Loopback path was actually probed.':'Traceroute/tracepath failed.',
