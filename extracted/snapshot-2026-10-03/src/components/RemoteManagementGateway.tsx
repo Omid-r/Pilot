@@ -40,8 +40,8 @@ export const RemoteManagementGateway: React.FC<RemoteManagementGatewayProps> = (
   const [isRunning, setIsRunning] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string>(
     `[LIVE SERVER TERMINAL]
-Connected to the Pilot controller on this server.
-Commands are executed by the authenticated backend on the selected host context.
+Pilot controller is ready on this server.
+Commands are executed by the authenticated backend on the selected host context after the node transport/authentication is available.
 Ready.`
   );
   const [execHistory, setExecHistory] = useState<RemoteCommandExecutionLog[]>([]);
