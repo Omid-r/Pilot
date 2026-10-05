@@ -38,6 +38,7 @@ export const ToolValidationModal: React.FC<Props> = ({
   const [allResults, setAllResults] = useState<Record<string, ToolValidationResult>>({});
   const [offlineSummary, setOfflineSummary] = useState<OfflineSummary | null>(null);
   const [diagnosticReport, setDiagnosticReport] = useState<any | null>(null);
+  const [diagnosticProgress, setDiagnosticProgress] = useState<{ jobId: string; status: string; completedTools: number; totalTools: number; currentToolId: string | null } | null>(null);
 
   const runValidationForTool = async (toolId: string) => {
     setIsValidating(true); setSingleResult(null);
@@ -75,25 +76,92 @@ export const ToolValidationModal: React.FC<Props> = ({
   };
 
   const generateDiagnosticReport = async () => {
-    setIsGeneratingReport(true); setDiagnosticReport(null); setActiveTab('all');
+    setIsGeneratingReport(true);
+    setDiagnosticReport(null);
+    setDiagnosticProgress(null);
+    setActiveTab('all');
+
     try {
-      const res = await fetch('/api/tools/diagnostic-report', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', cache: 'no-store', body: '{}'
+      const startRes = await fetch('/api/tools/diagnostic-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: '{}'
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.success !== true) throw new Error(data.error || ('HTTP ' + res.status));
-      setDiagnosticReport(data); setAllResults(data.tools || {});
+      const startData = await startRes.json().catch(() => ({}));
+      if (!startRes.ok || startData.success !== true || !startData.jobId) {
+        throw new Error(startData.error || ('HTTP ' + startRes.status));
+      }
+
+      const jobId = String(startData.jobId);
+      const totalTools = Number(startData.totalTools || allModules.length || 0);
+      setDiagnosticProgress({
+        jobId,
+        status: String(startData.status || 'queued'),
+        completedTools: 0,
+        totalTools,
+        currentToolId: null
+      });
+
+      let finalData: any = null;
+      for (let attempt = 0; attempt < 900; attempt++) {
+        await new Promise(resolve => window.setTimeout(resolve, 1000));
+
+        const poll = await fetch('/api/tools/diagnostic-report/' + encodeURIComponent(jobId), {
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        const data = await poll.json().catch(() => ({}));
+        if (!poll.ok || data.success !== true) {
+          throw new Error(data.error || ('HTTP ' + poll.status));
+        }
+
+        setDiagnosticProgress({
+          jobId,
+          status: String(data.status || 'running'),
+          completedTools: Number(data.completedTools || 0),
+          totalTools: Number(data.totalTools || totalTools),
+          currentToolId: data.currentToolId ? String(data.currentToolId) : null
+        });
+
+        if (data.status === 'error') {
+          throw new Error(data.error || 'Diagnostic job failed');
+        }
+        if (data.status === 'completed' && data.report) {
+          finalData = data.report;
+          break;
+        }
+      }
+
+      if (!finalData) throw new Error('Diagnostic report timed out before completion.');
+
+      setDiagnosticReport(finalData);
+      setAllResults(finalData.tools || {});
       setOfflineSummary({
-        overallStatus: Number(data.errorCount || 0) > 0 ? 'error' : Number(data.warningCount || 0) > 0 ? 'warning' : 'healthy',
-        score: Number(data.overallScore || 0), totalTools: Number(data.totalTools || 0),
-        healthyCount: Number(data.healthyCount || 0), warningCount: Number(data.warningCount || 0), errorCount: Number(data.errorCount || 0),
-        checkedAt: data.generatedAt || new Date().toISOString(), durationMs: Number(data.durationMs || 0),
-        messageFa: 'گزارش جامع ' + Number(data.totalTools || 0) + ' ابزار آماده شد.',
-        messageEn: 'Comprehensive report for ' + Number(data.totalTools || 0) + ' tools is ready.'
+        overallStatus: Number(finalData.errorCount || 0) > 0 ? 'error' : Number(finalData.warningCount || 0) > 0 ? 'warning' : 'healthy',
+        score: Number(finalData.overallScore || 0),
+        totalTools: Number(finalData.totalTools || 0),
+        healthyCount: Number(finalData.healthyCount || 0),
+        warningCount: Number(finalData.warningCount || 0),
+        errorCount: Number(finalData.errorCount || 0),
+        checkedAt: finalData.generatedAt || new Date().toISOString(),
+        durationMs: Number(finalData.durationMs || 0),
+        messageFa: 'گزارش جامع ' + Number(finalData.totalTools || 0) + ' ابزار آماده شد.',
+        messageEn: 'Comprehensive report for ' + Number(finalData.totalTools || 0) + ' tools is ready.'
       });
+      setDiagnosticProgress(prev => prev ? { ...prev, status: 'completed', completedTools: finalData.totalTools || prev.completedTools, totalTools: finalData.totalTools || prev.totalTools, currentToolId: null } : prev);
     } catch (e) {
-      setOfflineSummary({ overallStatus: 'error', score: 0, totalTools: 0, healthyCount: 0, warningCount: 0, errorCount: 1, checkedAt: new Date().toISOString(), durationMs: 0, messageFa: 'ساخت گزارش ناموفق بود: ' + safeError(e), messageEn: 'Report generation failed: ' + safeError(e) });
-    } finally { setIsGeneratingReport(false); }
+      setDiagnosticProgress(prev => prev ? { ...prev, status: 'error', currentToolId: null } : prev);
+      setOfflineSummary({
+        overallStatus: 'error', score: 0, totalTools: 0, healthyCount: 0, warningCount: 0, errorCount: 1,
+        checkedAt: new Date().toISOString(), durationMs: 0,
+        messageFa: 'ساخت گزارش ناموفق بود: ' + safeError(e),
+        messageEn: 'Report generation failed: ' + safeError(e)
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   const reportJson = diagnosticReport ? JSON.stringify(diagnosticReport, null, 2) : '';
@@ -156,7 +224,24 @@ export const ToolValidationModal: React.FC<Props> = ({
                 </div>
               </div>
               {offlineSummary && <div className='p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10 text-xs text-slate-300'>{offlineSummary.score}/100 · {offlineSummary.healthyCount} healthy · {offlineSummary.warningCount} warning · {offlineSummary.errorCount} error · {offlineSummary.durationMs}ms</div>}
-              {diagnosticReport && <div className='p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 text-xs text-emerald-200'>{isFa ? 'گزارش آماده است؛ می‌توانید JSON را کپی یا دانلود و برای من ارسال کنید.' : 'Report ready. Copy or download the JSON and send it here.'}</div>}
+              {diagnosticProgress && diagnosticProgress.status !== 'completed' && diagnosticProgress.status !== 'error' && (
+                <div className='p-4 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 space-y-2'>
+                  <div className='flex items-center justify-between text-xs text-cyan-200'>
+                    <span>{isFa ? 'در حال اجرای تست واقعی ابزارها…' : 'Running real tool diagnostics…'}</span>
+                    <span className='font-mono'>{diagnosticProgress.completedTools}/{diagnosticProgress.totalTools}</span>
+                  </div>
+                  <div className='h-2 rounded-full bg-white/[0.06] overflow-hidden'>
+                    <div
+                      className='h-full bg-cyan-400 transition-all duration-300'
+                      style={{ width: `${diagnosticProgress.totalTools ? Math.round((diagnosticProgress.completedTools / diagnosticProgress.totalTools) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <div className='text-[10px] text-cyan-200/60 font-mono'>
+                    {diagnosticProgress.currentToolId || (isFa ? 'در صف…' : 'Queued…')}
+                  </div>
+                </div>
+              )}
+              {diagnosticReport && <div className='p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 text-xs text-emerald-200'>{isFa ? 'گزارش آماده است؛ JSON را دانلود یا Copy کنید و همین فایل را برای من بفرستید.' : 'Report ready. Download or copy the JSON and send it to me.'}</div>}
               <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5'>
                 {allModules.map(mod => { const result = allResults[mod.id]; const good = result?.status === 'healthy'; return <div key={mod.id} className='p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]'>
                   <div className='flex items-start justify-between gap-2'><div><div className='text-[11px] font-bold text-white'>{isFa ? mod.titleFa : mod.titleEn}</div><div className='text-[10px] text-slate-500'>{isFa ? mod.categoryNameFa : mod.categoryNameEn}</div></div>{good ? <CheckCircle2 className='w-4 h-4 text-emerald-400' /> : <AlertTriangle className='w-4 h-4 text-amber-400' />}</div>
