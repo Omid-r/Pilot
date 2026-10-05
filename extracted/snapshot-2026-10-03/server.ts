@@ -4673,21 +4673,25 @@ disabled = 0
       }
       case 'heartbeat_radar': {
         const link=await run('ip',['-s','link'],'Link telemetry واقعی','Real link telemetry');
-        if (configuredTargets.length===0) {
+        const targetsToCheck = [...new Set(effectiveTargets)].filter(Boolean).slice(0,6);
+        if (targetsToCheck.length === 0) {
           addPartial('Heartbeat نودهای واقعی','Real node heartbeat',
-            'هیچ node واقعی از کانفیگ استخراج نشد؛ فقط link telemetry محلی تست شد.',
-            'No real cluster node was found in configuration; only local link telemetry was tested.');
+            'هیچ endpoint واقعی کلاستر از کانفیگ مؤثر Splunk یا runtime log پیدا نشد؛ رادار نباید node ساختگی نشان دهد.',
+            'No real cluster endpoint was found in effective Splunk config or runtime logs; the radar must not fabricate nodes.');
         } else {
-          for(const target of effectiveTargets.slice(0,4)){
-            const host=target.replace(/:\\d+$/,'');
-            const port=Number((target.match(/:(\\d+)$/)||[])[1]||8089);
+          for(const target of targetsToCheck){
+            const host=target.replace(/:\d+$/,'');
+            const port=Number((target.match(/:(\d+)$/)||[])[1]||8089);
             const p=await testTcpPort(host,port,1800);
-            add('functional',`Heartbeat ${target}`,`Heartbeat ${target}`,p.open?'pass':'warn',
-              p.open?`node ${target} پاسخ TCP داد؛ latency=${p.latencyMs}ms.`:`node ${target} پاسخ نداد: ${p.error||'timeout'}`,
-              p.open?`Node ${target} answered TCP; latency=${p.latencyMs}ms.`:`Node ${target} did not answer: ${p.error||'timeout'}`,
-              `TCP ${target}`,p.open?String(p.latencyMs)+'ms':'',p.error||'',p.open?0:1
+            add('functional','Heartbeat '+target,'Heartbeat '+target,p.open?'pass':'warn',
+              p.open?'node '+target+' پاسخ TCP داد؛ latency='+p.latencyMs+'ms.':'node '+target+' پاسخ نداد: '+(p.error||'timeout'),
+              p.open?'Node '+target+' answered TCP; latency='+p.latencyMs+'ms.':'Node '+target+' did not answer: '+(p.error||'timeout'),
+              'TCP '+target,p.open?String(p.latencyMs)+'ms':'',p.error||'',p.open?0:1
             );
           }
+        }
+        if (!link || link.code !== 0) {
+          addPartial('Link telemetry','Link telemetry','وضعیت interfaceهای kernel خوانده نشد.','Kernel interface telemetry could not be read.');
         }
         break;
       }
