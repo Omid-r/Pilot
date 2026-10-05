@@ -4537,7 +4537,14 @@ disabled = 0
         const f=await run('free',['-m'],'RAM واقعی','Real memory');
         const d=await run('df',['-P','/'],'دیسک واقعی','Real disk');
         const s=await run('ss',['-H','-s'],'خلاصه socket واقعی','Real socket summary');
-        if (!u || !f || !d || !s) addPartial('پوشش تشخیص عمیق','Deep diagnostics coverage','همه signalهای پایه قابل جمع‌آوری نبودند.','Not all base diagnostic signals were collectible.');
+        const j=await run('journalctl',['-u','splunk-doctor.service','-n','20','--no-pager'],'لاگ واقعی کنترلر','Real controller log',10000);
+        const aiOk=Boolean(u&&f&&d&&s&&j&&[u,f,d,s,j].every((x:any)=>x.code===0));
+        add('functional','تشخیص جامع host','Comprehensive host diagnostics',aiOk?'pass':'warn',
+          aiOk?'Kernel/RAM/Disk/Socket و لاگ سرویس واقعی با موفقیت خوانده شدند.':'یکی از signalهای تشخیصی پایه قابل جمع‌آوری نبود.',
+          aiOk?'Kernel/RAM/Disk/Socket and controller logs were collected successfully.':'One or more core diagnostic signals could not be collected.',
+          'uname -a; free -m; df -P /; ss -H -s; journalctl -u splunk-doctor.service -n 20 --no-pager',
+          [u,f,d,s,j].map((x:any)=>String(x?.stdout||'')).filter(Boolean).join('\n').slice(0,8000),
+          [u,f,d,s,j].map((x:any)=>String(x?.stderr||'')).filter(Boolean).join('\n').slice(0,4000),aiOk?0:1);
         break;
       }
       case 'cluster_deployer':
@@ -4566,7 +4573,16 @@ disabled = 0
         const r=await run('ip',['-j','route'],'Route واقعی','Real route table');
         const n=await run('ip',['-j','neigh'],'Neighbor واقعی','Real neighbor table');
         const s=await run('ss',['-H','-lnt'],'Listenerهای واقعی','Real listeners');
-        if (!r || !n || !s) addPartial('پوشش topology','Topology coverage','داده‌های route/neighbor/socket کامل نشدند.','Route/neighbor/socket data was incomplete.');
+        const topoOk=Boolean(r&&n&&s&&[r,n,s].every((x:any)=>x.code===0));
+        const routeCount=r?parseJsonSafe<any[]>(r.stdout,[]).length:0;
+        const neighborCount=n?parseJsonSafe<any[]>(n.stdout,[]).length:0;
+        const listenerCount=s?String(s.stdout||'').split('\n').filter(Boolean).length:0;
+        add('functional','Topology واقعی host','Real host topology',topoOk?'pass':'warn',
+          topoOk?`route=${routeCount} · neighbor=${neighborCount} · listener=${listenerCount}`:'route/neighbor/listener probe ناقص بود.',
+          topoOk?`route=${routeCount} · neighbor=${neighborCount} · listener=${listenerCount}`:'Route/neighbor/listener probe was incomplete.',
+          'ip -j route; ip -j neigh; ss -H -lnt',
+          [r,n,s].map((x:any)=>String(x?.stdout||'')).filter(Boolean).join('\n').slice(0,7000),
+          [r,n,s].map((x:any)=>String(x?.stderr||'')).filter(Boolean).join('\n').slice(0,3000),topoOk?0:1);
         break;
       }
       case 'heartbeat_radar': {
@@ -4608,7 +4624,13 @@ disabled = 0
         const d=await run('df',['-P','/'],'Disk health واقعی','Real disk health');
         const f=await run('free',['-m'],'Memory health واقعی','Real memory health');
         const up=await run('uptime',[],'Uptime واقعی','Real uptime');
-        if(!s || !d || !f || !up) addPartial('پوشش Health Audit','Health Audit coverage','یکی از signalهای اصلی سلامت جمع‌آوری نشد.','One or more core health signals could not be collected.');
+        const healthOk=Boolean(s&&d&&f&&up&&[s,d,f,up].every((x:any)=>x.code===0));
+        add('functional','Health telemetry واقعی','Real health telemetry',healthOk?'pass':'warn',
+          healthOk?'socket/disk/memory/uptime telemetry خوانده شد.':'یکی از signalهای اصلی سلامت جمع‌آوری نشد.',
+          healthOk?'Socket/disk/memory/uptime telemetry was collected.':'One or more core health signals could not be collected.',
+          'ss -H -s; df -P /; free -m; uptime',
+          [s,d,f,up].map((x:any)=>String(x?.stdout||'')).filter(Boolean).join('\n').slice(0,7000),
+          [s,d,f,up].map((x:any)=>String(x?.stderr||'')).filter(Boolean).join('\n').slice(0,3000),healthOk?0:1);
         break;
       }
       case 'live_logs': {
