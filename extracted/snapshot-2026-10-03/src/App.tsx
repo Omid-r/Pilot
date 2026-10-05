@@ -1087,19 +1087,27 @@ export default function App() {
       } catch (e) {}
     }
     return {
-      hfIp: '10.20.30.45',
-      hfHost: 'hf01.corp.net',
-      idx1Ip: '10.20.30.50',
-      idx1Host: 'idx01-site1.cluster.splunk',
-      idx2Ip: '10.20.30.51',
-      idx2Host: 'idx02-site1.cluster.splunk',
-      shIp: '10.20.30.40',
-      shHost: 'sh01.corp.net',
-      dsIp: '10.20.30.60',
-      dsHost: 'ds01.corp.net',
+      hfIp: '',
+      hfHost: '',
+      idx1Ip: '',
+      idx1Host: '',
+      idx2Ip: '',
+      idx2Host: '',
+      shIp: '',
+      shHost: '',
+      dsIp: '',
+      dsHost: '',
     };
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  useEffect(() => {
+    const sampleHosts = new Set(['hf01.corp.net','idx01-site1.cluster.splunk','idx02-site1.cluster.splunk','sh01.corp.net','ds01.corp.net']);
+    if (sampleHosts.has(clusterSettings.hfHost) || sampleHosts.has(clusterSettings.idx1Host) || sampleHosts.has(clusterSettings.idx2Host) || sampleHosts.has(clusterSettings.shHost) || sampleHosts.has(clusterSettings.dsHost)) {
+      setClusterSettings({
+        hfIp:'', hfHost:'', idx1Ip:'', idx1Host:'', idx2Ip:'', idx2Host:'', shIp:'', shHost:'', dsIp:'', dsHost:''
+      });
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('splunk_cluster_doctor_settings', JSON.stringify(clusterSettings));
