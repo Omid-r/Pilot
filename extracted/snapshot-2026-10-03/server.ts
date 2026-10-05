@@ -4595,6 +4595,40 @@ disabled = 0
           'splunk btool check --debug',candidate,'',1);
       }
     };
+    const classifyBtoolCheck = (result: any) => {
+      const stdout = String(result?.stdout || '');
+      const stderr = String(result?.stderr || '');
+      const lines = stdout.split(/\r?\n/)
+        .map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim())
+        .filter(Boolean);
+      const stderrLines = stderr.split(/\r?\n/)
+        .map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim())
+        .filter(Boolean)
+        .filter((line:string)=>!/^Command failed:\s*bash -lc\b/i.test(line));
+      const noSpecLines = lines.filter((line:string)=>/^No spec file for:\s*/i.test(line));
+      const diagnosticLines = lines.filter((line:string)=>/^Checking:\s*/i.test(line) || /^No spec file for:\s*/i.test(line));
+      const unexpectedLines = lines.filter((line:string)=>!/^Checking:\s*/i.test(line) && !/^No spec file for:\s*/i.test(line));
+      const explicitErrors = [...unexpectedLines, ...stderrLines].filter((line:string)=>
+        /^(?:ERROR|FATAL|INVALID|UNKNOWN|FAILED|UNABLE|CANNOT|MALFORMED)\b/i.test(line)
+        || /(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf)/i.test(line)
+      );
+      const onlyExpectedNoSpec = result?.code !== 0
+        && noSpecLines.length > 0
+        && diagnosticLines.length === lines.length
+        && explicitErrors.length === 0
+        && stderrLines.length === 0;
+      const pass = result?.code === 0 || onlyExpectedNoSpec;
+      return {
+        pass,
+        onlyExpectedNoSpec,
+        stdout,
+        stderr,
+        lines,
+        noSpecLines,
+        unexpectedLines,
+        explicitErrors
+      };
+    };
     const addPartial = (fa: string, en: string, reasonFa: string, reasonEn: string, command = '') => {
       add('safety',fa,en,'warn',reasonFa,reasonEn,command,'','',0);
     };
@@ -4709,44 +4743,21 @@ disabled = 0
         await splunkVersion();
         if (splunkBin) {
           const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
-          const btoolStdout = String(b.stdout || '');
-          const btoolStderr = String(b.stderr || '');
-          const btoolLines = btoolStdout
-            .split(/\r?\n/)
-            .map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim())
-            .filter(Boolean);
-          const meaningfulStderrLines = btoolStderr
-            .split(/\r?\n/)
-            .map((x:string)=>x.trim())
-            .filter(Boolean)
-            .filter((line:string)=>!/^Command failed:\s*bash -lc\b/i.test(line));
-          const meaningfulStderr = meaningfulStderrLines.join('\n');
-          const hasExplicitBtoolError = btoolLines.some((line:string)=>
-            /(?:^|\s)(?:ERROR|FATAL|Invalid|Unknown|Failed|Unable|Cannot|malformed|syntax error|not a valid)(?:\b|:)/i.test(line)
-            && !/^No spec file for:/i.test(line)
-          );
-          const noSpecOnly = btoolLines.length > 0 &&
-            btoolLines.every((line:string)=>/^Checking:/i.test(line) || /^No spec file for:/i.test(line));
-          const onlyNoSpec = b.code !== 0
-            && btoolLines.some((line:string)=>/^No spec file for:/i.test(line))
-            && noSpecOnly
-            && !hasExplicitBtoolError
-            && !meaningfulStderr;
-          const btoolStatus = (b.code===0 || onlyNoSpec) ? 'pass' : 'warn';
+          const btool = classifyBtoolCheck(b);
+          const btoolStatus = btool.pass ? 'pass' : 'warn';
           const btoolFa = b.code===0
             ? 'btool check بدون خطای syntax/config پایان یافت.'
-            : onlyNoSpec
+            : btool.onlyExpectedNoSpec
               ? 'btool فقط فایل‌های custom بدون spec file را گزارش کرد؛ این مورد خطای syntax/config محسوب نمی‌شود.'
-              : `btool check خطا داد: ${meaningfulStderr||btoolStdout||`exit ${b.code}`}`;
+              : `btool check خطا داد: ${btool.explicitErrors.join(' | ') || btool.stderr || btool.stdout || `exit ${b.code}`}`;
           const btoolEn = b.code===0
             ? 'btool check completed without config errors.'
-            : onlyNoSpec
+            : btool.onlyExpectedNoSpec
               ? 'btool only reported custom conf files without spec files; no syntax/config error was observed.'
-              : `btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`;
+              : `btool check failed: ${btool.explicitErrors.join(' | ') || btool.stderr || btool.stdout || `exit ${b.code}`}`;
           add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',btoolStatus,btoolFa,btoolEn,
-            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,btoolStdout,btoolStderr,b.code
+            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,btool.stdout,btool.stderr,b.code
           );
-          if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(btoolStdout+'\n'+meaningfulStderr);
         }
         break;
       }
@@ -4911,29 +4922,22 @@ disabled = 0
           );
           if(splunkBin){
             const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
-            const btoolStdout = String(b.stdout || '');
-            const btoolStderr = String(b.stderr || '');
-            const btoolLines = btoolStdout.split('\n').map((x:string)=>x.trim()).filter(Boolean);
-            const normalizedBtoolLines = btoolLines
-              .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').trim())
-              .filter(Boolean);
-            const normalizedStderrLines = btoolStderr
-              .split(/\r?\n/)
-              .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').trim())
-              .filter(Boolean)
-              .filter((line:string)=>!/^Command failed:\s*bash -lc\b/i.test(line));
-            const normalizedStderr = normalizedStderrLines.join('\n');
-            const btoolActualErrors = normalizedBtoolLines.filter((line:string) =>
-              /(?:^|\s)(?:ERROR|Error|FATAL|Fatal|Invalid|Unknown|Failed|Unable|Cannot|not a valid|malformed|syntax error)(?:\b|:)/i.test(line)
-              && !/^No spec file for:/i.test(line)
+            const btool = classifyBtoolCheck(b);
+            const btoolStatus = btool.pass ? 'pass' : 'warn';
+            const btoolFa = b.code===0
+              ? 'btool check بدون خطای syntax/config پایان یافت.'
+              : btool.onlyExpectedNoSpec
+                ? 'btool فقط فایل‌های custom بدون spec file را گزارش کرد؛ این مورد خطای syntax/config محسوب نمی‌شود.'
+                : `btool check خطا داد: ${btool.explicitErrors.join(' | ') || btool.stderr || btool.stdout || `exit ${b.code}`}`;
+            const btoolEn = b.code===0
+              ? 'btool check completed without config errors.'
+              : btool.onlyExpectedNoSpec
+                ? 'btool only reported custom conf files without spec files; no syntax/config error was observed.'
+                : `btool check failed: ${btool.explicitErrors.join(' | ') || btool.stderr || btool.stdout || `exit ${b.code}`}`;
+            add('functional','Syntax کانفیگ Splunk','Splunk config syntax',btoolStatus,btoolFa,btoolEn,
+              `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,btool.stdout,btool.stderr,b.code
             );
-            const btoolOnlyNoSpec = normalizedBtoolLines.length > 0
-              && normalizedBtoolLines.some((line:string)=>/^No spec file for:/i.test(line))
-              && normalizedBtoolLines.every((line:string)=>/^Checking:/i.test(line) || /^No spec file for:/i.test(line))
-              && btoolActualErrors.length === 0
-              && normalizedStderrLines.length === 0;
-            const onlyNoSpec = b.code !== 0 && btoolOnlyNoSpec;
-            if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(btoolStdout + '\n' + normalizedStderr);
+            if (!btool.pass) addBtoolIssueDetails(btool.stdout + '\n' + btool.stderr);
           }
         }
         addPartial('ویرایش واقعی config','Real config edit',
