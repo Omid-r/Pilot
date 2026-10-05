@@ -4436,12 +4436,22 @@ disabled = 0
     const webConf = readCfg('etc/system/local/web.conf');
     const indexesConf = readCfg('etc/system/local/indexes.conf');
 
+    const normalizeTargetEndpoint = (raw: string, defaultPort = 8089) => {
+      let value = String(raw || '').trim().replace(/^['"]|['"]$/g,'');
+      value = value.replace(/^https?:\/\//i,'').replace(/^tcp:\/\//i,'').replace(/^ssh:\/\//i,'');
+      value = value.split(/[/?#,\s]+/)[0].trim().replace(/\/$/,'');
+      if (/^[A-Za-z0-9_.-]+:\d+$/.test(value)) return value;
+      if (/^[A-Za-z0-9_.-]+$/.test(value)) return value + ':' + defaultPort;
+      return '';
+    };
+    const isClearlyPlaceholderHost = (host: string) => /^(?:your|replace|example|changeme|hostname|host|server)[A-Za-z0-9_-]*$/i.test(host)
+      || /(?:\.example\.|\.corp\.net$|\.cluster\.splunk$)/i.test(host);
     const extractTargets = (text: string) => {
       const candidates = new Set<string>();
       for (const m of text.matchAll(/(?:manager_uri|master_uri|target-broker|server|uri)\s*=\s*([^\s,#]+)/gi)) {
-        let value = String(m[1] || '').replace(/^https?:\/\//, '').replace(/^tcp:\/\//, '');
-        value = value.split(',')[0].trim().replace(/\/$/, '');
-        if (/^[A-Za-z0-9_.:-]+:\d+$/.test(value)) candidates.add(value);
+        const value = normalizeTargetEndpoint(String(m[1] || ''));
+        const host = value.replace(/:\d+$/,'');
+        if (value && !isClearlyPlaceholderHost(host) && !isPlaceholderTarget(value)) candidates.add(value);
       }
       return [...candidates].slice(0, 16);
     };
@@ -4452,6 +4462,8 @@ disabled = 0
 
     const isPlaceholderTarget = (value: string) => {
       const v = String(value || '').toLowerCase();
+      const host = v.replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/:\d+$/,'');
+      if (isClearlyPlaceholderHost(host)) return true;
       return new Set([
         'hf01.corp.net:8089','idx01-site1.cluster.splunk:8089','idx02-site1.cluster.splunk:8089',
         'sh01.corp.net:8000','ds01.corp.net:8089','10.20.30.45:8089','10.20.30.50:8089',
@@ -4460,8 +4472,9 @@ disabled = 0
     };
     const collectTargetsFromText = (text: string, found: Set<string>) => {
       for (const m of String(text || '').matchAll(/(?:server|target-broker|manager_uri|master_uri|uri)\s*=\s*([^\s,#]+)/gi)) {
-        let value = String(m[1] || '').replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/\/$/,'').split(',')[0].trim();
-        if (/^[A-Za-z0-9_.:-]+:\d+$/.test(value) && !isPlaceholderTarget(value)) found.add(value);
+        const value = normalizeTargetEndpoint(String(m[1] || ''));
+        const host = value.replace(/:\d+$/,'');
+        if (value && !isClearlyPlaceholderHost(host) && !isPlaceholderTarget(value)) found.add(value);
       }
     };
     const discoverEffectiveSplunkTargets = async () => {
@@ -4483,33 +4496,30 @@ disabled = 0
         const files = String(listing.stdout || '').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,160);
         for (const file of files) { try { collectTargetsFromText(readFileTailBounded(file,256*1024),found); } catch (_) {} }
       } catch (_) {}
-      // Runtime fallback: prefer destinations actually observed by Splunk when
-      // static config discovery is incomplete.
       try {
         const logPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
         if (fs.existsSync(logPath)) {
           const tail = readFileTailBounded(logPath, 2 * 1024 * 1024);
-          const logLines = tail.split('\n');
-          for (const line of logLines) {
-            const markers = ['server=', 'uri_host_port="https://'];
-            for (const marker of markers) {
+          for (const line of tail.split('\n')) {
+            for (const marker of ['server=','uri_host_port="https://']) {
               const pos = line.indexOf(marker);
               if (pos < 0) continue;
-              let value = line.slice(pos + marker.length).split(/[\s"\\,]+/)[0].trim();
-              if (value && value.includes(':') && !isPlaceholderTarget(value)) found.add(value);
+              const value = normalizeTargetEndpoint(line.slice(pos + marker.length));
+              if (value && !isPlaceholderTarget(value)) found.add(value);
             }
-            const ipMarker = 'ip=';
-            const ipPos = line.indexOf(ipMarker);
+            const ipPos = line.indexOf('ip=');
             if (ipPos >= 0) {
-              const value = line.slice(ipPos + ipMarker.length).split(/[\s,]+/)[0].trim();
-              if (value && value.includes(':') && !isPlaceholderTarget(value)) found.add(value);
+              const value = normalizeTargetEndpoint(line.slice(ipPos + 3));
+              if (value && !isPlaceholderTarget(value)) found.add(value);
             }
           }
         }
       } catch (_) {}
       return [...found].slice(0,16);
     };
-
+    const configuredTargetsNormalized = configuredTargets
+      .map((target: string) => normalizeTargetEndpoint(target))
+      .filter(Boolean);
     const testLocalTcp = async (port: number, labelFa: string, labelEn: string) => {
       const probe = await testTcpPort('127.0.0.1', port, 1500);
       add(
@@ -4564,7 +4574,7 @@ disabled = 0
     };
 
     const discoveredTargets = await discoverEffectiveSplunkTargets();
-    const effectiveTargets = [...new Set([...discoveredTargets, ...configuredTargets])].filter((target: string) => !isPlaceholderTarget(target)).slice(0,16);
+    const effectiveTargets = [...new Set([...discoveredTargets, ...configuredTargetsNormalized])].filter((target: string) => !isPlaceholderTarget(target)).slice(0,16);
     switch (toolId) {
       case 'bento_overview': {
         const ip = await run('ip',['-brief','addr'],'شبکه واقعی Bento','Bento real network');
