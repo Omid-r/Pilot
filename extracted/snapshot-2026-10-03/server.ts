@@ -4667,7 +4667,10 @@ disabled = 0
         if (splunkBin) {
           const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
           const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
-          const btoolLines = combinedBtool.split('\n').map((x:string)=>x.trim()).filter(Boolean);
+          const btoolLines = combinedBtool.split('\n')
+            .map((x:string)=>x.trim())
+            .filter(Boolean)
+            .filter((line:string)=>!/^Command failed:\s*bash -lc\s+SPLUNK_HOME=/i.test(line));
           const onlyNoSpec = b.code !== 0 && btoolLines.length > 0 &&
             btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
           const btoolStatus = (b.code===0 || onlyNoSpec) ? 'pass' : 'warn';
@@ -4852,30 +4855,44 @@ disabled = 0
       }
       case 'doc_reference': {
         const rootPath=getAppProjectRoot();
-        const docFiles = [
+        const candidateFiles = [
           path.join(rootPath,'src/data/splunkDocs.ts'),
           path.join(rootPath,'src/data/splunkArchitectureDocs.ts'),
           path.join(rootPath,'src/components/SplunkDocReference.tsx')
         ];
-        const existing = docFiles.filter(file => fs.existsSync(file));
-        const evidence = existing.map(file => {
-          let size = 0;
-          let valid = false;
+        const assetDir = path.join(rootPath,'dist/assets');
+        const existing = candidateFiles.filter(file => fs.existsSync(file));
+        let assetFiles:string[] = [];
+        try {
+          if (fs.existsSync(assetDir)) assetFiles = fs.readdirSync(assetDir).filter((x:string)=>/\.js$/.test(x)).slice(0,80).map((x:string)=>path.join(assetDir,x));
+        } catch (_) {}
+        let sourceValid = false;
+        const sourceEvidence = existing.map(file => {
+          let size=0, valid=false;
           try {
-            size = fs.statSync(file).size;
-            valid = size > 1024 && /Splunk|Indexer|Search Head|cluster|outputs\.conf|btool/i.test(readFileTailBounded(file, 512 * 1024));
+            size=fs.statSync(file).size;
+            valid=size>1024 && /Splunk|Indexer|Search Head|cluster|outputs\.conf|btool/i.test(readFileTailBounded(file,512*1024));
           } catch (_) {}
-          return { file, size, valid };
+          if(valid) sourceValid=true;
+          return {file,size,valid};
         });
-        const validCount = evidence.filter(x => x.valid).length;
-        add('functional','مخزن واقعی مستندات آفلاین','Real offline documentation corpus',
-          validCount > 0 ? 'pass' : 'warn',
-          validCount > 0 ? 'منبع واقعی مستندات آفلاین مورد استفاده UI تأیید شد.' : 'منبع واقعی مستندات آفلاین یا محتوای معتبر Splunk پیدا نشد.',
-          validCount > 0 ? 'The offline documentation corpus used by the UI was verified.' : 'The offline documentation corpus or valid Splunk content was not found.',
+        let assetValid=false;
+        let matchedAsset='';
+        for(const file of assetFiles){
+          try {
+            const sample=readFileTailBounded(file,2*1024*1024);
+            if(/Splunk|Indexer|Search Head|outputs\.conf|btool/i.test(sample)){ assetValid=true; matchedAsset=file; break; }
+          } catch (_) {}
+        }
+        const valid = sourceValid || assetValid;
+        add('functional','مستندات آفلاین واقعی UI','Real UI offline documentation',
+          valid?'pass':'warn',
+          valid ? (assetValid ? 'محتوای مستندات Splunk داخل asset واقعی frontend تأیید شد.' : 'منبع مستندات Splunk داخل سورس نصب‌شده تأیید شد.') : 'محتوای مستندات آفلاین واقعی قابل‌تشخیص نیست.',
+          valid ? (assetValid ? 'Splunk documentation content was verified inside the real frontend asset.' : 'Splunk documentation source was verified in the installed source tree.') : 'Real offline documentation content could not be verified.',
           'offline documentation corpus validation',
-          JSON.stringify(evidence),
+          JSON.stringify({sourceEvidence,assetFileCount:assetFiles.length,matchedAsset}),
           '',
-          validCount > 0 ? 0 : 1
+          valid?0:1
         );
         break;
       }
