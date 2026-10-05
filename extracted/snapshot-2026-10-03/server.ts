@@ -4517,6 +4517,17 @@ disabled = 0
       } catch (_) {}
       return [...found].slice(0,16);
     };
+    const normalizeProbeHost = (target: string) => {
+      const raw = String(target || '').replace(/^https?:\/\//i,'').replace(/^tcp:\/\//i,'').replace(/^ssh:\/\//i,'');
+      const host = raw.replace(/:\d+$/,'').trim();
+      if (/^(self|localhost)$/i.test(host) || host === os.hostname() || host === 'localhost.localdomain') return '127.0.0.1';
+      return host;
+    };
+    const parseTarget = (target: string, defaultPort = 8089) => {
+      const normalized = normalizeTargetEndpoint(target, defaultPort);
+      const m = normalized.match(/^(.+):(\d+)$/);
+      return { raw: normalized, host: normalizeProbeHost(normalized), port: m ? Number(m[2]) : defaultPort };
+    };
     const configuredTargetsNormalized = configuredTargets
       .map((target: string) => normalizeTargetEndpoint(target))
       .filter(Boolean);
@@ -4603,8 +4614,9 @@ disabled = 0
           break;
         }
         const target = effectiveTargets[0];
-        const host = target.replace(/:\\d+$/,'');
-        const managementPort = Number((target.match(/:(\\d+)$/)||[])[1] || 8089);
+        const parsedTarget = parseTarget(target, 8089);
+        const host = parsedTarget.host;
+        const managementPort = parsedTarget.port;
         const sshPort = 22;
         const sshCfg = await run('ssh',['-G',host],`پیکربندی SSH مقصد ${host}`,`SSH configuration for ${host}`,8000);
         add('functional','Resolve پیکربندی SSH','SSH configuration resolution',
@@ -4773,11 +4785,24 @@ disabled = 0
         const up=await run('uptime',[],'Uptime واقعی','Real uptime');
         const healthOk=Boolean(s&&d&&f&&up&&[s,d,f,up].every((x:any)=>x.code===0));
         const splunkLogPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
-        const splunkLogTail = fs.existsSync(splunkLogPath) ? readFileTailBounded(splunkLogPath, 512 * 1024) : '';
-        const refusedCount = (splunkLogTail.match(/Connection refused/gi) || []).length;
-        const timeoutCount = (splunkLogTail.match(/timed out|timeout/gi) || []).length;
-        const malformedCount = (splunkLogTail.match(/Missing or malformed messages\.conf stanza/gi) || []).length;
-        const splunkErrorCount = (splunkLogTail.match(/\bERROR\b/g) || []).length;
+        const splunkLogTail = fs.existsSync(splunkLogPath) ? readFileTailBounded(splunkLogPath, 768 * 1024) : '';
+        const nowMs = Date.now();
+        const healthWindowMs = 30 * 60 * 1000;
+        const parseSplunkTimestamp = (line: string) => {
+          const m = String(line || '').match(/^(\d{2}-\d{2}-\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+          if (!m) return 0;
+          const t = Date.parse(m[1] + ' ' + m[2]);
+          return Number.isFinite(t) ? t : 0;
+        };
+        const recentSplunkLines = splunkLogTail.split('\n').filter((line:string) => {
+          const ts = parseSplunkTimestamp(line);
+          return ts > 0 && (nowMs - ts) >= 0 && (nowMs - ts) <= healthWindowMs;
+        });
+        const recentSplunkTail = recentSplunkLines.join('\n');
+        const refusedCount = (recentSplunkTail.match(/Connection refused/gi) || []).length;
+        const timeoutCount = (recentSplunkTail.match(/timed out|timeout/gi) || []).length;
+        const malformedCount = (recentSplunkTail.match(/Missing or malformed messages\.conf stanza/gi) || []).length;
+        const splunkErrorCount = (recentSplunkTail.match(/\bERROR\b/g) || []).length;
         const logIssueTotal = refusedCount + timeoutCount + malformedCount;
 
         add('functional','Health telemetry واقعی','Real health telemetry',healthOk?'pass':'warn',
@@ -4790,13 +4815,17 @@ disabled = 0
           const logStatus = logIssueTotal === 0 ? 'pass' : 'warn';
           add('functional','خطاهای واقعی Splunk در لاگ','Real Splunk runtime log findings',logStatus,
             logIssueTotal === 0
-              ? 'در tail لاگ واقعی Splunk الگوی Connection refused/timeout/malformed messages.conf پیدا نشد.'
-              : 'در لاگ واقعی Splunk خطاهای شبکه/forwarding یا messages.conf مشاهده شد؛ نیاز به بررسی topology و config وجود دارد.',
+              ? (recentSplunkLines.length
+                ? 'در ۳۰ دقیقه اخیر الگوی Connection refused/timeout/malformed messages.conf پیدا نشد.'
+                : 'در ۳۰ دقیقه اخیر ورودی timestampدار قابل‌اعتباری برای بررسی خطاهای runtime پیدا نشد؛ خطاهای قدیمی خارج از امتیاز سلامت جاری هستند.')
+              : 'در ۳۰ دقیقه اخیر لاگ واقعی Splunk خطاهای شبکه/forwarding یا messages.conf نشان می‌دهد؛ نیاز به بررسی topology و config وجود دارد.',
             logIssueTotal === 0
-              ? 'No connection-refused/timeout/malformed-messages patterns were found in the real Splunk log tail.'
-              : 'Real Splunk logs contain network/forwarding or messages.conf failures; topology/config review is required.',
-            'tail -n 5000 "'+splunkLogPath+'"',
-            ('Connection refused='+refusedCount+'\nTimeout='+timeoutCount+'\nMalformed messages.conf='+malformedCount+'\nERROR='+splunkErrorCount),
+              ? (recentSplunkLines.length
+                ? 'No connection-refused/timeout/malformed-messages patterns were found in the last 30 minutes.'
+                : 'No recent timestamped Splunk log entries were available for the current health window; older errors are excluded from current health scoring.')
+              : 'Real Splunk logs contain recent network/forwarding or messages.conf failures; topology/config review is required.',
+            'recent Splunk log window: last 30 minutes',
+            ('Window=30m\nRecent lines='+recentSplunkLines.length+'\nConnection refused='+refusedCount+'\nTimeout='+timeoutCount+'\nMalformed messages.conf='+malformedCount+'\nERROR='+splunkErrorCount),
             '',
             logIssueTotal === 0 ? 0 : 1
           );
@@ -4835,10 +4864,13 @@ disabled = 0
             const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
             const btoolLines = combinedBtool.split('\n').map((x:string)=>x.trim()).filter(Boolean);
             const normalizedBtoolLines = btoolLines
-              .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').replace(/^.*?(Checking:|No spec file for:)/,'$1').trim())
+              .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').trim())
               .filter(Boolean);
-            const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 &&
-              normalizedBtoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
+            const btoolActualErrors = normalizedBtoolLines.filter((line:string) =>
+              /(?:^|\s)(?:ERROR|Error|FATAL|Fatal|Invalid|Unknown|Failed|Unable|Cannot|not a valid|malformed|syntax error)(?:\b|:)/i.test(line)
+              && !/^No spec file for:/i.test(line)
+            );
+            const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 && btoolActualErrors.length === 0;
             add('functional','Syntax کانفیگ Splunk','Splunk config syntax',
               (b.code===0 || onlyNoSpec) ? 'pass' : 'warn',
               b.code===0 ? 'syntax/config validation موفق بود.' : onlyNoSpec ? 'فقط custom conf بدون spec file گزارش شد؛ خطای syntax/config واقعی مشاهده نشد.' : `validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
