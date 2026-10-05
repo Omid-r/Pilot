@@ -4308,6 +4308,7 @@ disabled = 0
   async function validateToolInternal(toolId: string) {
     const started = Date.now();
     type ValidationCheck = {
+      kind?: 'capability' | 'functional' | 'safety';
       nameFa: string;
       nameEn: string;
       status: 'pass' | 'warn';
@@ -4318,27 +4319,20 @@ disabled = 0
       stderr?: string;
       exitCode?: number;
     };
+
     const checks: ValidationCheck[] = [];
     const add = (
+      kind: 'capability' | 'functional' | 'safety',
       fa: string,
       en: string,
       status: 'pass' | 'warn',
       df: string,
       de: string,
-      command?: string,
-      stdout?: string,
-      stderr?: string,
+      command = '',
+      stdout = '',
+      stderr = '',
       exitCode?: number
-    ) => checks.push({ nameFa: fa, nameEn: en, status, detailFa: df, detailEn: de, command, stdout, stderr, exitCode });
-
-    const root = typeof process.getuid === 'function' && process.getuid() === 0;
-    add(
-      'اجرای سرویس',
-      'Controller execution',
-      root ? 'pass' : 'warn',
-      root ? 'Backend با دسترسی root اجرا می‌شود.' : 'Backend با root اجرا نشده است.',
-      root ? 'The controller is running with root privileges.' : 'The controller is not running as root.'
-    );
+    ) => checks.push({ kind, nameFa: fa, nameEn: en, status, detailFa: df, detailEn: de, command, stdout, stderr, exitCode });
 
     const commandPath = (name: string) => {
       try {
@@ -4348,130 +4342,456 @@ disabled = 0
       }
     };
 
-    const specs: Record<string, { command: string; args: string[]; cwd?: string; nameFa: string; nameEn: string }> = {
-      bento_overview: { command: 'ip', args: ['-brief', 'addr'], nameFa: 'آزمون واقعی شبکه', nameEn: 'Real network probe' },
-      architect_overseer: { command: 'systemctl', args: ['--version'], nameFa: 'آزمون واقعی systemd', nameEn: 'Real systemd probe' },
-      autonomous_agent: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH client', nameEn: 'Real SSH client probe' },
-      ai_diagnostics: { command: 'uname', args: ['-a'], nameFa: 'آزمون واقعی هسته سیستم', nameEn: 'Real kernel probe' },
-      cluster_deployer: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH deploy client', nameEn: 'Real SSH deploy-client probe' },
-      architecture_auditor: { command: 'df', args: ['-P', '/'], nameFa: 'آزمون واقعی دیسک', nameEn: 'Real disk probe' },
-      topology: { command: 'ss', args: ['-H', '-lnt'], nameFa: 'آزمون واقعی socket', nameEn: 'Real socket probe' },
-      management_nodes: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH', nameEn: 'Real SSH probe' },
-      commercial_license: { command: 'openssl', args: ['version'], nameFa: 'آزمون واقعی OpenSSL', nameEn: 'Real OpenSSL probe' },
-      parallel_provisioning: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH provisioning', nameEn: 'Real SSH provisioning probe' },
-      docker_k8s: commandPath('podman')
-        ? { command: 'podman', args: ['--version'], nameFa: 'آزمون واقعی Podman', nameEn: 'Real Podman probe' }
-        : { command: 'kubectl', args: ['version', '--client'], nameFa: 'آزمون واقعی kubectl', nameEn: 'Real kubectl probe' },
-      health_audit: { command: 'ss', args: ['-H', '-s'], nameFa: 'آزمون واقعی socket summary', nameEn: 'Real socket summary probe' },
-      live_logs: { command: 'find', args: ['/opt/splunk/var/log/splunk', '-maxdepth', '1', '-type', 'f', '-name', 'splunkd.log', '-print', '-quit'], nameFa: 'آزمون واقعی فایل لاگ', nameEn: 'Real log-file probe' },
-      config_editor: { command: 'find', args: ['/opt/splunk/etc/system/local', '-maxdepth', '1', '-type', 'f', '-name', '*.conf', '-print', '-quit'], nameFa: 'آزمون واقعی کانفیگ', nameEn: 'Real config-file probe' },
-      doc_reference: { command: 'find', args: [getAppProjectRoot(), '-maxdepth', '2', '-type', 'f', '-name', 'README.md', '-print', '-quit'], nameFa: 'آزمون واقعی مستندات محلی', nameEn: 'Real local-doc probe' },
-      heartbeat_radar: { command: 'ip', args: ['-s', 'link'], nameFa: 'آزمون واقعی link telemetry', nameEn: 'Real link telemetry probe' },
-      alert_manager: { command: 'openssl', args: ['version'], nameFa: 'آزمون واقعی TLS runtime', nameEn: 'Real TLS runtime probe' },
-      network_sources: { command: 'ip', args: ['-j', 'route'], nameFa: 'آزمون واقعی route table', nameEn: 'Real route-table probe' },
-      component_agents: { command: 'tar', args: ['--version'], nameFa: 'آزمون واقعی tar', nameEn: 'Real tar probe' },
-      remote_gateway: { command: 'ssh', args: ['-V'], nameFa: 'آزمون واقعی SSH gateway', nameEn: 'Real SSH gateway probe' },
-      package_center: { command: 'gzip', args: ['--version'], nameFa: 'آزمون واقعی gzip', nameEn: 'Real gzip probe' },
-      backup_archive: { command: 'tar', args: ['--version'], nameFa: 'آزمون واقعی tar archive', nameEn: 'Real tar archive probe' },
-      network_toolbox: { command: 'ss', args: ['-H', '-s'], nameFa: 'آزمون واقعی network toolbox', nameEn: 'Real network toolbox probe' },
-      admin_security: { command: 'openssl', args: ['version'], nameFa: 'آزمون واقعی امنیت TLS', nameEn: 'Real security runtime probe' }
+    const run = async (
+      command: string,
+      args: string[],
+      nameFa: string,
+      nameEn: string,
+      timeoutMs = 15000
+    ) => {
+      const resolved = commandPath(command);
+      if (!resolved) {
+        add(
+          'capability',
+          nameFa,
+          nameEn,
+          'warn',
+          `فرمان ${command} روی سرور پیدا نشد.`,
+          `Command ${command} is not available on this server.`,
+          [command, ...args].join(' '),
+          '',
+          'command not found',
+          127
+        );
+        return null;
+      }
+      const result = await runCommand(command, args, {
+        toolId,
+        toolNameFa: nameFa,
+        toolNameEn: nameEn,
+        category: 'diagnostic',
+        timeoutMs
+      });
+      const stdout = String(result.stdout || '').trim();
+      const stderr = String(result.stderr || '').trim();
+      return { ...result, stdout, stderr };
     };
 
-    const spec = specs[toolId] || specs.bento_overview;
-    const resolved = commandPath(spec.command);
-    if (!resolved) {
+    const root = typeof process.getuid === 'function' && process.getuid() === 0;
+    add(
+      'capability',
+      'اجرای سرویس',
+      'Controller execution',
+      root ? 'pass' : 'warn',
+      root ? 'Backend با دسترسی root اجرا می‌شود.' : 'Backend با root اجرا نشده است.',
+      root ? 'The controller is running with root privileges.' : 'The controller is not running as root.'
+    );
+
+    const splunkCandidates = [process.env.SPLUNK_HOME || '', '/opt/splunk', '/opt/splunkforwarder'].filter(Boolean);
+    const splunkHome = splunkCandidates.find(p => fs.existsSync(path.join(p, 'bin', 'splunk'))) || '';
+    const splunkBin = splunkHome ? path.join(splunkHome, 'bin', 'splunk') : '';
+    const cfgDir = splunkHome ? path.join(splunkHome, 'etc/system/local') : '';
+    const readCfg = (relative: string) => {
+      try {
+        const file = path.join(splunkHome, relative);
+        return fs.existsSync(file) ? readFileTailBounded(file, 512 * 1024) : '';
+      } catch (_) {
+        return '';
+      }
+    };
+    const serverConf = readCfg('etc/system/local/server.conf');
+    const outputsConf = readCfg('etc/system/local/outputs.conf');
+    const webConf = readCfg('etc/system/local/web.conf');
+    const indexesConf = readCfg('etc/system/local/indexes.conf');
+
+    const extractTargets = (text: string) => {
+      const candidates = new Set<string>();
+      for (const m of text.matchAll(/(?:manager_uri|master_uri|target-broker|server|uri)\s*=\s*([^\s,#]+)/gi)) {
+        let value = String(m[1] || '').replace(/^https?:\/\//, '').replace(/^tcp:\/\//, '');
+        value = value.split(',')[0].trim().replace(/\/$/, '');
+        if (/^[A-Za-z0-9_.:-]+:\\d+$/.test(value)) candidates.add(value);
+      }
+      return [...candidates].slice(0, 16);
+    };
+    const configuredTargets = [...new Set([
+      ...extractTargets(serverConf),
+      ...extractTargets(outputsConf),
+    ])];
+
+    const testLocalTcp = async (port: number, labelFa: string, labelEn: string) => {
+      const probe = await testTcpPort('127.0.0.1', port, 1500);
       add(
-        spec.nameFa,
-        spec.nameEn,
-        'warn',
-        `فرمان ${spec.command} روی سرور پیدا نشد.`,
-        `Command ${spec.command} is not available on this server.`,
-        [spec.command, ...spec.args].join(' '),
-        '',
-        'command not found',
-        127
+        'functional',
+        labelFa,
+        labelEn,
+        probe.open ? 'pass' : 'warn',
+        probe.open
+          ? `اتصال TCP واقعی به 127.0.0.1:${port} موفق بود؛ latency=${probe.latencyMs}ms.`
+          : `اتصال TCP واقعی به 127.0.0.1:${port} برقرار نشد: ${probe.error || 'timeout'}`,
+        probe.open
+          ? `Real TCP connection to 127.0.0.1:${port} succeeded; latency=${probe.latencyMs}ms.`
+          : `Real TCP connection to 127.0.0.1:${port} failed: ${probe.error || 'timeout'}`,
+        `TCP 127.0.0.1:${port}`,
+        probe.open ? String(probe.latencyMs) + 'ms' : '',
+        probe.error || '',
+        probe.open ? 0 : 1
       );
-    } else {
-      const probe = await runCommand(spec.command, spec.args, {
-        toolId,
-        toolNameFa: spec.nameFa,
-        toolNameEn: spec.nameEn,
-        category: 'system',
-        timeoutMs: 15000
+      return probe.open;
+    };
+
+    const splunkVersion = async () => {
+      if (!splunkBin) {
+        add('functional','Splunk واقعی','Real Splunk runtime','warn','باینری واقعی Splunk پیدا نشد.','Real Splunk binary was not found.');
+        return false;
+      }
+      const p = await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" version`],{
+        toolId,toolNameFa:'نسخه واقعی Splunk',toolNameEn:'Real Splunk version',category:'splunk',timeoutMs:12000
       });
-      const output = (probe.stdout || '').trim();
-      const error = (probe.stderr || '').trim();
-      const passed = probe.code === 0;
-      const display = output || error || '(no output)';
-      add(
-        spec.nameFa,
-        spec.nameEn,
-        passed ? 'pass' : 'warn',
-        passed
-          ? `فرمان واقعی با کد خروجی 0 اجرا شد. خروجی: ${display.slice(0, 500)}`
-          : `فرمان واقعی شکست خورد (exit ${probe.code}). ${display.slice(0, 500)}`,
-        passed
-          ? `Real command completed with exit code 0. Output: ${display.slice(0, 500)}`
-          : `Real command failed with exit code ${probe.code}. ${display.slice(0, 500)}`,
-        [spec.command, ...spec.args].join(' '),
-        output,
-        error,
-        probe.code
+      const out=String(p.stdout||'').trim(), err=String(p.stderr||'').trim();
+      add('functional','اجرای واقعی Splunk','Real Splunk runtime',p.code===0?'pass':'warn',
+        p.code===0 ? `نسخه واقعی Splunk با exit 0 اجرا شد: ${out.slice(0,500)}` : `Splunk version شکست خورد: ${err || out || `exit ${p.code}`}`,
+        p.code===0 ? `Real Splunk version command passed: ${out.slice(0,500)}` : `Splunk version command failed: ${err || out || `exit ${p.code}`}`,
+        `SPLUNK_HOME="${splunkHome}" "${splunkBin}" version`,out,err,p.code
       );
-    }
+      return p.code===0;
+    };
 
-    if (['health_audit', 'topology', 'network_toolbox', 'bento_overview'].includes(toolId)) {
-      const ipPath = commandPath('ip');
-      const ssPath = commandPath('ss');
-      add(
-        'وابستگی‌های شبکه',
-        'Network dependencies',
-        ipPath && ssPath ? 'pass' : 'warn',
-        ipPath && ssPath ? 'ip و ss موجود هستند.' : 'یکی از ip یا ss روی سرور موجود نیست.',
-        ipPath && ssPath ? 'ip and ss are available.' : 'ip or ss is missing.'
-      );
-    }
+    const addPartial = (fa: string, en: string, reasonFa: string, reasonEn: string, command = '') => {
+      add('safety',fa,en,'warn',reasonFa,reasonEn,command,'','',0);
+    };
 
-    if (['live_logs', 'config_editor', 'health_audit'].includes(toolId)) {
-      const homeCandidates = [process.env.SPLUNK_HOME || '', '/opt/splunk', '/opt/splunkforwarder'].filter(Boolean);
-      const home = homeCandidates.find(p => fs.existsSync(path.join(p, 'etc/system/local')));
-      const cfgDir = home ? path.join(home, 'etc/system/local') : '';
-      add(
-        'مسیر واقعی Splunk',
-        'Real Splunk path',
-        cfgDir ? 'pass' : 'warn',
-        cfgDir ? `مسیر ${cfgDir} واقعی است.` : 'مسیر etc/system/local واقعی پیدا نشد.',
-        cfgDir ? `Real directory ${cfgDir} exists.` : 'A real etc/system/local directory was not found.'
-      );
-    }
-
-    if (['commercial_license', 'admin_security'].includes(toolId)) {
-      const store = getSecurityStore();
-      add(
-        'Security Store',
-        'Security Store',
-        store.users.length > 0 ? 'pass' : 'warn',
-        `تعداد کاربران واقعی: ${store.users.length}`,
-        `Real security-store users: ${store.users.length}`
-      );
+    switch (toolId) {
+      case 'bento_overview': {
+        const ip = await run('ip',['-brief','addr'],'شبکه واقعی Bento','Bento real network');
+        const ss = await run('ss',['-H','-lnt'],'listenerهای واقعی Bento','Bento real listeners');
+        await testLocalTcp(3000,'کنترلر HTTP واقعی Bento','Bento real HTTP controller');
+        if (!ip || !ss) addPartial('پوشش عملکردی Bento','Bento functional coverage','یکی از probeهای واقعی کامل نشد.','One or more live probes did not complete.');
+        break;
+      }
+      case 'architect_overseer': {
+        const p = await run('systemctl',['show','splunk-doctor.service','--property=ActiveState,SubState','--no-pager'],'وضعیت واقعی systemd','Real systemd state');
+        add('functional','سرویس Pilot','Pilot service',p?.code===0 && /ActiveState=active/.test(p.stdout) ? 'pass':'warn',
+          p?.code===0 && /ActiveState=active/.test(p.stdout) ? 'splunk-doctor واقعاً active است.' : `سرویس active نیست یا خروجی ناقص است: ${p?.stdout || p?.stderr || ''}`,
+          p?.code===0 && /ActiveState=active/.test(p.stdout) ? 'splunk-doctor is actually active.' : 'The service is not active or the probe failed.',
+          'systemctl show splunk-doctor.service --property=ActiveState,SubState --no-pager',
+          p?.stdout||'',p?.stderr||'',p?.code
+        );
+        break;
+      }
+      case 'autonomous_agent':
+      case 'management_nodes':
+      case 'remote_gateway': {
+        const cfg = await run('ssh',['-G','localhost'],'اعتبارسنجی SSH واقعی','Real SSH configuration probe');
+        const live = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=2','localhost','true'],'اتصال SSH محلی واقعی','Real local SSH connection',8000);
+        if (live?.code === 0) {
+          add('functional','اتصال SSH واقعی','Real SSH connection','pass','اتصال واقعی SSH به localhost با BatchMode موفق شد.','A real BatchMode SSH connection to localhost succeeded.','ssh -o BatchMode=yes -o ConnectTimeout=2 localhost true',live.stdout,live.stderr,live.code);
+        } else {
+          add('functional','اتصال SSH واقعی','Real SSH connection','warn',
+            'SSH client موجود است اما اتصال واقعی بدون تعامل احراز هویت موفق نشد؛ بنابراین این ابزار ۱۰۰٪ تأیید نشده است.',
+            'The SSH client exists, but a real non-interactive localhost connection did not succeed; full functionality is not proven.',
+            'ssh -o BatchMode=yes -o ConnectTimeout=2 localhost true',live?.stdout||'',live?.stderr||'',live?.code
+          );
+        }
+        if (configuredTargets.length === 0) {
+          addPartial('نود هدف پیکربندی‌شده','Configured remote target',
+            'هیچ مقصد مدیریتی واقعی از کانفیگ Splunk استخراج نشد؛ تست remote روی مقصد واقعی انجام نشده است.',
+            'No real management target was found in Splunk configuration; a real remote-node test was not performed.');
+        } else {
+          const target = configuredTargets[0];
+          const host = target.replace(/:\\d+$/,'');
+          const port = Number((target.match(/:(\\d+)$/)||[])[1] || 22);
+          const probe = await testTcpPort(host, port, 1800);
+          add('functional','دسترسی به مقصد واقعی','Real remote target reachability',
+            probe.open?'pass':'warn',
+            probe.open?`مقصد واقعی ${target} از سرور قابل دسترسی TCP است؛ latency=${probe.latencyMs}ms.`:`مقصد واقعی ${target} قابل دسترسی نیست: ${probe.error||'timeout'}`,
+            probe.open?`Real target ${target} is TCP reachable; latency=${probe.latencyMs}ms.`:`Real target ${target} is not reachable: ${probe.error||'timeout'}`,
+            `TCP ${target}`,probe.open?String(probe.latencyMs)+'ms':'',probe.error||'',probe.open?0:1
+          );
+        }
+        break;
+      }
+      case 'ai_diagnostics': {
+        const u=await run('uname',['-a'],'Kernel واقعی','Real kernel');
+        const f=await run('free',['-m'],'RAM واقعی','Real memory');
+        const d=await run('df',['-P','/'],'دیسک واقعی','Real disk');
+        const s=await run('ss',['-H','-s'],'خلاصه socket واقعی','Real socket summary');
+        if (!u || !f || !d || !s) addPartial('پوشش تشخیص عمیق','Deep diagnostics coverage','همه signalهای پایه قابل جمع‌آوری نبودند.','Not all base diagnostic signals were collectible.');
+        break;
+      }
+      case 'cluster_deployer':
+      case 'parallel_provisioning': {
+        const ssh=await run('ssh',['-G','localhost'],'پیکربندی واقعی SSH provisioning','Real SSH provisioning config');
+        if (ssh?.code===0) add('functional','Dry-run استقرار SSH','SSH deployment dry-run','pass','SSH برای مقصد محلی قابل resolve است؛ اجرای write/deploy واقعی عمداً انجام نشد.','SSH can resolve the local target; write/deploy was intentionally not executed.','ssh -G localhost',ssh.stdout,ssh.stderr,ssh.code);
+        addPartial('اجرای تخریبی استقرار','Destructive deployment execution',
+          'برای تست read-only گزارش، deploy واقعی اجرا نشده است؛ بنابراین سلامت کامل provisioning هنوز اثبات نشده است.',
+          'A real deployment was not executed in the read-only diagnostic, so full provisioning health is not proven.');
+        break;
+      }
+      case 'architecture_auditor': {
+        await splunkVersion();
+        if (splunkBin) {
+          const b=await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
+          add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',b.code===0?'pass':'warn',
+            b.code===0?'btool check بدون خطای syntax/config پایان یافت.':`btool check خطا داد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
+            b.code===0?'btool check completed without config errors.':`btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
+            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
+          );
+        }
+        break;
+      }
+      case 'topology':
+      case 'network_sources': {
+        const r=await run('ip',['-j','route'],'Route واقعی','Real route table');
+        const n=await run('ip',['-j','neigh'],'Neighbor واقعی','Real neighbor table');
+        const s=await run('ss',['-H','-lnt'],'Listenerهای واقعی','Real listeners');
+        if (!r || !n || !s) addPartial('پوشش topology','Topology coverage','داده‌های route/neighbor/socket کامل نشدند.','Route/neighbor/socket data was incomplete.');
+        break;
+      }
+      case 'heartbeat_radar': {
+        const link=await run('ip',['-s','link'],'Link telemetry واقعی','Real link telemetry');
+        if (configuredTargets.length===0) {
+          addPartial('Heartbeat نودهای واقعی','Real node heartbeat',
+            'هیچ node واقعی از کانفیگ استخراج نشد؛ فقط link telemetry محلی تست شد.',
+            'No real cluster node was found in configuration; only local link telemetry was tested.');
+        } else {
+          for(const target of configuredTargets.slice(0,4)){
+            const host=target.replace(/:\\d+$/,'');
+            const port=Number((target.match(/:(\\d+)$/)||[])[1]||8089);
+            const p=await testTcpPort(host,port,1800);
+            add('functional',`Heartbeat ${target}`,`Heartbeat ${target}`,p.open?'pass':'warn',
+              p.open?`node ${target} پاسخ TCP داد؛ latency=${p.latencyMs}ms.`:`node ${target} پاسخ نداد: ${p.error||'timeout'}`,
+              p.open?`Node ${target} answered TCP; latency=${p.latencyMs}ms.`:`Node ${target} did not answer: ${p.error||'timeout'}`,
+              `TCP ${target}`,p.open?String(p.latencyMs)+'ms':'',p.error||'',p.open?0:1
+            );
+          }
+        }
+        break;
+      }
+      case 'docker_k8s': {
+        const podman=commandPath('podman');
+        const kubectl=commandPath('kubectl');
+        if(podman){
+          const p=await run('podman',['info','--format','json'],'Podman runtime واقعی','Real Podman runtime',20000);
+          if(p && p.code!==0) add('functional','Podman functional','Podman functional','warn','Podman نصب است اما runtime پاسخ موفق نداد.','Podman is installed but runtime check failed.','podman info --format json',p.stdout,p.stderr,p.code);
+        } else add('capability','Podman','Podman','warn','Podman نصب نیست.','Podman is not installed.','podman info --format json','','command not found',127);
+        if(kubectl){
+          const k=await run('kubectl',['version','--client=true','--output=json'],'kubectl واقعی','Real kubectl',15000);
+          const ctx=await run('kubectl',['config','get-contexts','-o','name'],'کانتکست Kubernetes واقعی','Real Kubernetes contexts',10000);
+          if(ctx?.code!==0 || !ctx.stdout.trim()) addPartial('Kubernetes cluster connectivity','Kubernetes cluster connectivity','kubectl نصب است اما context فعال/قابل‌دسترسی برای تست cluster پیدا نشد؛ cluster write عمداً اجرا نشد.','kubectl is installed but no usable cluster context was found; cluster writes were intentionally not executed.');
+        } else add('capability','kubectl','kubectl','warn','kubectl نصب نیست.','kubectl is not installed.','kubectl version --client=true','','command not found',127);
+        break;
+      }
+      case 'health_audit': {
+        const s=await run('ss',['-H','-s'],'Socket health واقعی','Real socket health');
+        const d=await run('df',['-P','/'],'Disk health واقعی','Real disk health');
+        const f=await run('free',['-m'],'Memory health واقعی','Real memory health');
+        const up=await run('uptime',[],'Uptime واقعی','Real uptime');
+        if(!s || !d || !f || !up) addPartial('پوشش Health Audit','Health Audit coverage','یکی از signalهای اصلی سلامت جمع‌آوری نشد.','One or more core health signals could not be collected.');
+        break;
+      }
+      case 'live_logs': {
+        const log=path.join(splunkHome,'var/log/splunk/splunkd.log');
+        if(!fs.existsSync(log)){
+          add('functional','Tail واقعی splunkd.log','Real splunkd.log tail','warn','splunkd.log پیدا نشد.','splunkd.log was not found.');
+        } else {
+          const tail=readFileTailBounded(log,256*1024);
+          const nonEmpty=tail.split(/\n/).filter(Boolean);
+          add('functional','خواندن واقعی لاگ','Real log read',nonEmpty.length?'pass':'warn',
+            nonEmpty.length?`آخرین ${Math.min(nonEmpty.length,50)} خط واقعی لاگ خوانده شد.`:'فایل لاگ خالی است.',
+            nonEmpty.length?`Real log tail read: ${Math.min(nonEmpty.length,50)} lines.`:'The log file is empty.',
+            `tail -n 50 "${log}"`,nonEmpty.slice(-50).join('\n'),'',
+            nonEmpty.length?0:1
+          );
+        }
+        break;
+      }
+      case 'config_editor': {
+        if(!cfgDir){
+          add('functional','خواندن config واقعی','Real config read','warn','پوشه کانفیگ Splunk پیدا نشد.','Splunk config directory not found.');
+        } else {
+          const files=fs.readdirSync(cfgDir).filter(x=>x.endsWith('.conf'));
+          add('functional','خواندن کانفیگ واقعی','Real config read',files.length?'pass':'warn',
+            files.length?`${files.length} فایل .conf واقعی پیدا شد.`:'هیچ فایل .conf پیدا نشد.',
+            files.length?`${files.length} real .conf files found.`:'No .conf files found.',
+            `find "${cfgDir}" -maxdepth 1 -type f -name "*.conf"`,files.join('\n'),'',
+            files.length?0:1
+          );
+          if(splunkBin){
+            const b=await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
+            add('functional','Syntax کانفیگ Splunk','Splunk config syntax',b.code===0?'pass':'warn',
+              b.code===0?'syntax/config validation موفق بود.':`validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
+              b.code===0?'config validation passed.':`config validation failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
+              `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
+            );
+          }
+        }
+        addPartial('ویرایش واقعی config','Real config edit',
+          'در گزارش read-only هیچ writeای روی کانفیگ انجام نمی‌شود؛ بنابراین backup/edit/rollback عمداً تست نشده است.',
+          'This read-only report does not edit configuration; backup/edit/rollback are intentionally not executed.');
+        break;
+      }
+      case 'doc_reference': {
+        const rootPath=getAppProjectRoot();
+        const p=await run('find',[rootPath,'-maxdepth','2','-type','f','-name','README.md','-print','-quit'],'مستندات واقعی','Real documentation');
+        if(p?.code===0 && p.stdout.trim()){
+          const g=await run('grep',['-qi','splunk',p.stdout.trim()],'محتوای واقعی مستندات','Real documentation content',5000);
+          add('functional','جستجوی واقعی مستندات','Real documentation search',g?.code===0?'pass':'warn',
+            g?.code===0?'README واقعی پیدا و قابل جستجو است.':'README پیدا شد اما محتوای مورد انتظار تأیید نشد.',
+            g?.code===0?'Real README found and searchable.':'README was found but expected content was not verified.',
+            `grep -qi splunk "${p.stdout.trim()}"`,g?.stdout||'',g?.stderr||'',g?.code
+          );
+        } else add('functional','مستندات محلی','Local documentation','warn','README واقعی پیدا نشد.','Real README was not found.');
+        break;
+      }
+      case 'alert_manager': {
+        const o=await run('openssl',['version'],'TLS runtime واقعی','Real TLS runtime');
+        addPartial('اجرای واقعی Alert Manager','Alert Manager functional execution',
+          'در حالت read-only trigger/dispatch واقعی alert اجرا نمی‌شود؛ فقط runtime امنیتی تأیید شد.',
+          'In read-only mode no real alert trigger/dispatch is executed; only the security runtime is verified.',
+          'openssl version');
+        if(!o) break;
+        break;
+      }
+      case 'commercial_license': {
+        await splunkVersion();
+        if(splunkBin){
+          const b=await runCommand('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool license list --debug`],'پیکربندی واقعی License','Real license configuration',20000);
+          add('functional','پیکربندی License واقعی','Real license configuration',b.code===0?'pass':'warn',
+            b.code===0?'پیکربندی license قابل‌خواندن است.':'btool license شکست خورد یا license configuration قابل‌خواندن نیست.',
+            b.code===0?'License configuration is readable.':'License configuration could not be validated.',
+            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool license list --debug`,String(b.stdout||''),String(b.stderr||''),b.code
+          );
+        }
+        addPartial('وضعیت سهمیه/مصرف License','License quota/usage',
+          'بدون احراز هویت به REST API مدیریت Splunk، وضعیت مصرف واقعی license از روی host قابل اثبات کامل نیست.',
+          'Without authenticated Splunk REST access, actual license usage/quota is not fully provable from the host alone.');
+        break;
+      }
+      case 'component_agents': {
+        await run('tar',['--version'],'tar واقعی','Real tar');
+        await run('gzip',['--version'],'gzip واقعی','Real gzip');
+        const scriptsDir=path.join(getAppProjectRoot(),'scripts');
+        const scripts=fs.existsSync(scriptsDir) ? fs.readdirSync(scriptsDir).filter(x=>x.endsWith('.sh')) : [];
+        if(scripts.length){
+          const sample=scripts.slice(0,8);
+          for(const file of sample){
+            const b=await runCommand('bash',['-n',path.join(scriptsDir,file)],'','');
+            add('functional',`Syntax ${file}`,`Syntax ${file}`,b.code===0?'pass':'warn',
+              b.code===0?`bash -n ${file} موفق بود.`:`bash -n ${file} شکست خورد.`,
+              b.code===0?`bash -n ${file} passed.`:`bash -n ${file} failed.`,
+              `bash -n "${path.join(scriptsDir,file)}"`,String(b.stdout||''),String(b.stderr||''),b.code
+            );
+          }
+        } else addPartial('اسکریپت‌های Agent','Agent scripts','اسکریپت‌های اجرایی Component Agents پیدا نشدند.','Component Agent scripts were not found.');
+        break;
+      }
+      case 'package_center': {
+        const media=path.join(getAppProjectRoot(),'offline-prereqs');
+        const rpms=fs.existsSync(media) ? await run('bash',['-lc',`find "${media}" -type f -name '*.rpm' | wc -l`],'رسانه RPM آفلاین','Offline RPM media') : null;
+        const count=Number((rpms?.stdout||'0').trim())||0;
+        add('functional','RPM media واقعی','Real RPM media',count>0?'pass':'warn',
+          count?`${count} RPM آفلاین واقعی در media موجود است.`:'هیچ RPM آفلاین پیدا نشد.',
+          count?`${count} real offline RPMs are present.`:'No offline RPMs were found.',
+          `find "${media}" -type f -name "*.rpm" | wc -l`,rpms?.stdout||'',rpms?.stderr||'',rpms?.code
+        );
+        break;
+      }
+      case 'backup_archive': {
+        const tmp=fs.mkdtempSync(path.join('/tmp/','pilot-diag-backup-'));
+        try{
+          const source=path.join(tmp,'probe.txt');
+          const archive=path.join(tmp,'probe.tar.gz');
+          fs.writeFileSync(source,'pilot-backup-diagnostic-ok\n','utf8');
+          const t=await runCommand('tar',['-czf',archive,'-C',tmp,'probe.txt'],'ساخت archive واقعی','Real backup archive',10000);
+          const list=await runCommand('tar',['-tzf',archive],'اعتبار archive واقعی','Real archive validation',10000);
+          add('functional','backup/create/verify واقعی','Real backup/create/verify',
+            t.code===0 && list.code===0 && /probe\.txt/.test(list.stdout) ? 'pass':'warn',
+            t.code===0 && list.code===0 ? 'archive آزمایشی ساخته و استخراج‌پذیری آن تأیید شد.' : 'ساخت یا بررسی archive آزمایشی شکست خورد.',
+            t.code===0 && list.code===0 ? 'Test archive was created and validated.' : 'Test archive creation or validation failed.',
+            `tar -czf "${archive}" ... && tar -tzf "${archive}"`,
+            String(list.stdout||''),String(t.stderr||list.stderr||''),(t.code===0&&list.code===0)?0:1
+          );
+        } finally {
+          try{ fs.rmSync(tmp,{recursive:true,force:true}); } catch(_){}
+        }
+        break;
+      }
+      case 'package_center': break;
+      case 'network_toolbox': {
+        const s=await run('ss',['-H','-s'],'Socket summary واقعی','Real socket summary');
+        const ping=await runCommand('ping',['-n','-c','1','-W','1','127.0.0.1'],{toolId,toolNameFa:'Ping واقعی',toolNameEn:'Real ping',category:'diagnostic',timeoutMs:5000});
+        add('functional','Ping واقعی','Real ICMP ping',ping.code===0?'pass':'warn',
+          ping.code===0?'ICMP ping به loopback موفق شد.':'ICMP ping به loopback شکست خورد.',
+          ping.code===0?'ICMP ping to loopback succeeded.':'ICMP ping to loopback failed.',
+          'ping -n -c 1 -W 1 127.0.0.1',String(ping.stdout||''),String(ping.stderr||''),ping.code
+        );
+        await testLocalTcp(3000,'TCP port probe واقعی','Real TCP port probe');
+        const traceTool=commandPath('traceroute')||commandPath('tracepath');
+        if(traceTool){
+          const t=traceTool.endsWith('traceroute')
+            ? await runCommand('traceroute',['-m','3','-n','-w','1','127.0.0.1'],{toolId,toolNameFa:'Traceroute واقعی',toolNameEn:'Real traceroute',category:'diagnostic',timeoutMs:10000})
+            : await runCommand('tracepath',['-m','3','-n','127.0.0.1'],{toolId,toolNameFa:'Tracepath واقعی',toolNameEn:'Real tracepath',category:'diagnostic',timeoutMs:10000});
+          add('functional','Traceroute واقعی','Real route-path probe',t.code===0?'pass':'warn',
+            t.code===0?'مسیر loopback واقعاً probe شد.':'Traceroute/tracepath شکست خورد.',
+            t.code===0?'Loopback path was actually probed.':'Traceroute/tracepath failed.',
+            traceTool.endsWith('traceroute')?'traceroute -m 3 -n -w 1 127.0.0.1':'tracepath -m 3 -n 127.0.0.1',
+            String(t.stdout||''),String(t.stderr||''),t.code
+          );
+        } else {
+          addPartial('Traceroute','Traceroute','traceroute/tracepath روی سرور نصب نیست.','traceroute/tracepath is not installed.');
+        }
+        if(!s) addPartial('پوشش Network Toolbox','Network Toolbox coverage','socket summary قابل دریافت نبود.','socket summary was unavailable.');
+        break;
+      }
+      case 'admin_security': {
+        await run('openssl',['version'],'OpenSSL واقعی','Real OpenSSL');
+        const store=getSecurityStore();
+        const key=path.join(process.env.SPLUNK_DOCTOR_DATA_DIR||'/var/lib/splunk-doctor','master-signing.key');
+        const db=path.join(process.env.SPLUNK_DOCTOR_DATA_DIR||'/var/lib/splunk-doctor','security-db.json');
+        add('functional','Security store واقعی','Real security store',fs.existsSync(db)&&fs.existsSync(key)&&store.users.length>0?'pass':'warn',
+          fs.existsSync(db)&&fs.existsSync(key) ? `security DB/key موجود است؛ users=${store.users.length}.` : 'security DB/key کامل موجود نیست.',
+          fs.existsSync(db)&&fs.existsSync(key) ? `security DB/key present; users=${store.users.length}.` : 'security DB/key is incomplete.',
+          'security-store local files','','',fs.existsSync(db)&&fs.existsSync(key)?0:1
+        );
+        addPartial('تغییر امنیتی واقعی','Real security mutation',
+          'هیچ تغییر امنیتی از گزارش read-only انجام نمی‌شود؛ تغییر password/policy عمداً تست نشده است.',
+          'Read-only diagnostics do not mutate security; password/policy changes are intentionally not executed.');
+        break;
+      }
+      default: {
+        const base=await run('true',[],'Smoke واقعی ابزار','Real tool smoke');
+        addPartial('پوشش functional','Functional coverage',
+          'برای این ابزار هنوز تست اختصاصی functional پیاده نشده؛ بنابراین نتیجه healthy اعلام نمی‌شود.',
+          'A dedicated functional test is not implemented yet, so this tool cannot be declared fully healthy.');
+        if(!base) break;
+      }
     }
 
     const warns = checks.filter(c => c.status === 'warn').length;
-    const score = checks.length ? Math.round((checks.filter(c => c.status === 'pass').length / checks.length) * 100) : 0;
+    const functionalWarnings = checks.filter(c => c.kind === 'functional' && c.status === 'warn').length;
+    const safetyWarnings = checks.filter(c => c.kind === 'safety' && c.status === 'warn').length;
+    const score = checks.length ? Math.max(0, Math.round((checks.filter(c => c.status === 'pass').length / checks.length) * 100)) : 0;
+    const fullyFunctional = functionalWarnings === 0 && safetyWarnings === 0 && checks.some(c => c.kind === 'functional');
+
     return {
       toolId,
       status: warns ? 'warning' : 'healthy',
       score,
-      installed: checks.every(c => c.status === 'pass'),
-      operational: warns === 0,
+      evidenceLevel: fullyFunctional ? 'functional' : 'partial',
+      installed: !checks.some(c => c.kind === 'capability' && c.status === 'warn'),
+      operational: warns === 0 && fullyFunctional,
       latencyMs: Date.now() - started,
       checks,
       summaryFa: warns
-        ? `${warns} آزمون واقعی ناموفق/ناقص بود؛ خروجی و کد خطا در همین گزارش ثبت شده است.`
-        : 'آزمون واقعی ابزار با اجرای فرمان روی همین سرور با موفقیت انجام شد.',
+        ? `${warns} مورد نیازمند بررسی است؛ فقط مواردی که واقعاً اجرا و تأیید شده‌اند PASS هستند.`
+        : fullyFunctional
+          ? 'تست functional واقعی با موفقیت انجام شد.'
+          : 'قابلیت‌های محلی تأیید شدند، اما تست functional کامل این ابزار در گزارش read-only ممکن نیست.',
       summaryEn: warns
-        ? `${warns} real checks failed or are incomplete; command output and exit codes are recorded.`
-        : 'The tool passed by executing a real command on this server.'
+        ? `${warns} item(s) need attention; only actually executed and verified checks are PASS.`
+        : fullyFunctional
+          ? 'Real functional test completed successfully.'
+          : 'Local capabilities are verified, but a full functional test is not possible in the read-only diagnostic.'
     };
   }
   // =========================================================================
