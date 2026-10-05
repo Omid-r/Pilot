@@ -4716,7 +4716,6 @@ disabled = 0
         }
         break;
       }
-      case 'package_center': break;
       case 'network_toolbox': {
         const s=await run('ss',['-H','-s'],'Socket summary واقعی','Real socket summary');
         const ping=await runCommand('ping',['-n','-c','1','-W','1','127.0.0.1'],{toolId,toolNameFa:'Ping واقعی',toolNameEn:'Real ping',category:'diagnostic',timeoutMs:5000});
@@ -5168,8 +5167,9 @@ disabled = 0
         }
 
         const values = Object.values(job.tools) as any[];
-        const healthyCount = values.filter(r => r.status === 'healthy').length;
+        const healthyCount = values.filter(r => r.status === 'healthy' && r.evidenceLevel === 'functional').length;
         const warningCount = values.filter(r => r.status === 'warning').length;
+        const partialCount = values.filter(r => r.evidenceLevel === 'partial').length;
         const errorCount = values.filter(r => r.status === 'error').length;
         const overallScore = values.length
           ? Math.round(values.reduce((sum, r) => sum + Number(r.score || 0), 0) / values.length)
@@ -5219,7 +5219,7 @@ disabled = 0
         job.report = {
           success: true,
           reportType: 'PILOT_COMPREHENSIVE_TOOL_DIAGNOSTIC',
-          reportVersion: '1.1',
+          reportVersion: '1.2',
           generatedAt: new Date().toISOString(),
           durationMs: Date.now() - started,
           executionMode: 'BACKGROUND_SEQUENTIAL_REAL_READ_ONLY',
@@ -5227,6 +5227,8 @@ disabled = 0
           healthyCount,
           warningCount,
           errorCount,
+          partialCount,
+          functionalCount: values.filter(r => r.evidenceLevel === 'functional').length,
           overallScore,
           host: health,
           failedTools,
