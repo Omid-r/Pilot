@@ -4892,15 +4892,21 @@ disabled = 0
             const normalizedBtoolLines = btoolLines
               .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').trim())
               .filter(Boolean);
-            const normalizedStderr = btoolStderr
-              .replace(/^Command failed:\s*bash -lc\s+SPLUNK_HOME=.*$/gim,'')
-              .trim();
+            const normalizedStderrLines = btoolStderr
+              .split(/\r?\n/)
+              .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').trim())
+              .filter(Boolean)
+              .filter((line:string)=>!/^Command failed:\s*bash -lc\b/i.test(line));
+            const normalizedStderr = normalizedStderrLines.join('\n');
             const btoolActualErrors = normalizedBtoolLines.filter((line:string) =>
               /(?:^|\s)(?:ERROR|Error|FATAL|Fatal|Invalid|Unknown|Failed|Unable|Cannot|not a valid|malformed|syntax error)(?:\b|:)/i.test(line)
               && !/^No spec file for:/i.test(line)
             );
-            const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 &&
-              btoolActualErrors.length === 0 && !normalizedStderr;
+            const btoolOnlyNoSpec = normalizedBtoolLines.length > 0
+              && normalizedBtoolLines.every((line:string)=>/^Checking:/i.test(line) || /^No spec file for:/i.test(line))
+              && btoolActualErrors.length === 0
+              && normalizedStderrLines.length === 0;
+            const onlyNoSpec = b.code !== 0 && btoolOnlyNoSpec;
             if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(btoolStdout + '\n' + normalizedStderr);
           }
         }
