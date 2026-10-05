@@ -92,7 +92,7 @@ export const AlertNotificationCenter: React.FC<AlertNotificationCenterProps> = (
         messagePreview: ok
           ? String(data.message || data.response || (data.status === 'TRANSPORT_REACHABLE' ? 'Transport reachable; delivery not attempted.' : 'Real dispatch completed.')).slice(0, 240)
           : String(data.error || 'Real notification test failed.').slice(0, 240),
-        deliveryStatus: ok ? 'DELIVERED_SUCCESS' : 'FAILED',
+        deliveryStatus: ok ? 'DELIVERED_SUCCESS' : 'FAILED_RETRYING',
         latencyMs: Number(data.latencyMs || 0)
       };
 
