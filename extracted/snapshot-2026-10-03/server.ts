@@ -4418,6 +4418,20 @@ disabled = 0
       ...extractTargets(outputsConf),
     ])];
 
+    const isPlaceholderTarget = (value: string) => {
+      const v = String(value || '').toLowerCase();
+      return new Set([
+        'hf01.corp.net:8089','idx01-site1.cluster.splunk:8089','idx02-site1.cluster.splunk:8089',
+        'sh01.corp.net:8000','ds01.corp.net:8089','10.20.30.45:8089','10.20.30.50:8089',
+        '10.20.30.51:8089','10.20.30.40:8000','10.20.30.60:8089'
+      ]).has(v);
+    };
+    const collectTargetsFromText = (text: string, found: Set<string>) => {
+      for (const m of String(text || '').matchAll(/(?:server|target-broker|manager_uri|master_uri|uri)\s*=\s*([^\s,#]+)/gi)) {
+        let value = String(m[1] || '').replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/\/$/,'').split(',')[0].trim();
+        if (/^[A-Za-z0-9_.:-]+:\d+$/.test(value) && !isPlaceholderTarget(value)) found.add(value);
+      }
+    };
     const discoverEffectiveSplunkTargets = async () => {
       if (!splunkBin) return [] as string[];
       const found = new Set<string>();
@@ -4429,13 +4443,14 @@ disabled = 0
       for (const command of commands) {
         try {
           const p = await runCommand('bash',['-lc',command],{toolId,toolNameFa:'کشف مقصدهای مؤثر Splunk',toolNameEn:'Effective Splunk target discovery',category:'splunk',timeoutMs:12000});
-          for (const m of String(p.stdout || '').matchAll(/(?:server|target-broker|manager_uri|master_uri|uri)\s*=\s*([^\s,#]+)/gi)) {
-            let value = String(m[1] || '').replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/\/$/,'');
-            value = value.split(',')[0];
-            if (/^[A-Za-z0-9_.:-]+:\d+$/.test(value)) found.add(value);
-          }
+          collectTargetsFromText(String(p.stdout || ''), found);
         } catch (_) {}
       }
+      try {
+        const listing = await runCommand('find',[path.join(splunkHome,'etc'),'-type','f','(','-name','outputs.conf','-o','-name','deploymentclient.conf','-o','-name','server.conf',')','-print'],{toolId,toolNameFa:'کشف فایل‌های واقعی مقصد Splunk',toolNameEn:'Real Splunk target config files',category:'splunk',timeoutMs:12000});
+        const files = String(listing.stdout || '').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,160);
+        for (const file of files) { try { collectTargetsFromText(readFileTailBounded(file,256*1024),found); } catch (_) {} }
+      } catch (_) {}
       return [...found].slice(0,16);
     };
 
@@ -4492,7 +4507,8 @@ disabled = 0
       add('safety',fa,en,'warn',reasonFa,reasonEn,command,'','',0);
     };
 
-    const effectiveTargets = [...new Set([...configuredTargets, ...(await discoverEffectiveSplunkTargets())])];
+    const discoveredTargets = await discoverEffectiveSplunkTargets();
+    const effectiveTargets = [...new Set([...discoveredTargets, ...configuredTargets])].filter((target: string) => !isPlaceholderTarget(target)).slice(0,16);
     switch (toolId) {
       case 'bento_overview': {
         const ip = await run('ip',['-brief','addr'],'شبکه واقعی Bento','Bento real network');
