@@ -5403,13 +5403,18 @@ disabled = 0
         const realProbe = await validateToolInternal(toolId);
         checks.push(...realProbe.checks);
 
-        const hasWarning = checks.some(c => c.status === 'warn');
+        // Safety/read-only checks describe intentionally skipped mutating operations.
+        // They must remain visible as partial coverage, but must not reduce the
+        // functional score or turn an otherwise healthy tool into a warning.
+        const scoredChecks = checks.filter((c:any) => c.kind !== 'safety');
+        const functionalWarnings = scoredChecks.filter((c:any) => c.status === 'warn');
+        const hasWarning = functionalWarnings.length > 0;
         const requiredCommandCount = spec.commands.length;
         const passedCommandCount = requiredCommandCount - missingCommands.length;
         const routeCount = spec.routes.length;
         const passedRouteCount = routeCount - missingRoutes.length;
-        const checkCount = checks.length;
-        const passedChecks = checks.filter(c => c.status === 'pass').length;
+        const checkCount = scoredChecks.length;
+        const passedChecks = scoredChecks.filter((c:any) => c.status === 'pass').length;
         const score = checkCount ? Math.round((passedChecks / checkCount) * 100) : 100;
         toolResults[toolId] = {
           toolId,
@@ -5419,8 +5424,8 @@ disabled = 0
           operational: !hasWarning,
           latencyMs: Date.now() - started,
           checks,
-          summaryFa: hasWarning ? 'نیازمند بررسی واقعی یا وابستگی تکمیلی است.' : 'وابستگی‌ها و سطح backend این ابزار بررسی شد.',
-          summaryEn: hasWarning ? 'Needs real-world verification or an additional dependency.' : 'Dependencies and backend surface verified.'
+          summaryFa: hasWarning ? 'نیازمند بررسی واقعی یا وابستگی تکمیلی است.' : 'قابلیت‌های عملکردی و وابستگی‌های قابل‌آزمایش تأیید شد؛ عملیات تغییر‌دهنده در read-only عمداً اجرا نشد.',
+          summaryEn: hasWarning ? 'Needs real-world verification or an additional dependency.' : 'Functional checks and executable dependencies passed; mutating operations were intentionally skipped in read-only mode.'
         };
       }
 
