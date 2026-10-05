@@ -4363,7 +4363,7 @@ disabled = 0
           'command not found',
           127
         );
-        return null;
+        return { code: 127, stdout: '', stderr: 'command not found' };
       }
       const result = await runCommand(command, args, {
         toolId,
