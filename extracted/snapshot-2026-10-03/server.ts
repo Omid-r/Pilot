@@ -4641,14 +4641,14 @@ disabled = 0
             ? 'btool check بدون خطای syntax/config پایان یافت.'
             : onlyNoSpec
               ? 'btool فقط برای custom confهای بدون spec file هشدار داد؛ خطای syntax/config واقعی مشاهده نشد.'
-              : \`btool check خطا داد: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`;
+              : `btool check خطا داد: ${b.stderr||b.stdout||`exit ${b.code}`}`;
           const btoolEn = b.code===0
             ? 'btool check completed without config errors.'
             : onlyNoSpec
               ? 'btool only reported custom conf files without spec files; no syntax/config error was observed.'
-              : \`btool check failed: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`;
+              : `btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`;
           add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',btoolStatus,btoolFa,btoolEn,
-            \`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`,String(b.stdout||''),String(b.stderr||''),b.code
+            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
           );
           if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
         }
@@ -4797,9 +4797,9 @@ disabled = 0
               btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
             add('functional','Syntax کانفیگ Splunk','Splunk config syntax',
               (b.code===0 || onlyNoSpec) ? 'pass' : 'warn',
-              b.code===0 ? 'syntax/config validation موفق بود.' : onlyNoSpec ? 'فقط custom conf بدون spec file گزارش شد؛ خطای syntax/config واقعی مشاهده نشد.' : \`validation شکست خورد: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`,
-              b.code===0 ? 'config validation passed.' : onlyNoSpec ? 'Only custom conf without spec files were reported; no real syntax/config error was observed.' : \`config validation failed: \${b.stderr||b.stdout||\`exit \${b.code}\`}\`,
-              \`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`,String(b.stdout||''),String(b.stderr||''),b.code
+              b.code===0 ? 'syntax/config validation موفق بود.' : onlyNoSpec ? 'فقط custom conf بدون spec file گزارش شد؛ خطای syntax/config واقعی مشاهده نشد.' : `validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
+              b.code===0 ? 'config validation passed.' : onlyNoSpec ? 'Only custom conf without spec files were reported; no real syntax/config error was observed.' : `config validation failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
+              `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
             );
             if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
           }
@@ -4820,9 +4820,9 @@ disabled = 0
         }
         if(matched){
           add('functional','جستجوی واقعی مستندات','Real documentation search','pass',
-            \`مستندات واقعی پیدا و جستجو شد: \${matched}\`,
-            \`Real documentation found and searched successfully: \${matched}\`,
-            \`grep -Eqi "splunk|cluster|doctor|offline|installation" "\${matched}"\`,matched,'',0
+            `مستندات واقعی پیدا و جستجو شد: ${matched}`,
+            `Real documentation found and searched successfully: ${matched}`,
+            `grep -Eqi "splunk|cluster|doctor|offline|installation" "${matched}"`,matched,'',0
           );
         } else {
           add('functional','جستجوی واقعی مستندات','Real documentation search','warn',
