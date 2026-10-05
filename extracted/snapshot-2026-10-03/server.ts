@@ -4722,16 +4722,19 @@ disabled = 0
       }
       case 'heartbeat_radar': {
         const link=await run('ip',['-s','link'],'Link telemetry واقعی','Real link telemetry');
-        const targetsToCheck = [...new Set(effectiveTargets)].filter(Boolean).slice(0,6);
+        const targetsToCheck = [...new Set(effectiveTargets)]
+          .map((target:string) => parseTarget(target, 8089))
+          .filter((item:any) => item.host && item.port === 8089)
+          .filter((item:any) => !isClearlyPlaceholderHost(item.host))
+          .slice(0,6);
         if (targetsToCheck.length === 0) {
           addPartial('Heartbeat نودهای واقعی','Real node heartbeat',
             'هیچ endpoint واقعی کلاستر از کانفیگ مؤثر Splunk یا runtime log پیدا نشد؛ رادار نباید node ساختگی نشان دهد.',
             'No real cluster endpoint was found in effective Splunk config or runtime logs; the radar must not fabricate nodes.');
         } else {
-          for(const target of targetsToCheck){
-            const host=target.replace(/:\d+$/,'');
-            const port=Number((target.match(/:(\d+)$/)||[])[1]||8089);
-            const p=await testTcpPort(host,port,1800);
+          for(const item of targetsToCheck){
+            const target = item.host + ':' + item.port;
+            const p=await testTcpPort(item.host,item.port,1800);
             add('functional','Heartbeat '+target,'Heartbeat '+target,p.open?'pass':'warn',
               p.open?'node '+target+' پاسخ TCP داد؛ latency='+p.latencyMs+'ms.':'node '+target+' پاسخ نداد: '+(p.error||'timeout'),
               p.open?'Node '+target+' answered TCP; latency='+p.latencyMs+'ms.':'Node '+target+' did not answer: '+(p.error||'timeout'),
