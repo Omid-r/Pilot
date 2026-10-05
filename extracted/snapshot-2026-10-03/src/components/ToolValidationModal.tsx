@@ -223,7 +223,7 @@ export const ToolValidationModal: React.FC<Props> = ({
                   <button onClick={() => void runValidateAll()} disabled={isValidating || isGeneratingReport} className='px-3 py-2 rounded-xl bg-white/[0.06] text-white text-xs font-bold cursor-pointer disabled:opacity-40'><RefreshCw className='w-3.5 h-3.5 inline mr-1' />{isFa ? 'تست معمولی' : 'Basic Run'}</button>
                 </div>
               </div>
-              {offlineSummary && <div className='p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10 text-xs text-slate-300'>{offlineSummary.score}/100 · {offlineSummary.healthyCount} healthy · {offlineSummary.warningCount} warning · {offlineSummary.errorCount} error · {offlineSummary.durationMs}ms</div>}
+              {offlineSummary && <div className='p-4 rounded-2xl border border-violet-500/20 bg-violet-950/10 text-xs text-slate-300'>{offlineSummary.score}/100 · {offlineSummary.healthyCount} functional · {(offlineSummary as any).partialCount ?? 0} partial · {offlineSummary.warningCount} warning · {offlineSummary.errorCount} error · {offlineSummary.durationMs}ms</div>}
               {diagnosticProgress && diagnosticProgress.status !== 'completed' && diagnosticProgress.status !== 'error' && (
                 <div className='p-4 rounded-2xl border border-cyan-500/20 bg-cyan-950/10 space-y-2'>
                   <div className='flex items-center justify-between text-xs text-cyan-200'>
