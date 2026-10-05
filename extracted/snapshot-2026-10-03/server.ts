@@ -4792,12 +4792,12 @@ disabled = 0
       operational: fullyFunctional,
       latencyMs: Date.now() - started,
       checks,
-      summaryFa: warns
+      summaryFa: warningCount
         ? `${warningCount} مورد نیازمند بررسی است؛ فقط مواردی که واقعاً اجرا و تأیید شده‌اند PASS هستند.`
         : fullyFunctional
           ? 'تست functional واقعی با موفقیت انجام شد و شواهد عملکردی کامل است.'
           : 'فقط بخشی از قابلیت‌ها به‌صورت read-only/dry-run قابل اثبات بود؛ سلامت کامل ابزار تأیید نشده است.',
-      summaryEn: warns
+      summaryEn: warningCount
         ? `${warningCount} item(s) need attention; only actually executed and verified checks are PASS.`
         : fullyFunctional
           ? 'A real functional test completed successfully with full evidence.'
