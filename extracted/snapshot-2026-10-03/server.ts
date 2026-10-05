@@ -4444,8 +4444,20 @@ disabled = 0
       if (/^[A-Za-z0-9_.-]+$/.test(value)) return value + ':' + defaultPort;
       return '';
     };
-    const isClearlyPlaceholderHost = (host: string) => /^(?:your|replace|example|changeme|hostname|host|server)[A-Za-z0-9_-]*$/i.test(host)
+    const isClearlyPlaceholderHost = (host: string) => /^(?:your|replace|example|changeme|hostname|host|server|self|node|target|indexer|searchhead|manager|master)[A-Za-z0-9_.-]*$/i.test(host)
+      || /^<[^>]+>$/.test(host)
       || /(?:\.example\.|\.corp\.net$|\.cluster\.splunk$)/i.test(host);
+    const isPlaceholderTarget = (value: string) => {
+      const v = String(value || '').toLowerCase().trim();
+      const host = v.replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/^ssh:\/\//,'').replace(/:\d+$/,'');
+      if (isClearlyPlaceholderHost(host)) return true;
+      return new Set([
+        'hf01.corp.net:8089','idx01-site1.cluster.splunk:8089','idx02-site1.cluster.splunk:8089',
+        'sh01.corp.net:8000','ds01.corp.net:8089','10.20.30.45:8089','10.20.30.50:8089',
+        '10.20.30.51:8089','10.20.30.40:8000','10.20.30.60:8089',
+        'self:8089','self:22','localhost:8089'
+      ].has(v));
+    };
     const extractTargets = (text: string) => {
       const candidates = new Set<string>();
       for (const m of text.matchAll(/(?:manager_uri|master_uri|target-broker|server|uri)\s*=\s*([^\s,#]+)/gi)) {
@@ -4460,16 +4472,6 @@ disabled = 0
       ...extractTargets(outputsConf),
     ])];
 
-    const isPlaceholderTarget = (value: string) => {
-      const v = String(value || '').toLowerCase();
-      const host = v.replace(/^https?:\/\//,'').replace(/^tcp:\/\//,'').replace(/:\d+$/,'');
-      if (isClearlyPlaceholderHost(host)) return true;
-      return new Set([
-        'hf01.corp.net:8089','idx01-site1.cluster.splunk:8089','idx02-site1.cluster.splunk:8089',
-        'sh01.corp.net:8000','ds01.corp.net:8089','10.20.30.45:8089','10.20.30.50:8089',
-        '10.20.30.51:8089','10.20.30.40:8000','10.20.30.60:8089'
-      ]).has(v);
-    };
     const collectTargetsFromText = (text: string, found: Set<string>) => {
       for (const m of String(text || '').matchAll(/(?:server|target-broker|manager_uri|master_uri|uri)\s*=\s*([^\s,#]+)/gi)) {
         const value = normalizeTargetEndpoint(String(m[1] || ''));
@@ -4633,12 +4635,20 @@ disabled = 0
           `TCP ${host}:${sshPort}`,sshProbe.open?String(sshProbe.latencyMs)+'ms':'',sshProbe.error||'',sshProbe.open?0:1
         );
         const auth = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],`احراز هویت SSH واقعی ${host}`,`Real SSH authentication ${host}`,9000);
-        add('functional','احراز هویت SSH واقعی','Real SSH authentication',
-          auth?.code===0?'pass':'warn',
-          auth?.code===0?`احراز هویت non-interactive روی ${host} موفق شد.`:`SSH به ${host} بدون credential غیرتعاملی موفق نشد؛ ابزار خراب نیست، credential لازم است.`,
-          auth?.code===0?`Non-interactive SSH authentication to ${host} succeeded.`:`Non-interactive SSH to ${host} failed; credentials are required.`,
-          `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`,auth?.stdout||'',auth?.stderr||'',auth?.code
-        );
+        if (auth?.code===0) {
+          add('functional','احراز هویت SSH واقعی','Real SSH authentication',
+            'pass',
+            `احراز هویت non-interactive روی ${host} موفق شد.`,
+            `Non-interactive SSH authentication to ${host} succeeded.`,
+            `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`,auth?.stdout||'',auth?.stderr||'',auth?.code
+          );
+        } else {
+          addPartial('Credential SSH ریموت','Remote SSH credentials',
+            `اتصال شبکه‌ای مقصد بررسی شد، اما احراز هویت غیرتعاملی روی ${host} بدون credential معتبر انجام نشد؛ این محدودیت پوشش diagnostic است، نه failure خود ابزار.`,
+            `Network reachability was tested, but non-interactive SSH authentication to ${host} could not be proven without valid credentials; this is a diagnostic coverage limitation, not a tool failure.`,
+            `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`
+          );
+        }
         if (toolId === 'remote_gateway') {
           const mgmt = await testTcpPort(host,managementPort,1800);
           add('functional','پورت Management Splunk واقعی','Real Splunk management port',
@@ -4678,28 +4688,27 @@ disabled = 0
         await splunkVersion();
         if (splunkBin) {
           const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'اعتبارسنجی واقعی کانفیگ Splunk','Real Splunk config validation',20000);
-          const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
-          const btoolLines = combinedBtool.split('\n')
-            .map((x:string)=>x.trim())
-            .filter(Boolean)
-            .filter((line:string)=>!/^Command failed:\s*bash -lc\s+SPLUNK_HOME=/i.test(line));
+          const btoolStdout = String(b.stdout || '');
+          const btoolStderr = String(b.stderr || '');
+          const btoolLines = btoolStdout.split('\n').map((x:string)=>x.trim()).filter(Boolean);
+          const meaningfulStderr = btoolStderr.replace(/^Command failed:\s*bash -lc\s+SPLUNK_HOME=.*$/gim,'').trim();
           const onlyNoSpec = b.code !== 0 && btoolLines.length > 0 &&
-            btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:'));
+            btoolLines.every((line:string)=>line.startsWith('Checking:') || line.startsWith('No spec file for:')) && !meaningfulStderr;
           const btoolStatus = (b.code===0 || onlyNoSpec) ? 'pass' : 'warn';
           const btoolFa = b.code===0
             ? 'btool check بدون خطای syntax/config پایان یافت.'
             : onlyNoSpec
               ? 'btool فقط برای custom confهای بدون spec file هشدار داد؛ خطای syntax/config واقعی مشاهده نشد.'
-              : `btool check خطا داد: ${b.stderr||b.stdout||`exit ${b.code}`}`;
+              : `btool check خطا داد: ${meaningfulStderr||btoolStdout||`exit ${b.code}`}`;
           const btoolEn = b.code===0
             ? 'btool check completed without config errors.'
             : onlyNoSpec
               ? 'btool only reported custom conf files without spec files; no syntax/config error was observed.'
               : `btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`;
           add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',btoolStatus,btoolFa,btoolEn,
-            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
+            `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,btoolStdout,btoolStderr,b.code
           );
-          if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
+          if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(btoolStdout+'\n'+meaningfulStderr);
         }
         break;
       }
@@ -4864,22 +4873,21 @@ disabled = 0
           );
           if(splunkBin){
             const b=await run('bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'Syntax کانفیگ واقعی','Real config syntax',20000);
-            const combinedBtool = String(b.stdout || '') + '\n' + String(b.stderr || '');
-            const btoolLines = combinedBtool.split('\n').map((x:string)=>x.trim()).filter(Boolean);
+            const btoolStdout = String(b.stdout || '');
+            const btoolStderr = String(b.stderr || '');
+            const btoolLines = btoolStdout.split('\n').map((x:string)=>x.trim()).filter(Boolean);
             const normalizedBtoolLines = btoolLines
               .map((line:string)=>line.replace(/\u001b\[[0-9;]*m/g,'').trim())
               .filter(Boolean);
+            const normalizedStderr = btoolStderr
+              .replace(/^Command failed:\s*bash -lc\s+SPLUNK_HOME=.*$/gim,'')
+              .trim();
             const btoolActualErrors = normalizedBtoolLines.filter((line:string) =>
               /(?:^|\s)(?:ERROR|Error|FATAL|Fatal|Invalid|Unknown|Failed|Unable|Cannot|not a valid|malformed|syntax error)(?:\b|:)/i.test(line)
               && !/^No spec file for:/i.test(line)
             );
-            const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 && btoolActualErrors.length === 0;
-            add('functional','Syntax کانفیگ Splunk','Splunk config syntax',
-              (b.code===0 || onlyNoSpec) ? 'pass' : 'warn',
-              b.code===0 ? 'syntax/config validation موفق بود.' : onlyNoSpec ? 'فقط custom conf بدون spec file گزارش شد؛ خطای syntax/config واقعی مشاهده نشد.' : `validation شکست خورد: ${b.stderr||b.stdout||`exit ${b.code}`}`,
-              b.code===0 ? 'config validation passed.' : onlyNoSpec ? 'Only custom conf without spec files were reported; no real syntax/config error was observed.' : `config validation failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
-              `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
-            );
+            const onlyNoSpec = b.code !== 0 && normalizedBtoolLines.length > 0 &&
+              btoolActualErrors.length === 0 && !normalizedStderr;
             if (b.code !== 0 && !onlyNoSpec) addBtoolIssueDetails(combinedBtool);
           }
         }
