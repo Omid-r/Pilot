@@ -4489,11 +4489,11 @@ disabled = 0
         const logPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
         if (fs.existsSync(logPath)) {
           const tail = readFileTailBounded(logPath, 2 * 1024 * 1024);
-          for (const m of tail.matchAll(/(?:server=|uri_host_port="https?:\\/\\/)([A-Za-z0-9_.:-]+:\\d+)/g)) {
+          for (const m of tail.matchAll(/(?:server=|uri_host_port="https?:\/\/)([A-Za-z0-9_.:-]+:\d+)/g)) {
             const value = String(m[1] || '').trim();
-            if (/^[A-Za-z0-9_.-]+:\\d+$/.test(value) && !isPlaceholderTarget(value)) found.add(value);
+            if (/^[A-Za-z0-9_.-]+:\d+$/.test(value) && !isPlaceholderTarget(value)) found.add(value);
           }
-          for (const m of tail.matchAll(/ip=([A-Za-z0-9_.-]+):(\\d+)/g)) {
+          for (const m of tail.matchAll(/ip=([A-Za-z0-9_.-]+):(\d+)/g)) {
             const value = m[1] + ':' + m[2];
             if (!isPlaceholderTarget(value)) found.add(value);
           }
