@@ -5595,53 +5595,40 @@ disabled = 0
     });
   });
 
-  // API: Validate all tools across the entire platform
-  app.post('/api/tools/validate-all', async (req, res) => {
+  // API: Validate all tools using the same evidence-based engine as the comprehensive report.
+  app.post('/api/tools/validate-all', async (_req, res) => {
     try {
       const allToolIds = [
-        'architect_overseer',
-        'autonomous_agent',
-        'ai_diagnostics',
-        'bento_overview',
-        'cluster_deployer',
-        'architecture_auditor',
-        'topology',
-        'management_nodes',
-        'commercial_license',
-        'docker_k8s',
-        'health_audit',
-        'live_logs',
-        'config_editor',
-        'doc_reference',
-        'heartbeat_radar',
-        'alert_manager',
-        'network_sources',
-        'component_agents',
-        'remote_gateway',
-        'package_center',
-        'backup_archive',
-        'network_toolbox',
-        'admin_security'
+        'architect_overseer','autonomous_agent','ai_diagnostics','bento_overview','cluster_deployer',
+        'architecture_auditor','topology','management_nodes','commercial_license','docker_k8s',
+        'health_audit','live_logs','config_editor','doc_reference','heartbeat_radar','alert_manager',
+        'network_sources','component_agents','remote_gateway','package_center','backup_archive',
+        'network_toolbox','admin_security'
       ];
-
       const results: Record<string, any> = {};
-      await Promise.all(
-        allToolIds.map(async (id) => {
-          results[id] = await validateToolInternal(id);
-        })
-      );
-
+      for (const id of allToolIds) {
+        results[id] = await validateToolInternal(id);
+      }
+      const values=Object.values(results) as any[];
+      const healthyCount=values.filter(r=>r.status==='healthy' && r.evidenceLevel==='functional').length;
+      const warningCount=values.filter(r=>r.status!=='healthy').length;
+      const partialCount=values.filter(r=>r.evidenceLevel!=='functional').length;
+      const overallScore=values.length ? Math.round(values.reduce((sum,r)=>sum+Number(r.score||0),0)/values.length) : 0;
       res.json({
-        success: true,
-        totalTools: allToolIds.length,
-        healthyCount: Object.values(results).filter((r:any)=>r.status==='healthy').length,
-        warningCount: Object.values(results).filter((r:any)=>r.status!=='healthy').length,
+        success:true,
+        reportType:'PILOT_VALIDATE_ALL_EVIDENCE_BASED',
+        reportVersion:'1.3',
+        totalTools:allToolIds.length,
+        healthyCount,
+        warningCount,
+        partialCount,
+        overallScore,
         results,
-        messageFa: `اعتبارسنجی تمامی ${allToolIds.length} ابزار با موفقیت انجام شد و همگی سالم هستند.`,
-        messageEn: `Validation of all ${allToolIds.length} tools completed successfully. All modules healthy.`
+        messageFa:'اعتبارسنجی همه ابزارها با موتور functional واقعی انجام شد؛ ابزارهای ناقص سالم اعلام نمی‌شوند.',
+        messageEn:'All tools were validated with the evidence-based functional engine; partial tools are not reported as healthy.'
       });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+    } catch(err:any) {
+      res.status(500).json({success:false,error:err.message});
     }
   });
 
