@@ -35,6 +35,23 @@ let activeHttpServer: http.Server | null = null;
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
+  const diagnosticJobs = new Map<string, any>();
+
+  const purgeDiagnosticJobs = () => {
+    const now = Date.now();
+    for (const [id, job] of diagnosticJobs.entries()) {
+      if (job.finishedAt && now - Date.parse(job.finishedAt) > 30 * 60 * 1000) {
+        diagnosticJobs.delete(id);
+      }
+    }
+    const completed = [...diagnosticJobs.values()]
+      .filter(job => job.status === 'completed' || job.status === 'error')
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+    for (const job of completed.slice(3)) {
+      diagnosticJobs.delete(job.jobId);
+    }
+  };
+
 
   app.disable('x-powered-by');
   app.use(express.json());
@@ -4729,11 +4746,12 @@ disabled = 0
     }
   });
 
-  // API: Comprehensive diagnostic report for human/AI troubleshooting.
-  // Runs every tool validation sequentially, captures real command evidence and
-  // produces a bounded, shareable JSON report. No secrets are intentionally included.
+  // API: Start a background comprehensive diagnostic report.
+  // The previous implementation held the HTTP request open while all tools ran.
+  // This version is job-based so the browser stays responsive and progress is observable.
   app.post('/api/tools/diagnostic-report', async (_req, res) => {
-    const started = Date.now();
+    purgeDiagnosticJobs();
+
     const allToolIds = [
       'architect_overseer',
       'autonomous_agent',
@@ -4760,122 +4778,190 @@ disabled = 0
       'admin_security'
     ];
 
-    const redact = (value: unknown): string => {
-      let s = String(value ?? '');
-      s = s.replace(/(password|passwd|token|authorization|cookie|secret|private[_ -]?key|api[_ -]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
-      s = s.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED]');
-      s = s.replace(/-----BEGIN [^-]+ PRIVATE KEY-----[\\s\\S]*?-----END [^-]+ PRIVATE KEY-----/g, '[PRIVATE KEY REDACTED]');
-      return s.length > 8000 ? s.slice(0, 8000) + '\\n...[truncated]...' : s;
+    const jobId = 'diag-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    const job = {
+      jobId,
+      status: 'queued' as 'queued' | 'running' | 'completed' | 'error',
+      startedAt: new Date().toISOString(),
+      finishedAt: null as string | null,
+      totalTools: allToolIds.length,
+      completedTools: 0,
+      currentToolId: null as string | null,
+      currentToolIndex: 0,
+      tools: {} as Record<string, any>,
+      error: null as string | null,
+      report: null as any
     };
+    diagnosticJobs.set(jobId, job);
 
-    const results: Record<string, any> = {};
-    for (const toolId of allToolIds) {
+    void (async () => {
+      const started = Date.now();
       try {
-        const result = await validateToolInternal(toolId);
-        results[toolId] = {
-          ...result,
-          checks: result.checks.map((check: any) => ({
-            ...check,
-            detailFa: redact(check.detailFa),
-            detailEn: redact(check.detailEn),
-            command: redact(check.command),
-            stdout: redact(check.stdout),
-            stderr: redact(check.stderr)
-          }))
+        job.status = 'running';
+        const redact = (value: unknown): string => {
+          let s = String(value ?? '');
+          s = s.replace(/(password|passwd|token|authorization|cookie|secret|private[_ -]?key|api[_ -]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
+          s = s.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED]');
+          s = s.replace(/-----BEGIN [^-]+ PRIVATE KEY-----[\s\S]*?-----END [^-]+ PRIVATE KEY-----/g, '[PRIVATE KEY REDACTED]');
+          return s.length > 8000 ? s.slice(0, 8000) + '\n...[truncated]...' : s;
         };
+
+        for (let index = 0; index < allToolIds.length; index++) {
+          const toolId = allToolIds[index];
+          job.currentToolIndex = index + 1;
+          job.currentToolId = toolId;
+          try {
+            const result = await validateToolInternal(toolId);
+            job.tools[toolId] = {
+              ...result,
+              checks: result.checks.map((check: any) => ({
+                ...check,
+                detailFa: redact(check.detailFa),
+                detailEn: redact(check.detailEn),
+                command: redact(check.command),
+                stdout: redact(check.stdout),
+                stderr: redact(check.stderr)
+              }))
+            };
+          } catch (err: any) {
+            job.tools[toolId] = {
+              toolId,
+              status: 'error',
+              score: 0,
+              latencyMs: 0,
+              installed: false,
+              operational: false,
+              checks: [{
+                nameFa: 'خطای اجرایی گزارش',
+                nameEn: 'Diagnostic execution error',
+                status: 'warn',
+                detailFa: redact(err?.message || String(err)),
+                detailEn: redact(err?.message || String(err)),
+                stderr: redact(err?.stack || String(err)),
+                exitCode: 1
+              }],
+              summaryFa: 'اجرای ممیزی این ابزار با خطای اجرایی متوقف شد.',
+              summaryEn: 'Diagnostic execution for this tool stopped with a runtime error.'
+            };
+          }
+          job.completedTools = index + 1;
+        }
+
+        const values = Object.values(job.tools) as any[];
+        const healthyCount = values.filter(r => r.status === 'healthy').length;
+        const warningCount = values.filter(r => r.status === 'warning').length;
+        const errorCount = values.filter(r => r.status === 'error').length;
+        const overallScore = values.length
+          ? Math.round(values.reduce((sum, r) => sum + Number(r.score || 0), 0) / values.length)
+          : 0;
+
+        let health = null;
+        try {
+          const audit = getSystemAudit();
+          const net = getSystemNetworkInfo();
+          health = {
+            hostname: net.hostname,
+            primaryIp: net.primaryIp,
+            ipv4: net.ipv4List,
+            platform: process.platform,
+            arch: process.arch,
+            node: process.version,
+            runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
+            memoryTotalBytes: os.totalmem(),
+            memoryFreeBytes: os.freemem(),
+            loadAverage: os.loadavg(),
+            uptimeSeconds: os.uptime(),
+            splunkHome: audit.splunkHome.path,
+            splunkDetected: audit.splunkHome.detected
+          };
+        } catch (_) {}
+
+        const failedTools = values
+          .filter(r => r.status !== 'healthy')
+          .map(r => ({
+            toolId: r.toolId,
+            status: r.status,
+            score: r.score,
+            summaryFa: redact(r.summaryFa),
+            summaryEn: redact(r.summaryEn),
+            failedChecks: r.checks.filter((check: any) => check.status !== 'pass').map((check: any) => ({
+              nameFa: check.nameFa,
+              nameEn: check.nameEn,
+              command: redact(check.command),
+              stdout: redact(check.stdout),
+              stderr: redact(check.stderr),
+              exitCode: check.exitCode,
+              detailFa: redact(check.detailFa),
+              detailEn: redact(check.detailEn)
+            }))
+          }));
+
+        job.report = {
+          success: true,
+          reportType: 'PILOT_COMPREHENSIVE_TOOL_DIAGNOSTIC',
+          reportVersion: '1.1',
+          generatedAt: new Date().toISOString(),
+          durationMs: Date.now() - started,
+          executionMode: 'BACKGROUND_SEQUENTIAL_REAL_READ_ONLY',
+          totalTools: values.length,
+          healthyCount,
+          warningCount,
+          errorCount,
+          overallScore,
+          host: health,
+          failedTools,
+          tools: job.tools,
+          notes: [
+            'All tool validations were executed sequentially in a background server job so the browser is not blocked.',
+            'Command evidence is read-only; this report does not invoke write/remediation operations.',
+            'Secrets found in common key/value patterns are redacted before the report is returned.'
+          ]
+        };
+        job.status = 'completed';
+        job.currentToolId = null;
+        job.finishedAt = new Date().toISOString();
       } catch (err: any) {
-        results[toolId] = {
-          toolId,
-          status: 'error',
-          score: 0,
-          latencyMs: 0,
-          installed: false,
-          operational: false,
-          checks: [{
-            nameFa: 'خطای اجرایی گزارش',
-            nameEn: 'Diagnostic execution error',
-            status: 'warn',
-            detailFa: redact(err?.message || String(err)),
-            detailEn: redact(err?.message || String(err)),
-            stderr: redact(err?.stack || String(err)),
-            exitCode: 1
-          }],
-          summaryFa: 'اجرای ممیزی این ابزار با خطای اجرایی متوقف شد.',
-          summaryEn: 'Diagnostic execution for this tool stopped with a runtime error.'
-        };
+        job.status = 'error';
+        job.error = String(err?.message || err);
+        job.currentToolId = null;
+        job.finishedAt = new Date().toISOString();
+      } finally {
+        purgeDiagnosticJobs();
       }
-    }
+    })();
 
-    const values = Object.values(results) as any[];
-    const healthyCount = values.filter(r => r.status === 'healthy').length;
-    const warningCount = values.filter(r => r.status === 'warning').length;
-    const errorCount = values.filter(r => r.status === 'error').length;
-    const overallScore = values.length
-      ? Math.round(values.reduce((sum, r) => sum + Number(r.score || 0), 0) / values.length)
-      : 0;
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.status(202).json({
+      success: true,
+      async: true,
+      jobId,
+      status: job.status,
+      totalTools: job.totalTools,
+      completedTools: 0,
+      currentToolId: null
+    });
+  });
 
-    let health = null;
-    try {
-      const audit = getSystemAudit();
-      const net = getSystemNetworkInfo();
-      health = {
-        hostname: net.hostname,
-        primaryIp: net.primaryIp,
-        ipv4: net.ipv4List,
-        platform: process.platform,
-        arch: process.arch,
-        node: process.version,
-        runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
-        memoryTotalBytes: os.totalmem(),
-        memoryFreeBytes: os.freemem(),
-        loadAverage: os.loadavg(),
-        uptimeSeconds: os.uptime(),
-        splunkHome: audit.splunkHome.path,
-        splunkDetected: audit.splunkHome.detected
-      };
-    } catch (_) {}
-
-    const failedTools = values
-      .filter(r => r.status !== 'healthy')
-      .map(r => ({
-        toolId: r.toolId,
-        status: r.status,
-        score: r.score,
-        summaryFa: redact(r.summaryFa),
-        summaryEn: redact(r.summaryEn),
-        failedChecks: r.checks.filter((c:any) => c.status !== 'pass').map((c:any) => ({
-          nameFa: c.nameFa,
-          nameEn: c.nameEn,
-          command: redact(c.command),
-          stdout: redact(c.stdout),
-          stderr: redact(c.stderr),
-          exitCode: c.exitCode,
-          detailFa: redact(c.detailFa),
-          detailEn: redact(c.detailEn)
-        }))
-      }));
+  // API: Read background diagnostic job progress/result.
+  app.get('/api/tools/diagnostic-report/:jobId', (req, res) => {
+    purgeDiagnosticJobs();
+    const job = diagnosticJobs.get(String(req.params.jobId));
+    if (!job) return res.status(404).json({ success: false, error: 'Diagnostic job not found or expired.' });
 
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.json({
       success: true,
-      reportType: 'PILOT_COMPREHENSIVE_TOOL_DIAGNOSTIC',
-      reportVersion: '1.0',
-      generatedAt: new Date().toISOString(),
-      durationMs: Date.now() - started,
-      executionMode: 'SEQUENTIAL_REAL_READ_ONLY',
-      totalTools: values.length,
-      healthyCount,
-      warningCount,
-      errorCount,
-      overallScore,
-      host: health,
-      failedTools,
-      tools: results,
-      notes: [
-        'All tool validations were executed sequentially to avoid browser/server overload.',
-        'Command evidence is read-only unless a tool itself exposes an explicit write action; this report invokes validation paths only.',
-        'Secrets found in common key/value patterns are redacted before the report is returned.'
-      ]
+      jobId: job.jobId,
+      status: job.status,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      totalTools: job.totalTools,
+      completedTools: job.completedTools,
+      currentToolIndex: job.currentToolIndex,
+      currentToolId: job.currentToolId,
+      error: job.error,
+      report: job.status === 'completed' ? job.report : null,
+      partialResults: job.tools
     });
   });
 
