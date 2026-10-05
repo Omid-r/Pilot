@@ -83,9 +83,9 @@ export const AlertNotificationCenter: React.FC<AlertNotificationCenterProps> = (
       const ok = Boolean(data.success);
 
       const newLog: DispatchedAlertLog = {
-        id: \`disp-\${Date.now()}\`,
+        id: `disp-${Date.now()}`,
         timestamp: now,
-        ruleTitle: isFa ? \`تست کانال \${channel.name}\` : \`Channel Test — \${channel.name}\`,
+        ruleTitle: isFa ? `تست کانال ${channel.name}` : `Channel Test — ${channel.name}`,
         channelType: channel.type === 'TEAMS_SLACK' ? 'WEBHOOK' : channel.type as any,
         targetRecipient: channel.endpointOrTarget,
         severity: 'INFO',
@@ -99,11 +99,11 @@ export const AlertNotificationCenter: React.FC<AlertNotificationCenterProps> = (
       setLogs(prev => [newLog, ...prev]);
       setTestStatusMessage(
         ok
-          ? (isFa ? \`تست واقعی کانال \${channel.name} موفق بود. وضعیت: \${data.status}\` : \`Real channel test succeeded: \${data.status}\`)
-          : (isFa ? \`تست واقعی کانال ناموفق بود: \${data.error || 'خطای ناشناخته'}\` : \`Real channel test failed: \${data.error || 'Unknown error'}\`)
+          ? (isFa ? `تست واقعی کانال ${channel.name} موفق بود. وضعیت: ${data.status}` : `Real channel test succeeded: ${data.status}`)
+          : (isFa ? `تست واقعی کانال ناموفق بود: ${data.error || 'خطای ناشناخته'}` : `Real channel test failed: ${data.error || 'Unknown error'}`)
       );
     } catch (e: any) {
-      setTestStatusMessage(isFa ? \`اجرای تست واقعی ناموفق بود: \${e?.message || e}\` : \`Real test failed: \${e?.message || e}\`);
+      setTestStatusMessage(isFa ? `اجرای تست واقعی ناموفق بود: ${e?.message || e}` : `Real test failed: ${e?.message || e}`);
     } finally {
       setTestingChannelId(null);
     }
