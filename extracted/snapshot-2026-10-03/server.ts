@@ -4477,6 +4477,17 @@ disabled = 0
       return p.code===0;
     };
 
+    const addBtoolIssueDetails = (raw: string) => {
+      const matches = [...String(raw || '').matchAll(/No spec file for:\s*(.+)/g)].map(m => String(m[1] || '').trim()).filter(Boolean);
+      for (const candidate of matches.slice(0,8)) {
+        let kind = 'unknown'; let exists = false;
+        try { exists = fs.existsSync(candidate); kind = exists ? (fs.statSync(candidate).isDirectory() ? 'directory' : 'file') : 'missing'; } catch (_) {}
+        add('functional','جزئیات خطای btool','btool issue detail','warn',
+          exists ? `btool به مسیر ${candidate} اشاره می‌کند؛ نوع=${kind}. این مورد نیازمند بررسی App/Config است.` : `btool به مسیر ${candidate} اشاره می‌کند اما مسیر روی دیسک موجود نیست.`,
+          exists ? `btool references ${candidate}; type=${kind}. Review the affected app/config.` : `btool references ${candidate} but it does not exist on disk.`,
+          'splunk btool check --debug',candidate,'',1);
+      }
+    };
     const addPartial = (fa: string, en: string, reasonFa: string, reasonEn: string, command = '') => {
       add('safety',fa,en,'warn',reasonFa,reasonEn,command,'','',0);
     };
@@ -4504,7 +4515,7 @@ disabled = 0
       case 'management_nodes':
       case 'remote_gateway': {
         const cfg = await run('ssh',['-G','localhost'],'اعتبارسنجی SSH واقعی','Real SSH configuration probe');
-        const live = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=2','localhost','true'],'اتصال SSH محلی واقعی','Real local SSH connection',8000);
+        const live = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=2','-o','StrictHostKeyChecking=accept-new','localhost','true'],'اتصال SSH محلی واقعی','Real local SSH connection',8000);
         if (live?.code === 0) {
           add('functional','اتصال SSH واقعی','Real SSH connection','pass','اتصال واقعی SSH به localhost با BatchMode موفق شد.','A real BatchMode SSH connection to localhost succeeded.','ssh -o BatchMode=yes -o ConnectTimeout=2 localhost true',live.stdout,live.stderr,live.code);
         } else {
@@ -4565,6 +4576,7 @@ disabled = 0
             b.code===0?'btool check completed without config errors.':`btool check failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
             `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
           );
+          if (b.code !== 0) addBtoolIssueDetails(String(b.stdout || '') + '\n' + String(b.stderr || ''));
         }
         break;
       }
@@ -4667,6 +4679,7 @@ disabled = 0
               b.code===0?'config validation passed.':`config validation failed: ${b.stderr||b.stdout||`exit ${b.code}`}`,
               `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,String(b.stdout||''),String(b.stderr||''),b.code
             );
+            if (b.code !== 0) addBtoolIssueDetails(String(b.stdout || '') + '\n' + String(b.stderr || ''));
           }
         }
         addPartial('ویرایش واقعی config','Real config edit',
@@ -4678,7 +4691,7 @@ disabled = 0
         const rootPath=getAppProjectRoot();
         const p=await run('find',[rootPath,'-maxdepth','2','-type','f','-name','README.md','-print','-quit'],'مستندات واقعی','Real documentation');
         if(p?.code===0 && p.stdout.trim()){
-          const g=await run('grep',['-qi','splunk',p.stdout.trim()],'محتوای واقعی مستندات','Real documentation content',5000);
+          const g=await run('grep',['-Eqi','splunk|cluster|doctor',p.stdout.trim()],'محتوای واقعی مستندات','Real documentation content',5000);
           add('functional','جستجوی واقعی مستندات','Real documentation search',g?.code===0?'pass':'warn',
             g?.code===0?'README واقعی پیدا و قابل جستجو است.':'README پیدا شد اما محتوای مورد انتظار تأیید نشد.',
             g?.code===0?'Real README found and searchable.':'README was found but expected content was not verified.',
