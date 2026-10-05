@@ -4530,31 +4530,44 @@ disabled = 0
       case 'autonomous_agent':
       case 'management_nodes':
       case 'remote_gateway': {
-        const cfg = await run('ssh',['-G','localhost'],'اعتبارسنجی SSH واقعی','Real SSH configuration probe');
-        const live = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=2','-o','StrictHostKeyChecking=accept-new','localhost','true'],'اتصال SSH محلی واقعی','Real local SSH connection',8000);
-        if (live?.code === 0) {
-          add('functional','اتصال SSH واقعی','Real SSH connection','pass','اتصال واقعی SSH به localhost با BatchMode موفق شد.','A real BatchMode SSH connection to localhost succeeded.','ssh -o BatchMode=yes -o ConnectTimeout=2 localhost true',live.stdout,live.stderr,live.code);
-        } else {
-          add('functional','اتصال SSH واقعی','Real SSH connection','warn',
-            'SSH client موجود است اما اتصال واقعی بدون تعامل احراز هویت موفق نشد؛ بنابراین این ابزار ۱۰۰٪ تأیید نشده است.',
-            'The SSH client exists, but a real non-interactive localhost connection did not succeed; full functionality is not proven.',
-            'ssh -o BatchMode=yes -o ConnectTimeout=2 localhost true',live?.stdout||'',live?.stderr||'',live?.code
-          );
-        }
         if (effectiveTargets.length === 0) {
-          addPartial('نود هدف پیکربندی‌شده','Configured remote target',
-            'هیچ مقصد مدیریتی واقعی از کانفیگ Splunk استخراج نشد؛ تست remote روی مقصد واقعی انجام نشده است.',
-            'No real management target was found in Splunk configuration; a real remote-node test was not performed.');
-        } else {
-          const target = effectiveTargets[0];
-          const host = target.replace(/:\\d+$/,'');
-          const port = Number((target.match(/:(\\d+)$/)||[])[1] || 22);
-          const probe = await testTcpPort(host, port, 1800);
-          add('functional','دسترسی به مقصد واقعی','Real remote target reachability',
-            probe.open?'pass':'warn',
-            probe.open?`مقصد واقعی ${target} از سرور قابل دسترسی TCP است؛ latency=${probe.latencyMs}ms.`:`مقصد واقعی ${target} قابل دسترسی نیست: ${probe.error||'timeout'}`,
-            probe.open?`Real target ${target} is TCP reachable; latency=${probe.latencyMs}ms.`:`Real target ${target} is not reachable: ${probe.error||'timeout'}`,
-            `TCP ${target}`,probe.open?String(probe.latencyMs)+'ms':'',probe.error||'',probe.open?0:1
+          addPartial('مقصد SSH واقعی','Real SSH target',
+            'هیچ مقصد واقعی از تنظیمات/کانفیگ Splunk پیدا نشد. برای اجرای واقعی Remote/Management باید مقصد و credential تنظیم شود.',
+            'No real target was found from settings/Splunk config. A real Remote/Management execution requires a configured target and credentials.');
+          break;
+        }
+        const target = effectiveTargets[0];
+        const host = target.replace(/:\\d+$/,'');
+        const managementPort = Number((target.match(/:(\\d+)$/)||[])[1] || 8089);
+        const sshPort = 22;
+        const sshCfg = await run('ssh',['-G',host],`پیکربندی SSH مقصد ${host}`,`SSH configuration for ${host}`,8000);
+        add('functional','Resolve پیکربندی SSH','SSH configuration resolution',
+          sshCfg?.code===0?'pass':'warn',
+          sshCfg?.code===0?`پیکربندی SSH مقصد ${host} resolve شد؛ پورت مدیریت Splunk=${managementPort} و SSH=${sshPort}.`:`پیکربندی SSH مقصد ${host} resolve نشد.`,
+          sshCfg?.code===0?`SSH configuration resolved for ${host}; Splunk management port=${managementPort}, SSH=${sshPort}.`:`SSH configuration could not be resolved for ${host}.`,
+          `ssh -G ${host}`,sshCfg?.stdout||'',sshCfg?.stderr||'',sshCfg?.code
+        );
+        const sshProbe = await testTcpPort(host,sshPort,1800);
+        add('functional','پورت SSH واقعی','Real SSH transport',
+          sshProbe.open?'pass':'warn',
+          sshProbe.open?`پورت SSH ${host}:${sshPort} باز است؛ latency=${sshProbe.latencyMs}ms.`:`پورت SSH ${host}:${sshPort} قابل دسترسی نیست: ${sshProbe.error||'timeout'}`,
+          sshProbe.open?`SSH transport ${host}:${sshPort} is reachable; latency=${sshProbe.latencyMs}ms.`:`SSH transport ${host}:${sshPort} is not reachable: ${sshProbe.error||'timeout'}`,
+          `TCP ${host}:${sshPort}`,sshProbe.open?String(sshProbe.latencyMs)+'ms':'',sshProbe.error||'',sshProbe.open?0:1
+        );
+        const auth = await run('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],`احراز هویت SSH واقعی ${host}`,`Real SSH authentication ${host}`,9000);
+        add('functional','احراز هویت SSH واقعی','Real SSH authentication',
+          auth?.code===0?'pass':'warn',
+          auth?.code===0?`احراز هویت non-interactive روی ${host} موفق شد.`:`SSH به ${host} بدون credential غیرتعاملی موفق نشد؛ ابزار خراب نیست، credential لازم است.`,
+          auth?.code===0?`Non-interactive SSH authentication to ${host} succeeded.`:`Non-interactive SSH to ${host} failed; credentials are required.`,
+          `ssh -o BatchMode=yes -o ConnectTimeout=3 ${host} true`,auth?.stdout||'',auth?.stderr||'',auth?.code
+        );
+        if (toolId === 'remote_gateway') {
+          const mgmt = await testTcpPort(host,managementPort,1800);
+          add('functional','پورت Management Splunk واقعی','Real Splunk management port',
+            mgmt.open?'pass':'warn',
+            mgmt.open?`پورت مدیریت Splunk ${host}:${managementPort} باز است؛ latency=${mgmt.latencyMs}ms.`:`پورت مدیریت Splunk ${host}:${managementPort} در دسترس نیست: ${mgmt.error||'timeout'}`,
+            mgmt.open?`Splunk management ${host}:${managementPort} is reachable; latency=${mgmt.latencyMs}ms.`:`Splunk management ${host}:${managementPort} is not reachable: ${mgmt.error||'timeout'}`,
+            `TCP ${host}:${managementPort}`,mgmt.open?String(mgmt.latencyMs)+'ms':'',mgmt.error||'',mgmt.open?0:1
           );
         }
         break;
