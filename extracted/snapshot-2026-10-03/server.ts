@@ -4978,12 +4978,12 @@ disabled = 0
     const capabilityWarnings = checks.filter(c => c.kind === 'capability' && c.status === 'warn').length;
     const score = checks.length ? Math.max(0, Math.round((passCount / checks.length) * 100)) : 0;
     const hasFunctionalEvidence = functionalChecks.length > 0;
-    const fullyFunctional = hasFunctionalEvidence && functionalWarnings === 0 && capabilityWarnings === 0;
+    const fullyFunctional = hasFunctionalEvidence && functionalWarnings === 0 && capabilityWarnings === 0 && safetyWarnings === 0;
     const actionCoverage = safetyWarnings > 0 ? 'not_tested_read_only' : 'verified';
 
     return {
       toolId,
-      status: functionalWarnings > 0 || !hasFunctionalEvidence || capabilityWarnings > 0 ? 'warning' : 'healthy',
+      status: functionalWarnings > 0 || !hasFunctionalEvidence || capabilityWarnings > 0 || safetyWarnings > 0 ? 'warning' : 'healthy',
       score,
       evidenceLevel: fullyFunctional ? 'functional' : 'partial',
       actionCoverage,
