@@ -4489,13 +4489,21 @@ disabled = 0
         const logPath = path.join(splunkHome,'var/log/splunk/splunkd.log');
         if (fs.existsSync(logPath)) {
           const tail = readFileTailBounded(logPath, 2 * 1024 * 1024);
-          for (const m of tail.matchAll(/(?:server=|uri_host_port="https?:\/\/)([A-Za-z0-9_.:-]+:\d+)/g)) {
-            const value = String(m[1] || '').trim();
-            if (/^[A-Za-z0-9_.-]+:\d+$/.test(value) && !isPlaceholderTarget(value)) found.add(value);
-          }
-          for (const m of tail.matchAll(/ip=([A-Za-z0-9_.-]+):(\d+)/g)) {
-            const value = m[1] + ':' + m[2];
-            if (!isPlaceholderTarget(value)) found.add(value);
+          const logLines = tail.split('\n');
+          for (const line of logLines) {
+            const markers = ['server=', 'uri_host_port="https://'];
+            for (const marker of markers) {
+              const pos = line.indexOf(marker);
+              if (pos < 0) continue;
+              let value = line.slice(pos + marker.length).split(/[\s"\\,]+/)[0].trim();
+              if (value && value.includes(':') && !isPlaceholderTarget(value)) found.add(value);
+            }
+            const ipMarker = 'ip=';
+            const ipPos = line.indexOf(ipMarker);
+            if (ipPos >= 0) {
+              const value = line.slice(ipPos + ipMarker.length).split(/[\s,]+/)[0].trim();
+              if (value && value.includes(':') && !isPlaceholderTarget(value)) found.add(value);
+            }
           }
         }
       } catch (_) {}
@@ -5409,7 +5417,7 @@ disabled = 0
       }
 
       if (type === 'SMS') {
-        if (/^https?:\/\//i.test(endpoint)) {
+        if (endpoint.toLowerCase().startsWith('http://') || endpoint.toLowerCase().startsWith('https://')) {
           const response = await fetch(endpoint,{
             method:'POST',
             headers:{'Content-Type':'application/json',...(secret?{Authorization:'Bearer '+secret}:{})},
