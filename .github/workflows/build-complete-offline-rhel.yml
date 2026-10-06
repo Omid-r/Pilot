@@ -116,16 +116,25 @@ jobs:
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
-          for rhel in 8 9; do
-            repo_dir="offline-prereqs/rhel${rhel}/x86_64/rpms"
-            rm -rf "${repo_dir}/repodata" "${repo_dir}/.repodata"
-            docker run --rm \
-              -v "${PWD}/${repo_dir}:/out" \
-              "rockylinux:${rhel}" \
-              bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core createrepo_c >/dev/null; createrepo_c /out >/tmp/createrepo.log 2>&1; test -f /out/repodata/repomd.xml'
-            test -f "${repo_dir}/repodata/repomd.xml"
-          done
-
+          if [ "${{ steps.reuse-offline-media.outputs.hit }}" = "true" ]; then
+            echo "[+] Reusing validated repodata from the offline media artifact; no Rocky repository access is required."
+            for rhel in 8 9; do
+              repo_dir="offline-prereqs/rhel${rhel}/x86_64/rpms"
+              test -f "${repo_dir}/repodata/repomd.xml"
+            done
+          else
+            echo "[i] Fresh RPM closure detected; generating repodata in Rocky containers."
+            for rhel in 8 9; do
+              repo_dir="offline-prereqs/rhel${rhel}/x86_64/rpms"
+              rm -rf "${repo_dir}/repodata" "${repo_dir}/.repodata"
+              docker pull "rockylinux:${rhel}"
+              docker run --rm \
+                -v "${PWD}/${repo_dir}:/out" \
+                "rockylinux:${rhel}" \
+                bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core createrepo_c >/dev/null; createrepo_c /out >/tmp/createrepo.log 2>&1; test -f /out/repodata/repomd.xml'
+              test -f "${repo_dir}/repodata/repomd.xml"
+            done
+          fi
       - name: Download kubectl and verify checksum
         working-directory: ${{ env.APP_ROOT }}
         run: |
