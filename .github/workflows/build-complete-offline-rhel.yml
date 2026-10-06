@@ -84,6 +84,7 @@ jobs:
             echo "hit=false" >> "${GITHUB_OUTPUT}"
             echo "[i] Cached artifact unavailable; a fresh closure will be built."
           fi
+
       - name: Prepare offline media directories
         working-directory: ${{ env.APP_ROOT }}
         run: |
@@ -99,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           docker pull rockylinux:8
-          docker run --rm             -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool'             -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out"             rockylinux:8             bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --arch=x86_64,noarch --destdir /out ${PACKAGES}'
+          docker run --rm -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool' -v "${PWD}/offline-prereqs/rhel8/x86_64/rpms:/out" rockylinux:8 bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --arch=x86_64,noarch --destdir /out ${PACKAGES}'
 
       - name: Build RHEL 9 offline RPM closure
         if: steps.reuse-offline-media.outputs.hit != 'true'
@@ -107,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           docker pull rockylinux:9
-          docker run --rm             -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool'             -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out"             rockylinux:9             bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --destdir /out ${PACKAGES}'
+          docker run --rm -e 'PACKAGES=curl openssl openssh-clients iproute iputils gawk sed grep findutils coreutils util-linux hostname which nmap-ncat lsof net-tools conntrack-tools tar gzip ca-certificates firewalld iptables policycoreutils policycoreutils-python-utils python3 rsync procps-ng podman chrony ipmitool' -v "${PWD}/offline-prereqs/rhel9/x86_64/rpms:/out" rockylinux:9 bash -lc 'set -euo pipefail; dnf -y install dnf-plugins-core; dnf download --resolve --alldeps --arch=x86_64,noarch --destdir /out ${PACKAGES}'
 
       - name: Persist offline DNF repository metadata
         working-directory: ${{ env.APP_ROOT }}
@@ -169,18 +170,30 @@ jobs:
             -name 'bootstrap-admin-password' \
           \) -delete
 
-          chmod -R u=rwX,go=rX release/splunk-doctor
-          tar -czf release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz -C release splunk-doctor
-          sha256sum release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz > release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+          # Explicitly restore executable bits after copy/normalization.
+          # Git checkouts may not preserve script mode in all packaging paths.
+          find release/splunk-doctor/scripts -type f \( \
+            -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \
+          \) -exec chmod 0755 {} +
+          chmod 0755 release/splunk-doctor/setup.sh
+
+          # Keep non-executable application/config files readable.
+          find release/splunk-doctor -type f ! -path 'release/splunk-doctor/scripts/*' \
+            ! -name 'setup.sh' ! -path 'release/splunk-doctor/node-runtime/bin/node' \
+            -exec chmod 0644 {} +
+          chmod 0755 release/splunk-doctor/node-runtime/bin/node
+
+          tar -czf release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz -C release splunk-doctor
+          sha256sum release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz > release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz.sha256
 
       - name: Verify complete archive
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
-          archive="release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz"
+          archive="release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz"
           manifest="release/final-archive-manifest.txt"
 
-          sha256sum -c release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+          sha256sum -c release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz.sha256
           tar -tzf "${archive}" > "${manifest}"
 
           grep -Fq 'splunk-doctor/dist/server.cjs' "${manifest}"
@@ -200,11 +213,24 @@ jobs:
             exit 1
           fi
 
+          # Verify executable bits survive the tar archive.
+          mkdir -p /tmp/pilot-archive-perms
+          rm -rf /tmp/pilot-archive-perms/*
+          tar -xzf "${archive}" -C /tmp/pilot-archive-perms
+          test -x /tmp/pilot-archive-perms/splunk-doctor/setup.sh
+          test -x /tmp/pilot-archive-perms/splunk-doctor/node-runtime/bin/node
+          find /tmp/pilot-archive-perms/splunk-doctor/scripts -type f \( \
+            -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \
+          \) ! -perm /111 -print -quit | grep -q . && {
+            echo "Bundled script lost executable bit."
+            exit 1
+          } || true
+
       - name: Execute complete offline media on Rocky Linux
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
-          archive="release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz"
+          archive="release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz"
           for rhel in 8 9; do
             docker pull "rockylinux:${rhel}"
             docker run --rm --network none \
@@ -249,8 +275,8 @@ jobs:
       - name: Upload complete offline installer
         uses: actions/upload-artifact@v6
         with:
-          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.0-complete
+          name: pilot-snapshot-2026-10-03-offline-rhel-1.5.1-complete
           path: |
-            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz
-            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.0-complete.tar.gz.sha256
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz
+            ${{ env.APP_ROOT }}/release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz.sha256
           if-no-files-found: error
