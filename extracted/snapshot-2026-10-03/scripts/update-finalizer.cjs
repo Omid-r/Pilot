@@ -90,8 +90,33 @@ async function main() {
     fs.cpSync(src, dst, { recursive: true, force: true });
   }
   logLine('[ROLLBACK] Backup restored. Restarting service...');
-  await restartService();
-  writeStatus({ state: 'rollback', status: 'restored', currentVersion: 'previous', targetVersion });
+  const rollbackRestart = await restartService();
+  if (!rollbackRestart.ok) {
+    writeStatus({
+      state: 'error',
+      status: 'rollback_restart_failed',
+      currentVersion: 'unknown',
+      targetVersion,
+      error: rollbackRestart.stderr || 'Rollback service restart failed.'
+    });
+    return;
+  }
+  for (let i = 0; i < 30; i++) {
+    const rollbackHealth = await checkHealth();
+    if (rollbackHealth.ok) {
+      writeStatus({ state: 'rollback', status: 'restored_and_verified', currentVersion: rollbackHealth.version, targetVersion });
+      logLine('[ROLLBACK] Previous installation is healthy after rollback.');
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  writeStatus({
+    state: 'error',
+    status: 'rollback_health_failed',
+    currentVersion: 'unknown',
+    targetVersion,
+    error: 'Rollback completed but the previous version did not pass the health check.'
+  });
 }
 
 main().catch(error => {
