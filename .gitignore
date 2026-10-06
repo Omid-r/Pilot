@@ -1,0 +1,36 @@
+# Dependencies and build output
+node_modules/
+build/
+dist/
+coverage/
+logs/
+*.log
+*.tar.gz
+.DS_Store
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+secrets.json
+security-db.json
+master-signing.key
+bootstrap-admin-password
+
+# Runtime state
+data/
+var/
+runtime/
+*.sqlite
+*.sqlite3
+
+# Local editor / OS files
+.vscode/
+.idea/
