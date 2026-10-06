@@ -169,8 +169,49 @@ jobs:
             test -f "${target}/kubectl"
             test -x "${target}/kubectl"
             test -s "${target}/kubectl"
+            mkdir -p "offline-cache/kubectl/${KUBECTL_VERSION}/linux-amd64"
+            cp "${target}/kubectl" "offline-cache/kubectl/${KUBECTL_VERSION}/linux-amd64/kubectl"
+            cp "${target}/kubectl.sha256" "offline-cache/kubectl/${KUBECTL_VERSION}/linux-amd64/kubectl.sha256"
           done
 
+      - name: Populate fully offline container image cache
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          mkdir -p offline-cache/rocky offline-cache/splunk
+          for rhel in 8 9; do
+            image="rockylinux:${rhel}"
+            archive="offline-cache/rocky/rockylinux-${rhel}.tar.gz"
+            if [ -f "${archive}" ]; then
+              echo "[+] Loading existing bundled Rocky ${rhel} image archive."
+              docker load -i "${archive}"
+            else
+              echo "[i] Rocky ${rhel} archive missing; pulling once to create the offline release media."
+              docker pull "${image}"
+              docker save "${image}" | gzip -c > "${archive}"
+            fi
+            docker image inspect "${image}" >/dev/null
+            test -s "${archive}"
+          done
+
+          SPLUNK_IMAGE="splunk/splunk:10.4.3"
+          SPLUNK_ARCHIVE="offline-cache/splunk/splunk-10.4.3.tar.gz"
+          if [ -f "${SPLUNK_ARCHIVE}" ]; then
+            echo "[+] Loading existing bundled Splunk image archive."
+            docker load -i "${SPLUNK_ARCHIVE}"
+          else
+            echo "[i] Splunk image archive missing; pulling once to create the offline release media."
+            docker pull "${SPLUNK_IMAGE}"
+            docker save "${SPLUNK_IMAGE}" | gzip -c > "${SPLUNK_ARCHIVE}"
+          fi
+          docker image inspect "${SPLUNK_IMAGE}" >/dev/null
+          test -s "${SPLUNK_ARCHIVE}"
+          {
+            echo "Rocky 8: $(docker image inspect --format='{{index .RepoDigests 0}}' rockylinux:8 2>/dev/null || true)"
+            echo "Rocky 9: $(docker image inspect --format='{{index .RepoDigests 0}}' rockylinux:9 2>/dev/null || true)"
+            echo "Splunk 10.4.3: $(docker image inspect --format='{{index .RepoDigests 0}}' "${SPLUNK_IMAGE}" 2>/dev/null || true)"
+          } > offline-cache/container-images-manifest.txt
+          echo "[PASS] Offline Rocky and Splunk container image archives are present and loadable."
       - name: Verify offline dependency media
         working-directory: ${{ env.APP_ROOT }}
         run: |
@@ -261,6 +302,11 @@ jobs:
           done
           grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-cache/kubectl/v1.37.1/linux-amd64/kubectl' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-cache/rocky/rockylinux-8.tar.gz' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-cache/rocky/rockylinux-9.tar.gz' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-cache/splunk/splunk-10.4.3.tar.gz' "${manifest}"
+          grep -Fq 'splunk-doctor/offline-cache/container-images-manifest.txt' "${manifest}"
 
           if grep -Eq '(security-db\.json|master-signing\.key|bootstrap-admin-password)$' "${manifest}"; then
             echo "Runtime secret leaked into release archive."
@@ -286,19 +332,20 @@ jobs:
         run: |
           set -euo pipefail
           archive="release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz"
+          rm -rf /tmp/pilot-offline-release-media
+          mkdir -p /tmp/pilot-offline-release-media
+          tar -xzf "${archive}" -C /tmp/pilot-offline-release-media
+          test -s /tmp/pilot-offline-release-media/splunk-doctor/offline-cache/rocky/rockylinux-8.tar.gz
+          test -s /tmp/pilot-offline-release-media/splunk-doctor/offline-cache/rocky/rockylinux-9.tar.gz
+          test -s /tmp/pilot-offline-release-media/splunk-doctor/offline-cache/splunk/splunk-10.4.3.tar.gz
+          docker load -i /tmp/pilot-offline-release-media/splunk-doctor/offline-cache/splunk/splunk-10.4.3.tar.gz
+          docker image inspect splunk/splunk:10.4.3 >/dev/null
           for rhel in 8 9; do
             image="rockylinux:${rhel}"
-            local_image=""
-            for candidate in "offline-cache/rocky/rockylinux-${rhel}.tar.gz" "offline-cache/rocky/rockylinux-${rhel}.tar" "offline-cache/rocky/Rocky-${rhel}-Container-Base.latest.x86_64.tar.xz"; do
-              if [ -f "${candidate}" ]; then local_image="${candidate}"; break; fi
-            done
-            if [ -n "${local_image}" ]; then
-              echo "[+] Loading local Rocky Linux ${rhel} image: ${local_image}"
-              docker load -i "${local_image}"
-            else
-              echo "[i] Local Rocky Linux ${rhel} image missing; pulling from Docker Hub."
-              docker pull "${image}"
-            fi
+            local_image="/tmp/pilot-offline-release-media/splunk-doctor/offline-cache/rocky/rockylinux-${rhel}.tar.gz"
+            echo "[+] Loading Rocky Linux ${rhel} image from the release package: ${local_image}"
+            docker load -i "${local_image}"
+            docker image inspect "${image}" >/dev/null
             docker run --rm --network none \
               -e "RHEL_VERSION=${rhel}" \
               -v "${PWD}/${archive}:/media/app.tar.gz:ro" \
