@@ -48,9 +48,14 @@ else
         dnf --disablerepo='*' --repofrompath="splunk-doctor-offline,file://${RPM_DIR}" --enablerepo="splunk-doctor-offline" -y install podman
         podman --version >/dev/null
       else
-    echo "[-] No real Docker/Podman offline artifact was found."
-    echo "[!] Expected: Docker RPMs/static bundle or Podman RPMs under $PKG_DIR."
-    exit 1
+        echo "[-] No real Docker/Podman offline artifact was found."
+        echo "[!] Expected bundled RHEL media or Docker/Podman artifacts under $PKG_DIR."
+        exit 1
+      fi
+    else
+      echo "[-] Unsupported RHEL major version; cannot locate bundled container-engine RPMs."
+      exit 1
+    fi
   fi
 fi
 
