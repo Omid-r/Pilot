@@ -72,6 +72,15 @@ echo "[5/6] Verifying offline Splunk binaries & container engine..."
 # container engine or no image archive is present.
 OFFLINE_CACHE_DIR="${INSTALL_DIR}/offline-cache"
 IMAGE_LOADED=0
+# If no container engine exists, install a real one from the bundled RHEL media before loading images.
+if ! command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+    ENGINE_INSTALLER="${SCRIPTS_DIR}/install-container-engine-offline.sh"
+    if [ -x "${ENGINE_INSTALLER}" ] && { find "${OFFLINE_CACHE_DIR}/rocky" "${OFFLINE_CACHE_DIR}/splunk" -maxdepth 1 -type f \( -name "*.tar" -o -name "*.tar.gz" -o -name "*.tgz" \) -print -quit 2>/dev/null | grep -q .; }; then
+        echo "  [+] No container engine detected; installing from bundled offline media..."
+        bash "${ENGINE_INSTALLER}"
+    fi
+fi
+
 if { command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; } && [ -d "${OFFLINE_CACHE_DIR}" ]; then
     CONTAINER_LOAD_CMD="docker"
     command -v docker >/dev/null 2>&1 || CONTAINER_LOAD_CMD="podman"
