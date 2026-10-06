@@ -374,16 +374,16 @@ fi
 # Stage and use the bundled Node.js runtime only.
 BUNDLED_NODE="\${SOURCE_DIR}/node-runtime/bin/node"
 NODE_BIN="/usr/local/bin/splunk-doctor-node"
-if [ ! -x "${BUNDLED_NODE}" ]; then
+if [ ! -x "\${BUNDLED_NODE}" ]; then
   echo "[-] اخطار: runtime داخلی Node.js در بسته موجود نیست یا executable نیست."
   exit 1
 fi
 install -d -m 0755 /usr/local/bin
-install -m 0755 "${BUNDLED_NODE}" "${NODE_BIN}"
-if command -v restorecon >/dev/null 2>&1; then restorecon -F "${NODE_BIN}" >/dev/null 2>&1 || true; fi
-chmod 0755 "${NODE_BIN}"
-"${NODE_BIN}" --version >/dev/null
-echo "  -> runtime داخلی Node.js: ${NODE_BIN}"
+install -m 0755 "\${BUNDLED_NODE}" "\${NODE_BIN}"
+if command -v restorecon >/dev/null 2>&1; then restorecon -F "\${NODE_BIN}" >/dev/null 2>&1 || true; fi
+chmod 0755 "\${NODE_BIN}"
+"\${NODE_BIN}" --version >/dev/null
+echo "  -> runtime داخلی Node.js: \${NODE_BIN}"
 # 6. Configure Systemd Service dynamically
 mkdir -p /var/lib/splunk-doctor
 chmod 700 /var/lib/splunk-doctor
