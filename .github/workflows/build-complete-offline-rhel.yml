@@ -212,6 +212,54 @@ jobs:
             echo "Splunk 10.4.3: $(docker image inspect --format='{{index .RepoDigests 0}}' "${SPLUNK_IMAGE}" 2>/dev/null || true)"
           } > offline-cache/container-images-manifest.txt
           echo "[PASS] Offline Rocky and Splunk container image archives are present and loadable."
+      - name: Materialize complete offline dependency cache
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          mkdir -p offline-cache/node offline-cache/npm-cache offline-cache/rhel8/x86_64/rpms offline-cache/rhel9/x86_64/rpms
+
+          # Bundle the exact Node binary used by this build.
+          cp "$(command -v node)" offline-cache/node/node
+          chmod 0755 offline-cache/node/node
+
+          # Bundle the exact dependency tree used by this build.
+          npm_bundle="offline-cache/npm-cache/node_modules-${GITHUB_SHA}.tar.gz"
+          tar -czf "${npm_bundle}" node_modules
+          test -s "${npm_bundle}"
+
+          # Mirror the validated RHEL RPM media + repodata into the reusable cache layout.
+          for rhel in 8 9; do
+            rm -rf "offline-cache/rhel${rhel}/x86_64/rpms"
+            mkdir -p "offline-cache/rhel${rhel}/x86_64"
+            cp -a "offline-prereqs/rhel${rhel}/x86_64/rpms" "offline-cache/rhel${rhel}/x86_64/"
+            test -f "offline-cache/rhel${rhel}/x86_64/rpms/repodata/repomd.xml"
+          done
+
+          # Verify that every expected cache class is non-empty before packaging.
+          test -s offline-cache/node/node
+          test -s "${npm_bundle}"
+          test -s offline-cache/kubectl/v1.37.1/linux-amd64/kubectl
+          test -s offline-cache/kubectl/v1.37.1/linux-amd64/kubectl.sha256
+          test -s offline-cache/rocky/rockylinux-8.tar.gz
+          test -s offline-cache/rocky/rockylinux-9.tar.gz
+          test -s offline-cache/splunk/splunk-10.4.3.tar.gz
+
+          {
+            echo "# Pilot offline cache manifest"
+            echo "commit=${GITHUB_SHA}"
+            echo "node=$(offline-cache/node/node --version)"
+            echo "npm_bundle=$(basename "${npm_bundle}")"
+            echo "rocky8=$(stat -c %s offline-cache/rocky/rockylinux-8.tar.gz) bytes"
+            echo "rocky9=$(stat -c %s offline-cache/rocky/rockylinux-9.tar.gz) bytes"
+            echo "splunk10.4.3=$(stat -c %s offline-cache/splunk/splunk-10.4.3.tar.gz) bytes"
+            echo "rhel8_rpms=$(find offline-cache/rhel8/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)"
+            echo "rhel9_rpms=$(find offline-cache/rhel9/x86_64/rpms -maxdepth 1 -type f -name '*.rpm' | wc -l)"
+          } > offline-cache/MANIFEST.txt
+
+          zip -qr9 offline-cache.zip offline-cache
+          sha256sum offline-cache.zip > offline-cache.zip.sha256
+          test -s offline-cache.zip
+          echo "[PASS] Complete offline cache materialized and archived."
       - name: Verify offline dependency media
         working-directory: ${{ env.APP_ROOT }}
         run: |
@@ -390,6 +438,14 @@ jobs:
               '
           done
 
+      - name: Upload standalone offline cache archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-snapshot-2026-10-03-offline-cache
+          path: |
+            ${{ env.APP_ROOT }}/offline-cache.zip
+            ${{ env.APP_ROOT }}/offline-cache.zip.sha256
+          if-no-files-found: error
       - name: Upload complete offline installer
         uses: actions/upload-artifact@v6
         with:
