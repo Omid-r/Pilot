@@ -56,6 +56,17 @@ try {
   execSync(`rm -f "${distTarget}"/*.tar.gz "${distTarget}"/*.spl`);
 } catch (e) {}
 
+// 3c. Bundle optional local offline-cache files when provided by the build host.
+// This is intentionally optional so public CI never requires large binary blobs
+// to be committed to the repository. When present, the entire cache is shipped
+// inside the standalone package for air-gapped deployment.
+const offlineCacheSource = path.join(rootDir, 'offline-cache');
+const offlineCacheTarget = path.join(stagingDir, 'offline-cache');
+if (fs.existsSync(offlineCacheSource)) {
+  fs.cpSync(offlineCacheSource, offlineCacheTarget, { recursive: true, force: true });
+  console.log('[RHEL Packager] Bundled local offline-cache into standalone package.');
+}
+
 // 3b. Copy network toolbox & fix scripts
 const scriptsTarget = path.join(stagingDir, 'scripts');
 fs.mkdirSync(scriptsTarget, { recursive: true });
