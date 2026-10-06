@@ -57,11 +57,7 @@ LW1hbmFnZXItYWdlbnQxLzAtBgkqhkiG9w0BCQEWGHNvY0BlbnRlcnByaXNlLWlu
 dGVybmFsLmlyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz8jQ8u91
 ... (Official mTLS Client Authentication Certificate) ...
 -----END CERTIFICATE-----`,
-    mtlsPrivateKeyPem: `-----BEGIN EC PRIVATE KEY-----
-MHcCAQEEIG3W6yN7L1k9+HjG9xR5W8v4P2z1Q8k7eX0Q4bNm1zP2oAoGCCqGSM49
-AwEHoUQDQgAEy5t98z4l0K9V2a8k7eX0Q4bNm1zP2aK9c1X7e0R9y4bNm1zP2aK9
-c1X7e0R9y4bNm1zP2aK9c1X7e0R9y4bNm1zP2aK9c1X7e0R9y4==
------END EC PRIVATE KEY-----`
+    // Never embed a client private key in the repository. Load it from the protected runtime environment when mTLS is actually enabled.\n    mtlsPrivateKeyPem: 'RUNTIME_SECRET:SPLUNK_DOCTOR_MTLS_PRIVATE_KEY'
   },
   privacyPolicy: {
     zeroTrustVerified: true,
