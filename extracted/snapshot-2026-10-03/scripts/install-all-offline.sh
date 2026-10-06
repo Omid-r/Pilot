@@ -66,6 +66,29 @@ if [ -f "${SCRIPTS_DIR}/traffic-tools.py" ]; then
 fi
 
 echo "[5/6] Verifying offline Splunk binaries & container engine..."
+
+# Load container images shipped in the application offline-cache.
+# Supported archives: .tar, .tar.gz, .tgz. The operation is skipped when no
+# container engine or no image archive is present.
+OFFLINE_CACHE_DIR="${INSTALL_DIR}/offline-cache"
+IMAGE_LOADED=0
+if { command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1; } && [ -d "${OFFLINE_CACHE_DIR}" ]; then
+    CONTAINER_LOAD_CMD="docker"
+    command -v docker >/dev/null 2>&1 || CONTAINER_LOAD_CMD="podman"
+    for image_dir in "${OFFLINE_CACHE_DIR}/rocky" "${OFFLINE_CACHE_DIR}/splunk"; do
+        [ -d "${image_dir}" ] || continue
+        while IFS= read -r -d "" image_archive; do
+            echo "  [+] Loading local container image: ${image_archive}"
+            if "${CONTAINER_LOAD_CMD}" load -i "${image_archive}"; then
+                IMAGE_LOADED=$((IMAGE_LOADED + 1))
+            else
+                echo "[-] Failed to load local container image: ${image_archive}"
+                exit 1
+            fi
+        done < <(find "${image_dir}" -maxdepth 1 -type f \( -name "*.tar" -o -name "*.tar.gz" -o -name "*.tgz" \) -print0)
+    done
+    echo "  [+] Local container image archives loaded: ${IMAGE_LOADED}"
+fi
 if [ -d "/opt/splunk/bin" ]; then
     echo "  [✓] Local Splunk Enterprise detected in /opt/splunk."
     if [ ! -f "${PARALLEL_DIR}/bin/splunk" ]; then
