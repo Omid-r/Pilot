@@ -199,6 +199,7 @@ jobs:
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
+          trap 'rc=$?; echo "VERIFY_ARCHIVE_FAILED line=${LINENO} rc=${rc} cmd=${BASH_COMMAND}"; exit ${rc}' ERR
           archive="release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz"
           manifest="release/final-archive-manifest.txt"
 
@@ -244,6 +245,7 @@ jobs:
             exit 1
           fi
           echo "Archive script executable-bit verification passed."
+          echo "Archive verification fully passed."
 
       - name: Execute complete offline media on Rocky Linux
         working-directory: ${{ env.APP_ROOT }}
