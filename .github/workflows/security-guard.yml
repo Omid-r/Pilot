@@ -1,0 +1,87 @@
+name: Repository Security Guard
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  security-guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Reject committed runtime secrets and private keys
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          blocked_paths=(
+            "security-db.json"
+            "master-signing.key"
+            "bootstrap-admin-password"
+          )
+
+          for path in "${blocked_paths[@]}"; do
+            if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+              echo "ERROR: forbidden runtime secret is tracked: $path"
+              exit 1
+            fi
+          done
+
+          while IFS= read -r path; do
+            base="${path##*/}"
+            case "${base}" in
+              .env)
+                echo "ERROR: credential/private-key material is tracked: ${path}"
+                exit 1
+                ;;
+              .env.*)
+                if [ "${base}" != ".env.example" ]; then
+                  echo "ERROR: credential/private-key material is tracked: ${path}"
+                  exit 1
+                fi
+                ;;
+              *.pem|*.key|*.p12|*.pfx|*.jks|*.keystore)
+                echo "ERROR: credential/private-key material is tracked: ${path}"
+                exit 1
+                ;;
+            esac
+          done < <(git ls-files)
+
+      - name: Reject high-confidence credential material
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git grep -nI -E '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----' -- ':!*.lock'; then
+            echo "ERROR: private-key material found in tracked text."
+            exit 1
+          fi
+
+          if git grep -nI -E 'https://hooks[.]slack[.]com/services/[A-Za-z0-9_/-]{20,}' -- ':!*.map' ':!*.min.js'; then
+            echo "ERROR: live Slack webhook found in tracked source."
+            exit 1
+          fi
+
+          if git grep -nI -E '(api[_-]?key|access[_-]?token|client[_-]?secret|secret[_-]?key|password)\s*[:=]\s*["'"'"'][^"'"'"'\n]{16,}["'"'"']' -- ':!*.lock' ':!package-lock.json'; then
+            echo "ERROR: possible hard-coded credential found. Review and replace with an environment/secret reference."
+            exit 1
+          fi
+
+      - name: Verify ignore policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .gitignore
+          grep -qxF '.env' .gitignore
+          grep -qxF 'master-signing.key' .gitignore
+          grep -qxF 'security-db.json' .gitignore
+          grep -qxF '*.pem' .gitignore
+          echo "Repository security ignore policy verified."
