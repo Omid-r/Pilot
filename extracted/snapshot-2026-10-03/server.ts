@@ -204,7 +204,7 @@ async function startServer() {
         if (!rel || !isSafeArchiveEntry(rel)) throw new Error('Unsafe manifest path: ' + rel);
         const target = path.resolve(payloadRoot, rel);
         if (!target.startsWith(path.resolve(payloadRoot) + path.sep)) throw new Error('Manifest path escaped payload root.');
-        if (!fs.existsSync(target) || !fs.statSync(target).isFile()) throw new Error('Missing update payload file: ' + rel);
+        if (!fs.existsSync(target) || !fs.lstatSync(target).isFile()) throw new Error('Missing or non-regular update payload file: ' + rel);
         if (sha256File(target) !== String(item.sha256 || '').toLowerCase()) throw new Error('Checksum mismatch for update file: ' + rel);
       }
       pushUpdateLog(jobId, `[VALIDATE] Version ${currentVersion} -> ${targetVersion}; ${files.length} payload files verified.`);
@@ -5299,6 +5299,35 @@ disabled = 0
           'Read-only diagnostics do not mutate security; password/policy changes are intentionally not executed.');
         break;
       }
+      case 'system_update': {
+        const updateDataDir = process.env.SPLUNK_DOCTOR_DATA_DIR || '/var/lib/splunk-doctor';
+        const updaterRoot = path.join(updateDataDir, 'updates');
+        const updaterDirsReady = [updaterRoot, path.join(updaterRoot, 'inbox'), path.join(updaterRoot, 'stage'), path.join(updaterRoot, 'backups')].every(p => {
+          try { fs.mkdirSync(p, { recursive:true, mode:0o700 }); fs.accessSync(p, fs.constants.R_OK | fs.constants.W_OK); return true; } catch (_) { return false; }
+        });
+        const finalizer = path.join(splunkHome || process.cwd(), 'scripts', 'update-finalizer.cjs');
+        add(
+          'functional',
+          'زیرساخت Update Manager',
+          'Update Manager infrastructure',
+          updaterDirsReady && fs.existsSync(finalizer) ? 'pass' : 'warn',
+          updaterDirsReady && fs.existsSync(finalizer) ? 'مسیرهای Update و فایل finalizer آماده و قابل دسترسی هستند.' : 'زیرساخت Update یا فایل finalizer آماده نیست.',
+          updaterDirsReady && fs.existsSync(finalizer) ? 'Update directories and finalizer are ready and accessible.' : 'Update infrastructure or finalizer is not ready.',
+          'test -d /var/lib/splunk-doctor/updates && test -x scripts/update-finalizer.cjs',
+          updaterDirsReady ? 'update-storage=ready' : '',
+          updaterDirsReady && fs.existsSync(finalizer) ? '' : 'update infrastructure unavailable',
+          updaterDirsReady && fs.existsSync(finalizer) ? 0 : 1
+        );
+        add(
+          'safety',
+          'نصب واقعی Update',
+          'Real update installation',
+          'warn',
+          'آپلود/نصب یک نسخه جدید در validation عمداً انجام نمی‌شود؛ این عملیات فقط از Update Manager توسط اپراتور اجرا می‌شود.',
+          'A real update upload/install is intentionally not executed during validation; it is operator-triggered from Update Manager.'
+        );
+        break;
+      }
       default: {
         const base=await run('true',[],'Smoke واقعی ابزار','Real tool smoke');
         addPartial('پوشش functional','Functional coverage',
@@ -5486,7 +5515,8 @@ disabled = 0
         package_center: { labelFa: 'Package Center', commands: ['find','tar','gzip'], routes: ['/api/download/package-info','/api/download/rhel-package'] },
         backup_archive: { labelFa: 'Backup Archive', commands: ['tar','gzip'], routes: [] },
         network_toolbox: { labelFa: 'Network Toolbox', commands: ['ip','ss'], routes: ['/api/real/network/scan'] },
-        admin_security: { labelFa: 'Admin Security', commands: ['openssl'], routes: ['/api/auth/me'] }
+        admin_security: { labelFa: 'Admin Security', commands: ['openssl'], routes: ['/api/auth/me'] },
+        system_update: { labelFa: 'Pilot Update Manager', commands: [], routes: ['/api/system/update/upload','/api/system/update/status/:jobId'] }
       };
 
       const toolResults: Record<string, any> = {};
