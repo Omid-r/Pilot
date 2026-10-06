@@ -173,6 +173,10 @@ jobs:
           rm -rf release
           mkdir -p release/splunk-doctor/node-runtime/bin
           cp -a dist scripts setup.sh package.json README.md metadata.json offline-prereqs release/splunk-doctor/
+          if [ -d offline-cache ]; then
+            cp -a offline-cache release/splunk-doctor/
+            echo "[+] Bundled local offline-cache into release."
+          fi
           cp -a node_modules release/splunk-doctor/
           cp "$(command -v node)" release/splunk-doctor/node-runtime/bin/node
           chmod 0755 release/splunk-doctor/node-runtime/bin/node
@@ -198,7 +202,10 @@ jobs:
           # Keep non-executable application/config files readable.
           find release/splunk-doctor -type f ! -path 'release/splunk-doctor/scripts/*' \
             ! -name 'setup.sh' ! -path 'release/splunk-doctor/node-runtime/bin/node' \
+            ! -path 'release/splunk-doctor/offline-prereqs/*/x86_64/bin/*' \
             -exec chmod 0644 {} +
+          chmod 0755 release/splunk-doctor/offline-prereqs/rhel8/x86_64/bin/kubectl
+          chmod 0755 release/splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl
           chmod 0755 release/splunk-doctor/node-runtime/bin/node
 
           tar -czf release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz -C release splunk-doctor
