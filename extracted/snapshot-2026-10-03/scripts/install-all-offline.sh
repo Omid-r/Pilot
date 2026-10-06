@@ -10,6 +10,12 @@ echo "======================================================================"
 echo " [AIR-GAPPED MASTER INSTALLER] Splunk Cluster Doctor & Studio Tools"
 echo "======================================================================"
 
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
+SCRIPTS_DIR="${INSTALL_DIR}/scripts"
+PACKAGES_DIR="/opt/splunk_packages"
+RUNTIME_DIR="/opt/splunk_container_runtime"
+PARALLEL_DIR="/opt/splunk_parallel"
+
 # Install the bundled RHEL user-space prerequisites before configuring the application tools.
 if [ -x "${SCRIPTS_DIR}/install-offline-prereqs.sh" ]; then
     echo "[0/6] Installing bundled offline RHEL prerequisites (no external repositories)..."
@@ -19,13 +25,19 @@ else
     exit 1
 fi
 
-INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
-SCRIPTS_DIR="${INSTALL_DIR}/scripts"
-PACKAGES_DIR="/opt/splunk_packages"
-RUNTIME_DIR="/opt/splunk_container_runtime"
-PARALLEL_DIR="/opt/splunk_parallel"
-
-echo "[1/6] Applying safe executable permissions..."
+echo "[1/6] Applying and restoring executable permissions..."
+find "${INSTALL_DIR}" -type d -exec chmod 755 {} +
+find "${INSTALL_DIR}" -type f -exec chmod 644 {} +
+find "${INSTALL_DIR}" -type f \( \
+  -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \
+\) -exec chmod 755 {} +
+for executable in "${INSTALL_DIR}/node-runtime/bin/node" "${INSTALL_DIR}/kubectl" "${INSTALL_DIR}/k3s"; do
+    [ -f "${executable}" ] && chmod 755 "${executable}" 2>/dev/null || true
+done
+chmod +x "${INSTALL_DIR}"/*.sh 2>/dev/null || true
+if [ -d "${SCRIPTS_DIR}" ]; then
+    chmod +x "${SCRIPTS_DIR}"/*.sh "${SCRIPTS_DIR}"/*.py 2>/dev/null || true
+fi
 find "${INSTALL_DIR}" -type d -exec chmod 755 {} +
 find "${INSTALL_DIR}" -type f -exec chmod 644 {} +
 if [ -d "${SCRIPTS_DIR}" ]; then chmod +x "${SCRIPTS_DIR}"/*.sh "${SCRIPTS_DIR}"/*.py 2>/dev/null || true; fi
