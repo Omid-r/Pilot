@@ -90,8 +90,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p offline-prereqs/rhel8/x86_64/rpms
-          mkdir -p offline-prereqs/rhel8/x86_64/bin
           mkdir -p offline-prereqs/rhel9/x86_64/rpms
+          # Always rebuild kubectl payload directories from scratch.
+          rm -rf offline-prereqs/rhel8/x86_64/bin offline-prereqs/rhel9/x86_64/bin
+          mkdir -p offline-prereqs/rhel8/x86_64/bin
           mkdir -p offline-prereqs/rhel9/x86_64/bin
 
       - name: Build RHEL 8 offline RPM closure
@@ -137,6 +139,9 @@ jobs:
             test "${#expected}" -eq 64
             test "${actual}" = "${expected}"
             chmod 0755 "${target}/kubectl"
+            test -f "${target}/kubectl"
+            test -x "${target}/kubectl"
+            test -s "${target}/kubectl"
           done
 
       - name: Verify offline dependency media
@@ -207,6 +212,14 @@ jobs:
           grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/[^[:space:]]+\.rpm$' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/bin/kubectl' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/bin/kubectl' "${manifest}"
+          mkdir -p /tmp/pilot-kubectl-check
+          rm -rf /tmp/pilot-kubectl-check/*
+          tar -xzf "${archive}" -C /tmp/pilot-kubectl-check
+          for rhel in 8 9; do
+            test -f "/tmp/pilot-kubectl-check/splunk-doctor/offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+            test -x "/tmp/pilot-kubectl-check/splunk-doctor/offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+            test -s "/tmp/pilot-kubectl-check/splunk-doctor/offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+          done
           grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/repodata/repomd.xml' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/repodata/repomd.xml' "${manifest}"
 
@@ -249,6 +262,11 @@ jobs:
                 test -f "${app}/node-runtime/bin/node"
                 test -f "${app}/setup.sh"
                 test -f "${app}/scripts/install-offline-prereqs.sh"
+                for rhel in 8 9; do
+                  test -f "${app}/offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+                  test -x "${app}/offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+                  test -s "${app}/offline-prereqs/rhel${rhel}/x86_64/bin/kubectl"
+                done
                 bash "${app}/scripts/install-offline-prereqs.sh"
                 test -x /usr/local/bin/splunk-doctor-node
                 /usr/local/bin/splunk-doctor-node --version
