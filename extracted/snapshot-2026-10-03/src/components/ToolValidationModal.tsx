@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileCheck, Layers, RefreshCw, ShieldCheck, X, Clock, Copy, Check, Terminal } from 'lucide-react';
 
 interface ToolValidationCheck {
-  nameFa: string; nameEn: string; status: 'pass' | 'warn'; detailFa: string; detailEn: string;
+  nameFa: string; nameEn: string; status: 'pass' | 'warn' | 'fail'; detailFa: string; detailEn: string; result?: 'PASS' | 'WARN' | 'FAIL' | 'NOT_EXECUTED'; startedAt?: string; finishedAt?: string; durationMs?: number; executionPerformed?: boolean; executorCommand?: string; issuePaths?: Array<{path:string;exists?:boolean;type?:string}>;
   command?: string; stdout?: string; stderr?: string; exitCode?: number;
 }
 
 interface ToolValidationResult {
-  toolId: string; status: 'healthy' | 'warning' | 'error'; score: number; latencyMs: number;
+  toolId: string; status: 'healthy' | 'warning' | 'error'; score: number; latencyMs: number; checkedAt?: string;
   checks: ToolValidationCheck[]; summaryFa: string; summaryEn: string;
   installed?: boolean; operational?: boolean;
 }
@@ -40,8 +40,10 @@ export const ToolValidationModal: React.FC<Props> = ({
   const [diagnosticReport, setDiagnosticReport] = useState<any | null>(null);
   const [diagnosticProgress, setDiagnosticProgress] = useState<{ jobId: string; status: string; completedTools: number; totalTools: number; currentToolId: string | null } | null>(null);
   const [executingCheck, setExecutingCheck] = useState(false);
-  const [checkInspector, setCheckInspector] = useState<{ toolId: string; checkIndex: number; checkedAt: string; toolLatencyMs: number; toolStatus?: string; toolScore?: number; check: ToolValidationCheck } | null>(null);
+  const [checkInspector, setCheckInspector] = useState<{ toolId: string; checkIndex: number; checkedAt: string; startedAt?: string; finishedAt?: string; durationMs: number; executionMode?: string; executionPerformed?: boolean; toolLatencyMs: number; toolStatus?: string; toolScore?: number; check: ToolValidationCheck } | null>(null);
   const [copiedCommand, setCopiedCommand] = useState(false);
+  const copyCheckOutput=async()=>{if(!checkInspector)return;const c=checkInspector.check;const out=[c.stdout||'',c.stderr?'STDERR:\n'+c.stderr:''].filter(Boolean).join('\n');try{await navigator.clipboard.writeText(out||'(no output)');}catch(_){}};
+  const downloadCheckResult=()=>{if(!checkInspector)return;const c=checkInspector.check;const blob=new Blob([JSON.stringify({toolId:checkInspector.toolId,test:c.nameEn,executionMode:checkInspector.executionMode,executionPerformed:checkInspector.executionPerformed,startedAt:checkInspector.startedAt,finishedAt:checkInspector.finishedAt,durationMs:checkInspector.durationMs,check:c},null,2)],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='pilot-check-result-'+checkInspector.toolId+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)};
 
   const runValidationForTool = async (toolId: string) => {
     setIsValidating(true); setSingleResult(null);
@@ -74,28 +76,24 @@ export const ToolValidationModal: React.FC<Props> = ({
       setCheckInspector({
         toolId: String(data.toolId || toolId),
         checkIndex: Number(data.checkIndex ?? checkIndex),
-        checkedAt: String(data.checkedAt || new Date().toISOString()),
-        toolLatencyMs: Number(data.toolLatencyMs || 0),
+        checkedAt: String(data.checkedAt || data.finishedAt || new Date().toISOString()),
+        startedAt: data.startedAt ? String(data.startedAt) : undefined,
+        finishedAt: data.finishedAt ? String(data.finishedAt) : undefined,
+        durationMs: Number(data.durationMs ?? data.check?.durationMs ?? 0),
+        executionMode: data.executionMode ? String(data.executionMode) : undefined,
+        executionPerformed: data.executionPerformed !== false && data.check?.executionPerformed !== false,
+        toolLatencyMs: Number(data.durationMs ?? data.toolLatencyMs ?? 0),
         toolStatus: data.toolStatus,
         toolScore: data.toolScore,
         check: data.check || check
       });
     } catch (e) {
+      const message=safeError(e);
       setCheckInspector({
-        toolId,
-        checkIndex,
-        checkedAt: new Date().toISOString(),
-        toolLatencyMs: 0,
-        toolStatus: 'error',
-        toolScore: 0,
-        check: {
-          ...check,
-          status: 'warn',
-          detailFa: 'اجرای مجدد این check ناموفق بود: ' + safeError(e),
-          detailEn: 'This check could not be refreshed: ' + safeError(e),
-          stderr: safeError(e),
-          exitCode: 1
-        }
+        toolId,checkIndex,checkedAt:new Date().toISOString(),startedAt:new Date().toISOString(),finishedAt:new Date().toISOString(),
+        durationMs:0,executionMode:'ISOLATED_SINGLE_CHECK',executionPerformed:false,toolLatencyMs:0,toolStatus:'warning',toolScore:undefined,
+        check:{nameFa:check.nameFa,nameEn:check.nameEn,status:'warn',result:'NOT_EXECUTED',
+          detailFa:'این check اجرا نشد: '+message,detailEn:'This check was not executed: '+message,command:'',stdout:'',stderr:'',exitCode:undefined,executionPerformed:false}
       });
     } finally {
       setExecutingCheck(false);
@@ -294,6 +292,7 @@ export const ToolValidationModal: React.FC<Props> = ({
                   <div className='flex items-start justify-between gap-2'><div><div className='text-[11px] font-bold text-white'>{isFa ? mod.titleFa : mod.titleEn}</div><div className='text-[10px] text-slate-500'>{isFa ? mod.categoryNameFa : mod.categoryNameEn}</div></div>{good ? <CheckCircle2 className='w-4 h-4 text-emerald-400' /> : <AlertTriangle className='w-4 h-4 text-amber-400' />}</div>
                   <div className='mt-2 text-[10px] font-mono text-slate-300'>{result ? result.score + '/100' : '—'}</div>
                   {result?.summaryFa && <div className='mt-1 text-[10px] text-slate-500 line-clamp-2'>{isFa ? result.summaryFa : result.summaryEn}</div>}
+                  {result?.checkedAt && <div className='mt-1 text-[9px] text-slate-600 font-mono'>{isFa ? 'آخرین Refresh:' : 'Last Refresh:'} {new Date(result.checkedAt).toLocaleString()}</div>}
                   <div className='mt-2 flex items-center gap-2'>
                     <button
                       onClick={() => { setSelectedTool(mod.id); setActiveTab('current'); void runValidationForTool(mod.id); }}
@@ -322,11 +321,19 @@ export const ToolValidationModal: React.FC<Props> = ({
           <button type='button' onClick={() => setCheckInspector(null)} className='p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400'><X className='w-4 h-4' /></button>
         </div>
         <div className='p-4 overflow-y-auto max-h-[calc(88vh-70px)] space-y-3'>
-          <div className='grid grid-cols-2 md:grid-cols-4 gap-2'>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'وضعیت' : 'Status'}</div><div className={'mt-1 text-xs font-black ' + (checkInspector.check.status === 'pass' ? 'text-emerald-300' : 'text-amber-300')}>{checkInspector.check.status.toUpperCase()}</div></div>
+          <div className='grid grid-cols-2 md:grid-cols-3 gap-2'>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Tool</div><div className='mt-1 text-xs font-black text-white'>{checkInspector.toolId}</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Test</div><div className='mt-1 text-[10px] font-black text-white'>{checkInspector.check.nameEn}</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Status</div><div className={'mt-1 text-xs font-black ' + (checkInspector.check.result === 'PASS' ? 'text-emerald-300' : checkInspector.check.result === 'FAIL' ? 'text-rose-300' : checkInspector.check.result === 'NOT_EXECUTED' ? 'text-slate-300' : 'text-amber-300')}>{checkInspector.check.result || checkInspector.check.status.toUpperCase()}</div></div>
             <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Exit Code</div><div className='mt-1 text-xs font-black text-white'>{checkInspector.check.exitCode ?? '—'}</div></div>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'Latency' : 'Latency'}</div><div className='mt-1 text-xs font-black text-white flex items-center gap-1'><Clock className='w-3 h-3 text-cyan-400' />{checkInspector.toolLatencyMs}ms</div></div>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'زمان' : 'Checked at'}</div><div className='mt-1 text-[10px] font-mono text-slate-300'>{new Date(checkInspector.checkedAt).toLocaleTimeString()}</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'شروع' : 'Start time'}</div><div className='mt-1 text-[10px] font-mono text-slate-300'>{checkInspector.startedAt ? new Date(checkInspector.startedAt).toLocaleString() : '—'}</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Duration</div><div className='mt-1 text-xs font-black text-white flex items-center gap-1'><Clock className='w-3 h-3 text-cyan-400' />{checkInspector.durationMs}ms</div></div>
+          </div>
+          <div className='flex flex-wrap items-center gap-2'>
+            <span className='text-[9px] text-slate-500 font-mono'>{checkInspector.executionMode || 'UNKNOWN'} · {checkInspector.executionPerformed === false ? 'NOT EXECUTED' : 'EXECUTED'}</span>
+            <button type='button' onClick={copyCheckOutput} className='px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-[9px] text-slate-200'>Copy Output</button>
+            <button type='button' onClick={downloadCheckResult} className='px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-[9px] text-slate-200'>Download Result</button>
+            <button type='button' onClick={()=>void runValidationForCheck(checkInspector.toolId,checkInspector.check,checkInspector.checkIndex)} disabled={executingCheck} className='px-2.5 py-1.5 rounded-lg bg-cyan-600/80 text-[9px] font-bold text-white disabled:opacity-40'>Run Again</button>
           </div>
           <div className='rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3'>
             <div className='flex items-center justify-between gap-2 mb-2'><div className='text-[10px] font-bold text-cyan-200'>{isFa ? 'دستور دقیق اجراشده روی سرور' : 'Exact command executed on the server'}</div><button type='button' onClick={() => { if (checkInspector.check.command) { navigator.clipboard.writeText(checkInspector.check.command).then(() => { setCopiedCommand(true); window.setTimeout(() => setCopiedCommand(false), 1500); }).catch(() => {}); } }} className='text-[9px] text-slate-300 hover:text-white inline-flex items-center gap-1'>{copiedCommand ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}{copiedCommand ? (isFa ? 'کپی شد' : 'Copied') : 'Copy'}</button></div>
