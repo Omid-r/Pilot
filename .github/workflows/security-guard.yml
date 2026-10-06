@@ -35,10 +35,25 @@ jobs:
             fi
           done
 
-          if git ls-files | grep -E '(^|/)(.env($|\.)|.*\.(pem|key|p12|pfx|jks|keystore)$)' ; then
-            echo "ERROR: credential/private-key material is tracked."
-            exit 1
-          fi
+          while IFS= read -r path; do
+            base="${path##*/}"
+            case "${base}" in
+              .env)
+                echo "ERROR: credential/private-key material is tracked: ${path}"
+                exit 1
+                ;;
+              .env.*)
+                if [ "${base}" != ".env.example" ]; then
+                  echo "ERROR: credential/private-key material is tracked: ${path}"
+                  exit 1
+                fi
+                ;;
+              *.pem|*.key|*.p12|*.pfx|*.jks|*.keystore)
+                echo "ERROR: credential/private-key material is tracked: ${path}"
+                exit 1
+                ;;
+            esac
+          done < <(git ls-files)
 
       - name: Reject high-confidence credential material
         shell: bash
