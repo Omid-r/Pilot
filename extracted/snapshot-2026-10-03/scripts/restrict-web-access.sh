@@ -31,7 +31,7 @@ if systemctl is-active --quiet firewalld 2>/dev/null && command -v firewall-cmd 
     firewall-cmd --permanent --zone=public --remove-port="${p}/tcp" >/dev/null 2>&1 || true
   done
 
-  RULE="rule family="ipv4" source address="${CLIENT_SOURCE}" port port="${PORT}" protocol="tcp" accept"
+  RULE="rule family=\"ipv4\" source address=\"${CLIENT_SOURCE}\" port port=\"${PORT}\" protocol=\"tcp\" accept"
   firewall-cmd --permanent --zone=public --remove-rich-rule="${RULE}" >/dev/null 2>&1 || true
   firewall-cmd --permanent --zone=public --add-rich-rule="${RULE}" >/dev/null
   firewall-cmd --reload >/dev/null
