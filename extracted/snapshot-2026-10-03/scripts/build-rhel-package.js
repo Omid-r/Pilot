@@ -372,7 +372,7 @@ if [ -d "\${TARGET_DIR}/data" ]; then
 fi
 
 # Stage and use the bundled Node.js runtime only.
-BUNDLED_NODE="${SOURCE_DIR}/node-runtime/bin/node"
+BUNDLED_NODE="\${SOURCE_DIR}/node-runtime/bin/node"
 NODE_BIN="/usr/local/bin/splunk-doctor-node"
 if [ ! -x "${BUNDLED_NODE}" ]; then
   echo "[-] اخطار: runtime داخلی Node.js در بسته موجود نیست یا executable نیست."
