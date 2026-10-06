@@ -110,7 +110,7 @@ async function startServer() {
               'DENIED',
               session.user.username,
               req.ip || 'unknown',
-              \`حساب auditor اجازه اجرای متد تغییردهنده \${req.method} روی مسیر \${req.path} را ندارد.\`
+              'حساب auditor اجازه اجرای متد تغییردهنده ' + req.method + ' روی مسیر ' + req.path + ' را ندارد.'
             );
             return res.status(403).json({
               success: false,
@@ -472,7 +472,6 @@ child.unref();
       .replace(/(PASSWORD\\s*=\\s*)(["']?)[^"'\\s]+/gi, '$1[REDACTED]')
       .replace(/(pass4SymmKey\\s*=\\s*)([^\\s]+)/gi, '$1[REDACTED]')
       .replace(/(token\\s*=\\s*)([^\\s]+)/gi, '$1[REDACTED]')
-      .replace(/(SPLUNK_PASSWORD=)([^\\s]+)/gi, '$1[REDACTED]');
 
     const logEntry: ServerCommandLogEntry = {
       id: entryId,
