@@ -118,20 +118,9 @@ else
     echo "  [!] Container engine not installed. Real container deployment will remain unavailable until an offline runtime is staged."
 fi
 
-echo "[6/6] Configuring OS Firewall & Port Access Rules..."
-if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
-    firewall-cmd --permanent --zone=public --add-port=3000/tcp
-    firewall-cmd --permanent --zone=public --add-port=8001/tcp
-    firewall-cmd --permanent --zone=public --add-port=8090/tcp
-    firewall-cmd --permanent --zone=public --add-port=9998/tcp
-    firewall-cmd --reload
-fi
-
-if command -v iptables >/dev/null 2>&1; then
-    iptables -I INPUT -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-    iptables -I INPUT -p tcp --dport 8001 -j ACCEPT 2>/dev/null || true
-    iptables -I INPUT -p tcp --dport 8090 -j ACCEPT 2>/dev/null || true
-fi
+echo "[6/6] Leaving inbound firewall closed by default..."
+echo "  [i] No global inbound ports are opened by install-all-offline.sh."
+echo "  [i] For limited web access, use scripts/restrict-web-access.sh with one client IP/CIDR."
 
 echo "======================================================================"
 echo " [SUCCESS] Air-Gapped Setup Completed!"
