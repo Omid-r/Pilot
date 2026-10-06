@@ -65,6 +65,14 @@ jobs:
             exit 1
           fi
 
+
+
+          # Reject literal container bootstrap credentials in templates/manifests.
+          # Placeholders and runtime secret references are allowed; concrete values are not.
+          if git grep -nI -E -- '(SPLUNK_PASSWORD|SPLUNK_HEC_TOKEN|MINIO_ROOT_PASSWORD|SPLUNK_SECRET)[[:space:]]*=[[:space:]]*[^<\$\{[:space:]][^[:space:]]*' -- ':!*.lock' ':!*.map' ':!*.min.js'; then
+            echo "ERROR: literal container credential found in tracked source."
+            exit 1
+          fi
           if git grep -nI -E -- 'https://hooks[.]slack[.]com/services/[A-Za-z0-9]{15,}/[A-Za-z0-9]{15,}/[A-Za-z0-9]{15,}' -- ':!*.map' ':!*.min.js'; then
             echo "ERROR: live Slack webhook found in tracked source."
             exit 1
