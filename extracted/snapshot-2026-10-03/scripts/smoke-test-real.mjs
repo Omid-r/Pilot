@@ -45,6 +45,12 @@ try{
  r=await req('/api/parallel-cluster/start',{method:'POST',headers:auth,body:{}});assert(r.status>=400,`parallel start unexpectedly succeeded: ${r.status}`);
  r=await req('/api/k8s/deploy-splunk',{method:'POST',headers:auth,body:{password}});assert(r.status>=400,`k8s deploy unexpectedly succeeded: ${r.status}`);
  r=await req('/api/tools/validate-all',{method:'POST',headers:auth,body:{}});assert(r.status===200,'validate-all failed');assert((r.json?.healthyCount||0)+(r.json?.warningCount||0)===r.json.totalTools,'validate-all counts are inconsistent');
+ r=await req('/api/tools/validate-check',{method:'POST',headers:auth,body:{toolId:'architecture_auditor',checkIndex:0,checkNameEn:'Real Splunk runtime'}});
+ assert(r.status===200 || r.status===409,'isolated check endpoint unexpected: '+r.status);
+ assert(r.json?.executionMode==='ISOLATED_SINGLE_CHECK','isolated execution mode missing');
+ assert(r.json?.executionPerformed===false || typeof r.json?.executionPerformed==='boolean','isolated execution flag missing');
+ if(r.status===200) assert(r.json?.check?.nameEn==='Real Splunk runtime','wrong isolated check returned');
+
  r=await req('/api/tools/offline-readiness',{headers:auth});assert(r.status===200,'offline readiness endpoint failed: '+r.text);assert(r.json?.mode==='OFFLINE_READINESS','offline readiness mode missing');assert(Number(r.json?.totalTools)>=20,'offline readiness did not validate the full tool set');assert((r.json?.healthyCount||0)+(r.json?.warningCount||0)+(r.json?.errorCount||0)===r.json.totalTools,'offline readiness counts are inconsistent');assert(r.json?.localSignals?.nodeRuntime===true,'offline bundled/system Node runtime probe failed');assert(r.json?.localSignals?.appBundle===true,'offline application bundle probe failed');
  console.log('[SMOKE] PASS — real authenticated control-plane, legacy negative, and validation checks passed.');
 }catch(e){console.error('[SMOKE] FAIL — '+e.message);console.error(stdout);console.error(stderr);process.exitCode=1;}finally{child.kill('SIGTERM');}
