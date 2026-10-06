@@ -5600,7 +5600,7 @@ disabled = 0
     if(toolId==='heartbeat_radar'&&checkNameEn==='Real node heartbeat'){
       const target=await discoverRemoteTarget();
       if(!target)return notExecuted('Heartbeat نودهای واقعی','هیچ endpoint واقعی پیدا نشد.','No real endpoint was found.');
-      const parsed=parseTarget(target,8089);
+      const parsed=isolatedParseTarget(target,8089);
       return execute('Heartbeat '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Heartbeat واقعی موفق شد.',detailEn:'Real heartbeat succeeded.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
 
@@ -5610,19 +5610,19 @@ disabled = 0
     }
     if(toolId==='remote_gateway'&&checkNameEn==='Resolve پیکربندی SSH'){
       const target=await discoverRemoteTarget(); if(!target)return notExecuted('Resolve پیکربندی SSH','target واقعی وجود ندارد؛ ssh -G اجرا نشد.','No real target exists; ssh -G was not executed.');
-      const parsed=parseTarget(target,8089); return execute('Resolve پیکربندی SSH','ssh',['-G',parsed.host],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'SSH config واقعی resolve شد برای '+parsed.host+'.',detailEn:'Real SSH config resolved for '+parsed.host+'.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+      const parsed=isolatedParseTarget(target,8089); return execute('Resolve پیکربندی SSH','ssh',['-G',parsed.host],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'SSH config واقعی resolve شد برای '+parsed.host+'.',detailEn:'Real SSH config resolved for '+parsed.host+'.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
     if(toolId==='remote_gateway'&&(checkNameEn==='پورت SSH واقعی'||checkNameEn==='Real SSH transport')){
       const target=await discoverRemoteTarget(); if(!target)return notExecuted('پورت SSH واقعی','target واقعی وجود ندارد؛ TCP probe اجرا نشد.','No real target exists; the TCP probe was not executed.');
-      const host=parseTarget(target,8089).host; return execute('SSH TCP '+host+':22','node',['-e',tcpProbeScript,host,'22'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'پورت SSH '+host+':22 در دسترس است.',detailEn:'SSH port '+host+':22 is reachable.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+      const host=isolatedParseTarget(target,8089).host; return execute('SSH TCP '+host+':22','node',['-e',tcpProbeScript,host,'22'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'پورت SSH '+host+':22 در دسترس است.',detailEn:'SSH port '+host+':22 is reachable.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
     if(toolId==='remote_gateway'&&(checkNameEn==='Remote SSH credentials'||checkNameEn==='احراز هویت SSH واقعی')){
       const target=await discoverRemoteTarget(); if(!target)return notExecuted('Credential SSH ریموت','target واقعی وجود ندارد؛ authentication اجرا نشد.','No real target exists; authentication was not executed.');
-      const host=parseTarget(target,8089).host; return execute('احراز هویت SSH واقعی','ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'SSH non-interactive authentication موفق شد.',detailEn:'Non-interactive SSH authentication succeeded.'}:{status:'warn',detailFa:'SSH transport/credential evidence: '+String(r.stderr||r.stdout||('exit '+r.code)),detailEn:'SSH transport/credential evidence: '+String(r.stderr||r.stdout||('exit '+r.code))});
+      const host=isolatedParseTarget(target,8089).host; return execute('احراز هویت SSH واقعی','ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'SSH non-interactive authentication موفق شد.',detailEn:'Non-interactive SSH authentication succeeded.'}:{status:'warn',detailFa:'SSH transport/credential evidence: '+String(r.stderr||r.stdout||('exit '+r.code)),detailEn:'SSH transport/credential evidence: '+String(r.stderr||r.stdout||('exit '+r.code))});
     }
     if(toolId==='remote_gateway'&&checkNameEn==='پورت Management Splunk واقعی'){
       const target=await discoverRemoteTarget(); if(!target)return notExecuted('پورت Management Splunk واقعی','target واقعی وجود ندارد؛ TCP probe اجرا نشد.','No real target exists; TCP probe was not executed.');
-      const parsed=parseTarget(target,8089); return execute('Splunk Management '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Management port واقعی قابل دسترسی است.',detailEn:'The real management port is reachable.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+      const parsed=isolatedParseTarget(target,8089); return execute('Splunk Management '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Management port واقعی قابل دسترسی است.',detailEn:'The real management port is reachable.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
 
     if(toolId==='health_audit'&&checkNameEn==='Health telemetry واقعی'){
