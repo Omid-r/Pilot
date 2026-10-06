@@ -51,10 +51,25 @@ cp -rf "${SOURCE_DIR}"/* "${TARGET_DIR}/"
 echo "==> [۴/۶] نصب تمام پیش‌نیازهای آفلاین RHEL از روی مدیا..."
 bash "${TARGET_DIR}/scripts/install-offline-prereqs.sh"
 
-# Install safe permissions; do not make every config/data file executable.
-echo "==> [۴.۵/۶] اعمال مجوزهای امن و اجرایی..."
+# Normalize installation permissions once, then restore executable bits for every
+# bundled installer/script/runtime artifact that must be executable. Never make
+# configuration, JSON, JS, or secret/state files executable.
+echo "==> [۴.۵/۶] اعمال و تثبیت مجوزهای نصب و فایل‌های اجرایی..."
 find "${TARGET_DIR}" -type d -exec chmod 755 {} +
 find "${TARGET_DIR}" -type f -exec chmod 644 {} +
+find "${TARGET_DIR}" -type f \( \
+  -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \
+\) -exec chmod 755 {} +
+for executable in \
+  "${TARGET_DIR}/node-runtime/bin/node" \
+  "${TARGET_DIR}/kubectl" \
+  "${TARGET_DIR}/k3s" \
+  "${TARGET_DIR}/bin/kubectl" \
+  "/usr/local/bin/splunk-doctor-node" \
+  "/usr/local/bin/kubectl" \
+  "/usr/local/bin/k3s"; do
+  [ -f "${executable}" ] && chmod 755 "${executable}" 2>/dev/null || true
+done
 chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
 # Private runtime state and secrets live outside the application tree.
 mkdir -p "${DATA_DIR}"
