@@ -4925,7 +4925,6 @@ disabled = 0
             `find "${cfgDir}" -maxdepth 1 -type f -name "*.conf"`,String(cfg?.stdout||''),String(cfg?.stderr||''),Number(cfg?.code??1)
           );
         }
-        }
         break;
       }
       case 'topology':
