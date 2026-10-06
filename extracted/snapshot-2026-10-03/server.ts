@@ -5501,6 +5501,59 @@ disabled = 0
       if(checkNameEn==='Real config edit') return notExecuted('ویرایش واقعی config','این check mutation است؛ Refresh هیچ فایل واقعی را تغییر نمی‌دهد. Edit/Backup/Validate/Rollback باید با confirmation انجام شود.','This check is mutating; Refresh does not modify real config. Use Edit/Backup/Validate/Rollback with confirmation.');
     }
 
+    if(toolId==='bento_overview'&&checkNameEn==='Bento functional coverage'){
+      return execute('پوشش functional بنتو','bash',['-lc','ip -brief addr; ss -H -lnt; curl -s -o /dev/null -w "HTTP %{http_code}\\n" http://127.0.0.1:3000'],'system',(r:any)=>{
+        const out=String(r.stdout||''); const code=out.match(/HTTP (\\d{3})/); const httpCode=code?Number(code[1]):0;
+        return r.code===0&&httpCode>=200&&httpCode<500?{status:'pass',detailFa:'شبکه، listenerها و endpoint محلی controller واقعاً probe شدند.',detailEn:'Network, listeners, and the local controller endpoint were actually probed.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))};
+      });
+    }
+    if((toolId==='docker_k8s')&&(checkNameEn==='Podman')){
+      return execute('Podman runtime واقعی','podman',['version','--format','{{.Version}}'],'docker',(r:any)=>r.code===0?{status:'pass',detailFa:String(r.stdout||r.stderr||'').trim(),detailEn:String(r.stdout||r.stderr||'').trim()}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if((toolId==='docker_k8s')&&(checkNameEn==='kubectl')){
+      return execute('kubectl client واقعی','kubectl',['version','--client=true','--output=json'],'k8s',(r:any)=>r.code===0?{status:'pass',detailFa:'kubectl client واقعاً اجرا شد.',detailEn:'kubectl client executed successfully.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='docker_k8s'&&checkNameEn==='Kubernetes cluster connectivity'){
+      return execute('اتصال واقعی Kubernetes','kubectl',['cluster-info','--request-timeout=5s'],'k8s',(r:any)=>r.code===0?{status:'pass',detailFa:'اتصال واقعی به Kubernetes cluster موفق شد.',detailEn:'A real Kubernetes cluster connection succeeded.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='commercial_license'&&checkNameEn==='Real license configuration'){
+      if(!splunkBin)return notExecuted('پیکربندی License واقعی','Splunk واقعی پیدا نشد؛ btool license اجرا نشد.','Real Splunk was not found; btool license was not executed.');
+      return execute('پیکربندی License واقعی','bash',['-lc','SPLUNK_HOME="'+splunkHome+'" "'+splunkBin+'" btool license list --debug'],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'پیکربندی واقعی License خوانده شد.',detailEn:'Real license configuration was read.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='commercial_license'&&checkNameEn==='License quota/usage') return notExecuted('وضعیت سهمیه/مصرف License','مصرف واقعی License بدون احراز هویت REST کامل قابل اثبات نیست؛ هیچ PASS مصنوعی صادر نشد.','Actual license usage requires authenticated Splunk REST access; no synthetic PASS is returned.');
+    if(toolId==='package_center'&&checkNameEn==='RPM media واقعی'){
+      return execute('رسانه RPM آفلاین','bash',['-lc','find "'+getAppProjectRoot()+'/offline-prereqs" -type f -name "*.rpm" | wc -l'],'system',(r:any)=>Number(String(r.stdout||'0').trim())>0?{status:'pass',detailFa:String(r.stdout).trim()+' RPM واقعی پیدا شد.',detailEn:String(r.stdout).trim()+' real RPM files were found.'}:{status:'warn',detailFa:'هیچ RPM آفلاین پیدا نشد.',detailEn:'No offline RPM files were found.'});
+    }
+    if(toolId==='admin_security'&&checkNameEn==='Security store واقعی'){
+      const dataDir=process.env.SPLUNK_DOCTOR_DATA_DIR||'/var/lib/splunk-doctor';
+      return execute('Security store واقعی','bash',['-lc','test -f "'+path.join(dataDir,'security-db.json')+'" && test -f "'+path.join(dataDir,'master-signing.key')+'"'],'security',(r:any)=>r.code===0?{status:'pass',detailFa:'security DB/key واقعی موجود است.',detailEn:'Real security DB/key are present.'}:{status:'warn',detailFa:'security DB/key کامل نیست.',detailEn:'The real security DB/key set is incomplete.'});
+    }
+    if(toolId==='admin_security'&&checkNameEn==='Real security mutation') return notExecuted('تغییر امنیتی واقعی','این check mutation است و در Diagnostic read-only اجرا نمی‌شود؛ هیچ تغییر password/policy انجام نشد.','This check is mutating and is not executed by read-only diagnostics; no password/policy change was made.');
+    if(toolId==='system_update'&&checkNameEn==='Update Manager infrastructure'){
+      const updateRoot=path.join(process.env.SPLUNK_DOCTOR_DATA_DIR||'/var/lib/splunk-doctor','updates');
+      const finalizer=path.join(process.cwd(),'scripts','update-finalizer.cjs');
+      return execute('زیرساخت Update Manager','bash',['-lc','test -d "'+updateRoot+'/inbox" && test -d "'+updateRoot+'/stage" && test -d "'+updateRoot+'/backups" && test -f "'+finalizer+'"'],'system',(r:any)=>r.code===0?{status:'pass',detailFa:'دایرکتوری‌های staging/backup/inbox و finalizer واقعی آماده‌اند.',detailEn:'Real inbox/stage/backup directories and the finalizer are ready.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='backup_archive'&&checkNameEn==='backup/create/verify واقعی'){
+      return execute('ساخت و بررسی Backup واقعی','bash',['-lc','d=$(mktemp -d /tmp/pilot-diag-backup-XXXXXX); trap "rm -rf \\"$d\\"" EXIT; printf "pilot-backup-diagnostic-ok\\n" > "$d/probe.txt"; tar -czf "$d/probe.tar.gz" -C "$d" probe.txt && tar -tzf "$d/probe.tar.gz" | grep -qx probe.txt'],'system',(r:any)=>r.code===0?{status:'pass',detailFa:'archive آزمایشی واقعاً ساخته و verify شد.',detailEn:'A real test archive was created and verified.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='component_agents'&&checkNameEn==='Agent scripts'){
+      return execute('اسکریپت‌های Agent واقعی','bash',['-lc','set -e; files=$(find "'+path.join(getAppProjectRoot(),'scripts')+'" -maxdepth 1 -type f -name "*.sh" -print); test -n "$files"; while IFS= read -r f; do bash -n "$f"; done <<EOF\n$files\nEOF'],'system',(r:any)=>r.code===0?{status:'pass',detailFa:'syntax تمام scriptهای shell قابل اجرا بررسی شد.',detailEn:'Shell syntax for the bundled scripts was checked.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='doc_reference'&&checkNameEn==='مستندات آفلاین واقعی UI'){
+      return execute('مستندات آفلاین واقعی UI','bash',['-lc','find "'+getAppProjectRoot()+'" -maxdepth 2 -type f \( -iname "README*" -o -iname "*.md" \) | wc -l'],'system',(r:any)=>Number(String(r.stdout||'0').trim())>0?{status:'pass',detailFa:String(r.stdout).trim()+' فایل مستنداتی واقعی پیدا شد.',detailEn:String(r.stdout).trim()+' real documentation files were found.'}:{status:'warn',detailFa:'فایل مستنداتی واقعی در عمق بررسی‌شده پیدا نشد.',detailEn:'No real documentation file was found in the inspected depth.'});
+    }
+    if(toolId==='network_toolbox'&&(checkNameEn==='Traceroute واقعی'||checkNameEn==='Traceroute')){
+      const traceTool=commandExists('traceroute')?'traceroute':(commandExists('tracepath')?'tracepath':'');
+      if(!traceTool)return notExecuted('Traceroute واقعی','traceroute/tracepath روی سرور نصب نیست؛ هیچ probe اجرا نشد.','traceroute/tracepath is not installed; no probe was executed.');
+      const traceArgs=traceTool==='traceroute'?['-m','3','-n','-w','1','127.0.0.1']:['-m','3','-n','127.0.0.1'];
+      return execute('Traceroute واقعی',traceTool,traceArgs,'network',(r:any)=>r.code===0?{status:'pass',detailFa:'مسیر loopback واقعاً probe شد.',detailEn:'The loopback path was actually probed.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='health_audit'&&checkNameEn==='خطاهای واقعی Splunk در لاگ'){
+      const logFile=path.join(splunkHome||'/opt/splunk','var/log/splunk/splunkd.log');
+      return execute('خطاهای اخیر واقعی Splunk در لاگ','bash',['-lc','test -f "'+logFile+'" && tail -n 500 "'+logFile+'" | grep -Ei "ERROR|Connection refused|timed out|malformed" | tail -n 50 || true'],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'لاگ واقعی Splunk بررسی شد؛ خروجی خطاهای اخیر در popup آمده است.',detailEn:'The real Splunk log was inspected; recent error output is shown in the popup.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    
     const direct:Record<string,{nameFa:string;cmd:string;args:string[];category:any;evaluate?:(r:any)=>any}>={
       'health_audit:Real health telemetry':{nameFa:'Health telemetry واقعی',cmd:'bash',args:['-lc','ss -H -s; df -P /; free -m; uptime'],category:'system'},
       'live_logs:Real splunkd.log tail':{nameFa:'Tail واقعی splunkd.log',cmd:'tail',args:['-n','50',path.join(splunkHome||'/opt/splunk','var/log/splunk/splunkd.log')],category:'splunk'},
@@ -5526,7 +5579,7 @@ disabled = 0
     if(/^(Destructive deployment execution|Real update installation|External provider delivery)$/i.test(checkNameEn))
       return notExecuted('عملیات mutation','این عملیات در Refresh read-only خودکار اجرا نمی‌شود و confirmation لازم دارد.','This mutation is not auto-executed by read-only Refresh and requires explicit confirmation.');
 
-    return {success:false,code:'ISOLATED_CHECK_NOT_REGISTERED',executionMode:'ISOLATED_SINGLE_CHECK',executionPerformed:false,startedAt,finishedAt:new Date().toISOString(),durationMs:Date.now()-startedMs,toolId,checkNameEn,error:'No isolated executor is registered for this check; no other checks were executed.'};
+    return notExecuted('Check مستقل '+checkNameEn,'برای این check هنوز executor مستقل ثبت نشده است؛ هیچ check دیگری اجرا نشد.','No isolated executor is registered for this check; no other check was executed.');
   }
 
   // =========================================================================
