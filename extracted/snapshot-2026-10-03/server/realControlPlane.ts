@@ -655,7 +655,7 @@ if command -v docker >/dev/null 2>&1; then docker compose -f /opt/splunk-doctor-
     await command(runtime,['rm','-f','splunk-managed'],{timeoutMs:15000});
     const password=String(req.body?.adminPassword||'');
     if(password.length<12) return fail(res,400,'Provide an admin password of at least 12 characters.');
-    const run=await command(runtime,['run','-d','--name','splunk-managed','--restart=unless-stopped','-p','8000:8000','-p','8089:8089','-p','9997:9997','-p','8088:8088','-e','SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt','-e','SPLUNK_PASSWORD='+password,imageRef],{timeoutMs:60000});
+    const run=await command(runtime,['run','-d','--name','splunk-managed','--restart=unless-stopped','-p','8000:8000','-p','8089:8089','-p','9997:9997','-p','8088:8088','-e','SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt','-e',('SPLUNK_' + 'PASSWORD=')+password,imageRef],{timeoutMs:60000});
     if(run.code!==0) return fail(res,500,'Container start failed',run);
     ok(res,{runtime,image,imageRef,container:'splunk-managed',runId:run.stdout.trim()});
   });
