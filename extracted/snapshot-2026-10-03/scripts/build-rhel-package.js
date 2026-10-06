@@ -68,7 +68,10 @@ if (fs.existsSync(path.join(rootDir, 'scripts'))) {
       try { fs.chmodSync(path.join(stagingDir, s), 0o755); } catch (e) {}
     }
   });
-  // chmod +x all scripts inside scriptsTarget
+  // Restore executable permissions for every bundled installer/diagnostic script.
+  try {
+    execSync(`find "${scriptsTarget}" -type f \\( -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \\) -exec chmod 755 {} + 2>/dev/null || true`);
+  } catch (_) {}
   try {
     execSync(`chmod +x "${scriptsTarget}"/*.sh "${scriptsTarget}"/*.py 2>/dev/null || true`);
   } catch (_) {}
@@ -225,7 +228,11 @@ mkdir -p "$TARGET_DIR"
 cp -r ./* "$TARGET_DIR/"
 find "$TARGET_DIR" -type d -exec chmod 755 {} +
 find "$TARGET_DIR" -type f -exec chmod 644 {} +
-chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh "$TARGET_DIR"/node-runtime/bin/node 2>/dev/null || true
+find "$TARGET_DIR" -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \) -exec chmod 755 {} +
+for executable in "$TARGET_DIR/node-runtime/bin/node" "$TARGET_DIR/kubectl" "$TARGET_DIR/k3s" "$TARGET_DIR/bin/kubectl"; do
+  [ -f "$executable" ] && chmod 755 "$executable" 2>/dev/null || true
+done
+chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
 mkdir -p /var/lib/splunk-doctor
 chmod 700 /var/lib/splunk-doctor
 if command -v restorecon >/dev/null 2>&1; then
@@ -311,12 +318,20 @@ rm -rf "\${TARGET_DIR}/dist" "\${TARGET_DIR}/scripts" "\${TARGET_DIR}/systemd" 2
 echo "==> [۳/۶] کپی و استقرار فایل‌های بسته جدید..."
 cp -rf "\${SOURCE_DIR}"/* "\${TARGET_DIR}/"
 
-# 5. Fix ALL permissions automatically (No manual chmod required!)
-echo "==> [۴/۶] اعمال و تثبیت دسترسی‌های اجرایی کامل روی تمامی فایل‌ها و اسکریپت‌ها..."
-chmod -R 755 "\${TARGET_DIR}"
-chmod +x "\${TARGET_DIR}"/*.sh 2>/dev/null || true
-chmod +x "\${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
-chmod +x "\${TARGET_DIR}"/dist/server.cjs 2>/dev/null || true
+# Normalize installation permissions and restore executable bits only on
+# installers, diagnostic scripts and bundled runtime binaries.
+echo "==> [۴/۶] اعمال و تثبیت مجوزهای نصب و فایل‌های اجرایی..."
+find "${TARGET_DIR}" -type d -exec chmod 755 {} +
+find "${TARGET_DIR}" -type f -exec chmod 644 {} +
+find "${TARGET_DIR}" -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \) -exec chmod 755 {} +
+for executable in \
+  "${TARGET_DIR}/node-runtime/bin/node" \
+  "${TARGET_DIR}/kubectl" \
+  "${TARGET_DIR}/k3s" \
+  "${TARGET_DIR}/bin/kubectl"; do
+  [ -f "${executable}" ] && chmod 755 "${executable}" 2>/dev/null || true
+done
+chmod +x "${TARGET_DIR}"/*.sh "${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
 
 # Check / find Node.js binary path
 NODE_BIN="$(command -v node 2>/dev/null || which node 2>/dev/null || echo "")"
@@ -508,6 +523,21 @@ FEATURES=ARROW_9997_REVERSED,ACTIVE_PORT_INSPECTOR,TCP_PROBE_API,DYNAMIC_NODES
 fs.writeFileSync(path.join(stagingDir, 'VERSION'), versionInfo, 'utf8');
 
 // 10. Archive into public directory as both names for backward and forward compatibility
+console.log('[RHEL Packager] Finalizing executable permissions in staging tree...');
+try {
+  execSync(`find "${stagingDir}" -type f \\( -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \\) -exec chmod 755 {} + 2>/dev/null || true`);
+} catch (_) {}
+for (const executable of [
+  path.join(stagingDir, 'node-runtime', 'bin', 'node'),
+  path.join(stagingDir, 'kubectl'),
+  path.join(stagingDir, 'k3s'),
+  path.join(stagingDir, 'bin', 'kubectl')
+]) {
+  if (fs.existsSync(executable)) {
+    try { fs.chmodSync(executable, 0o755); } catch (_) {}
+  }
+}
+
 console.log('[RHEL Packager] Archiving tar.gz...');
 const targetTar1 = path.join(publicDir, 'splunk_doctor_standalone_ui.tar.gz');
 const targetTar2 = path.join(publicDir, `splunk_cluster_doctor_rhel_v${PACKAGE_VERSION}.tar.gz`);
