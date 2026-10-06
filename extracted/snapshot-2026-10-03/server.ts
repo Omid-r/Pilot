@@ -65,9 +65,63 @@ async function startServer() {
     next();
   });
 
+  // Authenticate every API request, then enforce a hard read-only boundary for auditor accounts.
+  // This is intentionally centralized so newly-added mutating POST/PUT/PATCH/DELETE routes
+  // cannot accidentally become available to a limited diagnostic account.
+  const AUDITOR_READONLY_MUTATING_PATHS = new Set([
+    '/real/network/scan',
+    '/real/node/probe',
+    '/real/hardening/plan',
+    '/real/validate/cluster',
+    '/real/overseer/step',
+    '/splunk/logs/analyze',
+    '/parallel-cluster/deep-diagnostics',
+    '/toolbox/port-scan',
+    '/toolbox/ping',
+    '/toolbox/flows',
+    '/toolbox/traceroute',
+    '/splunk/remote/probe-port',
+    '/splunk/remote/probe-cluster',
+    '/bento/live',
+    '/tools/validate',
+    '/tools/validate-all',
+    '/tools/validate-check',
+    '/tools/diagnostic-report'
+  ]);
+
   app.use('/api', (req, res, next) => {
     if (req.path === '/auth/login' || req.path === '/health') return next();
-    return requireAuth(req, res, next);
+    return requireAuth(req, res, () => {
+      const authHeader = req.headers.authorization;
+      const headerToken = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.replace('Bearer ', '').trim()
+        : '';
+      const cookieToken = readSessionCookie(req);
+      const token = headerToken || cookieToken;
+      const session = token ? verifySessionToken(token) : null;
+      if (session && !session.isExpiredAccount) {
+        (req as any).user = session.user;
+        (req as any).sessionToken = token;
+        if (session.user.role === 'auditor' && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+          if (!AUDITOR_READONLY_MUTATING_PATHS.has(req.path)) {
+            logAuditEvent(
+              'SECURITY',
+              'AUDITOR_MUTATION_BLOCKED',
+              'DENIED',
+              session.user.username,
+              req.ip || 'unknown',
+              \`حساب auditor اجازه اجرای متد تغییردهنده \${req.method} روی مسیر \${req.path} را ندارد.\`
+            );
+            return res.status(403).json({
+              success: false,
+              error: 'حساب auditor فقط به عملیات read-only و diagnostic مجاز دسترسی دارد.',
+              code: 'AUDITOR_READ_ONLY'
+            });
+          }
+        }
+      }
+      return next();
+    });
   });
 
   // Public controller health/version endpoint. No browser cache is permitted.
