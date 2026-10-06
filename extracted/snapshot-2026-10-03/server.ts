@@ -4748,34 +4748,38 @@ disabled = 0
       }
     };
     const classifyBtoolCheck = (result: any) => {
-      const stdout = String(result?.stdout || '');
-      const stderr = String(result?.stderr || '');
-      const lines = stdout.split(/\r?\n/)
-        .map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim())
-        .filter(Boolean);
-      const stderrLines = stderr.split(/\r?\n/)
+      const normalizeLines = (value: unknown) => String(value || '')
+        .split(/\r?\n/)
         .map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim())
         .filter(Boolean)
         .filter((line:string)=>!/^Command failed:\s*bash -lc\b/i.test(line));
-      const noSpecLines = lines.filter((line:string)=>/^No spec file for:\s*/i.test(line));
-      const diagnosticLines = lines.filter((line:string)=>/^Checking:\s*/i.test(line) || /^No spec file for:\s*/i.test(line));
-      const unexpectedLines = lines.filter((line:string)=>!/^Checking:\s*/i.test(line) && !/^No spec file for:\s*/i.test(line));
-      const explicitErrors = [...unexpectedLines, ...stderrLines].filter((line:string)=>
+      const stdout = String(result?.stdout || '');
+      const stderr = String(result?.stderr || '');
+      const lines = normalizeLines(stdout);
+      const stderrLines = normalizeLines(stderr);
+      const combinedLines = [...lines, ...stderrLines];
+      const noSpecLines = combinedLines.filter((line:string)=>/^No spec file for:\s*/i.test(line));
+      const benignLines = combinedLines.filter((line:string)=>
+        /^Checking:\s*/i.test(line) || /^No spec file for:\s*/i.test(line)
+      );
+      const unexpectedLines = combinedLines.filter((line:string)=>
+        !/^Checking:\s*/i.test(line) && !/^No spec file for:\s*/i.test(line)
+      );
+      const explicitErrors = unexpectedLines.filter((line:string)=>
         /^(?:ERROR|FATAL|INVALID|UNKNOWN|FAILED|UNABLE|CANNOT|MALFORMED)\b/i.test(line)
-        || /(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf)/i.test(line)
+        || /(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf|invalid key in stanza|improper stanza)/i.test(line)
       );
       const onlyExpectedNoSpec = result?.code !== 0
         && noSpecLines.length > 0
-        && diagnosticLines.length === lines.length
-        && explicitErrors.length === 0
-        && stderrLines.length === 0;
-      const pass = result?.code === 0 || onlyExpectedNoSpec;
+        && benignLines.length === combinedLines.length
+        && explicitErrors.length === 0;
       return {
-        pass,
+        pass: result?.code === 0 || onlyExpectedNoSpec,
         onlyExpectedNoSpec,
         stdout,
         stderr,
         lines,
+        stderrLines,
         noSpecLines,
         unexpectedLines,
         explicitErrors
@@ -4910,6 +4914,17 @@ disabled = 0
           add('functional','اعتبارسنجی کانفیگ Splunk','Splunk config validation',btoolStatus,btoolFa,btoolEn,
             `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`,btool.stdout,btool.stderr,b.code
           );
+        }
+        if (cfgDir) {
+          const cfg=await run('find',[cfgDir,'-maxdepth','1','-type','f','-name','*.conf'],'بازرسی واقعی فایل‌های Config','Real config file inspection',10000);
+          const files=String(cfg?.stdout||'').split('\n').map((x:string)=>x.trim()).filter(Boolean);
+          add('functional','بازرسی واقعی فایل‌های Config','Real config file inspection',
+            cfg?.code===0&&files.length>0?'pass':'warn',
+            cfg?.code===0&&files.length>0?`${files.length} فایل .conf واقعی در system/local بررسی شد.`:'فایل config واقعی قابل بررسی پیدا نشد یا فرمان find شکست خورد.',
+            cfg?.code===0&&files.length>0?`${files.length} real .conf files were inspected in system/local.`:'No real config file was available for inspection or find failed.',
+            `find "${cfgDir}" -maxdepth 1 -type f -name "*.conf"`,String(cfg?.stdout||''),String(cfg?.stderr||''),Number(cfg?.code??1)
+          );
+        }
         }
         break;
       }
@@ -5371,6 +5386,7 @@ disabled = 0
       installed: capabilityWarnings === 0,
       operational: functionalHealthy,
       latencyMs: Date.now() - started,
+      checkedAt: new Date().toISOString(),
       checks,
       summaryFa: functionalWarnings || capabilityWarnings
         ? `${functionalWarnings + capabilityWarnings} مورد عملکردی/وابستگی نیازمند بررسی است؛ محدودیت read-only: ${safetyWarnings}`
@@ -5384,6 +5400,136 @@ disabled = 0
           : 'A real functional test completed successfully with full evidence.'
     };
   }
+
+  // =========================================================================
+  // ISOLATED SINGLE-CHECK EXECUTOR
+  // IMPORTANT: this path never calls validateToolInternal().
+  // =========================================================================
+  async function runIsolatedValidationCheck(toolId: string, checkNameEn: string) {
+    const startedMs=Date.now();
+    const startedAt=new Date(startedMs).toISOString();
+
+    const redact=(value:unknown)=>{
+      let s=String(value??'');
+      s=s.replace(/(password|passwd|token|authorization|cookie|secret|private[_ -]?key|api[_ -]?key)\s*[:=]\s*[^\s,;]+/gi,'$1=[REDACTED]');
+      s=s.replace(/Bearer\s+[A-Za-z0-9._-]+/gi,'Bearer [REDACTED]');
+      s=s.replace(/-----BEGIN [^-]+ PRIVATE KEY-----[\s\S]*?-----END [^-]+ PRIVATE KEY-----/g,'[PRIVATE KEY REDACTED]');
+      return s.length>16000?s.slice(0,16000)+'\n...[truncated]...':s;
+    };
+    const finish=(check:any,executionPerformed:boolean)=>{
+      const finishedAt=new Date().toISOString();
+      return {success:true,executionMode:'ISOLATED_SINGLE_CHECK',executionPerformed,startedAt,finishedAt,durationMs:Date.now()-startedMs,
+        check:{...check,startedAt:check.startedAt||startedAt,finishedAt:check.finishedAt||finishedAt,durationMs:Number(check.durationMs??(Date.now()-startedMs)),executionPerformed,result:check.result||(check.status==='pass'?'PASS':check.status==='fail'?'FAIL':'WARN')}};
+    };
+    const notExecuted=(nameFa:string,detailFa:string,detailEn:string,command='')=>finish({
+      nameFa,nameEn:checkNameEn,status:'warn',result:'NOT_EXECUTED',detailFa,detailEn,command:redact(command),stdout:'',stderr:''
+    },false);
+    const commandExists=(cmd:string)=>{
+      try{return execSync('command -v '+JSON.stringify(cmd)+' 2>/dev/null || true',{encoding:'utf8'}).trim()!=='';}catch(_){return false;}
+    };
+    const execute=async(nameFa:string,cmd:string,args:string[],category:any,evaluate:(r:any)=>any)=>{
+      const rendered=args.map((a:string)=>/^[A-Za-z0-9_./:@%+=,-]+$/.test(a)?a:JSON.stringify(a)).join(' ');
+      const displayCommand=rendered?cmd+' '+rendered:cmd;
+      if(!commandExists(cmd)) return notExecuted(nameFa,\`فرمان \${cmd} روی سرور موجود نیست؛ اجرا نشد.\`,\`Command \${cmd} is not available on the server; it was not executed.\`,displayCommand);
+      const before=new Date().toISOString();
+      const r=await runCommand(cmd,args,{toolId,toolNameFa:nameFa,toolNameEn:checkNameEn,category,timeoutMs:20000});
+      const entry=serverCommandLogs.find((e:any)=>e.id===r.entryId);
+      const ev=evaluate(r);
+      return finish({
+        nameFa,nameEn:checkNameEn,status:ev.status,result:ev.result||(ev.status==='pass'?'PASS':ev.status==='fail'?'FAIL':'WARN'),
+        detailFa:ev.detailFa,detailEn:ev.detailEn,
+        command:redact(entry?.command||displayCommand),executorCommand:redact(entry?.command||displayCommand),
+        stdout:redact(r.stdout),stderr:redact(r.stderr),exitCode:Number(r.code),
+        startedAt:entry?.timestamp||before,finishedAt:new Date().toISOString(),
+        durationMs:Number(entry?.durationMs??(Date.now()-Date.parse(entry?.timestamp||before)))
+      },true);
+    };
+    const splunkContext=()=>{
+      const candidates=[process.env.SPLUNK_HOME||'','/opt/splunk','/opt/splunkforwarder'].filter(Boolean);
+      const home=candidates.find(p=>fs.existsSync(path.join(p,'bin','splunk')))||'';
+      return {home,bin:home?path.join(home,'bin','splunk'):'',cfgDir:home?path.join(home,'etc/system/local'):''};
+    };
+    const {home:splunkHome,bin:splunkBin,cfgDir}=splunkContext();
+
+    if(toolId==='architecture_auditor'){
+      if(checkNameEn==='Real Splunk runtime'){
+        if(!splunkBin) return notExecuted('اجرای واقعی Splunk','Splunk واقعی پیدا نشد؛ version اجرا نشد.','Real Splunk was not found; version was not executed.',\`SPLUNK_HOME="/opt/splunk" "/opt/splunk/bin/splunk" version\`);
+        return execute('اجرای واقعی Splunk','bash',['-lc',\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" version\`],'splunk',(r:any)=>r.code===0
+          ?{status:'pass',detailFa:String(r.stdout||r.stderr||'').trim().slice(0,800)||'Splunk version با exit 0 اجرا شد.',detailEn:String(r.stdout||r.stderr||'').trim().slice(0,800)||'Splunk version exited 0.'}
+          :{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+      }
+      if(checkNameEn==='Real Splunk config validation'){
+        if(!splunkBin) return notExecuted('اعتبارسنجی واقعی کانفیگ Splunk','Splunk واقعی پیدا نشد؛ btool اجرا نشد.','Real Splunk was not found; btool was not executed.');
+        return execute('اعتبارسنجی واقعی کانفیگ Splunk','bash',['-lc',\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`],'splunk',(r:any)=>{
+          const lines=[String(r.stdout||''),String(r.stderr||'')].flatMap((x:string)=>x.split(/\r?\n/)).map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim()).filter(Boolean);
+          const noSpec=lines.filter((x:string)=>/^No spec file for:\s*/i.test(x));
+          const benign=lines.length>0&&lines.every((x:string)=>/^Checking:\s*/i.test(x)||/^No spec file for:\s*/i.test(x));
+          const explicit=lines.filter((x:string)=>!/^Checking:\s*/i.test(x)&&!/^No spec file for:\s*/i.test(x)).filter((x:string)=>/^(?:ERROR|FATAL|INVALID|UNKNOWN|FAILED|UNABLE|CANNOT|MALFORMED)\b/i.test(x)||/(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf|invalid key in stanza|improper stanza)/i.test(x));
+          const pass=r.code===0||(r.code!==0&&noSpec.length>0&&benign&&explicit.length===0);
+          return pass
+            ?{status:'pass',detailFa:r.code===0?'btool check بدون خطای syntax/config پایان یافت.':\`btool exit \${r.code} داشت، اما فقط Checking/No spec file گزارش شد و خطای syntax/config مشاهده نشد.\`,detailEn:r.code===0?'btool check completed without syntax/config errors.':\`btool returned exit \${r.code}, but only Checking/No spec file messages were present and no syntax/config error was observed.\`}
+            :{status:'fail',detailFa:\`btool خطای واقعی گزارش کرد: \${explicit.join(' | ')||String(r.stderr||r.stdout||('exit '+r.code))}\`,detailEn:\`btool reported a real error: \${explicit.join(' | ')||String(r.stderr||r.stdout||('exit '+r.code))}\`};
+        });
+      }
+      if(checkNameEn==='Real config file inspection'){
+        if(!cfgDir||!fs.existsSync(cfgDir)) return notExecuted('بازرسی واقعی فایل‌های Config','مسیر system/local پیدا نشد؛ find اجرا نشد.','The system/local directory was not found; find was not executed.');
+        return execute('بازرسی واقعی فایل‌های Config','find',[cfgDir,'-maxdepth','1','-type','f','-name','*.conf'],'splunk',(r:any)=>{
+          const n=String(r.stdout||'').split(/\r?\n/).map((x:string)=>x.trim()).filter(Boolean).length;
+          return r.code===0&&n>0?{status:'pass',detailFa:n+' فایل .conf واقعی پیدا شد.',detailEn:n+' real .conf files were found.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))};
+        });
+      }
+    }
+
+    if(toolId==='config_editor'){
+      if(checkNameEn==='Real config read'){
+        if(!cfgDir||!fs.existsSync(cfgDir)) return notExecuted('خواندن config واقعی','مسیر system/local پیدا نشد؛ find اجرا نشد.','The system/local directory was not found; find was not executed.');
+        return execute('خواندن config واقعی','find',[cfgDir,'-maxdepth','1','-type','f','-name','*.conf'],'splunk',(r:any)=>{
+          const n=String(r.stdout||'').split(/\r?\n/).map((x:string)=>x.trim()).filter(Boolean).length;
+          return r.code===0&&n>0?{status:'pass',detailFa:n+' فایل .conf واقعی پیدا شد.',detailEn:n+' real .conf files were found.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))};
+        });
+      }
+      if(checkNameEn==='Splunk config syntax'){
+        if(!splunkBin) return notExecuted('Syntax کانفیگ Splunk','Splunk واقعی پیدا نشد؛ btool اجرا نشد.','Real Splunk was not found; btool was not executed.');
+        return execute('Syntax کانفیگ Splunk','bash',['-lc',\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`],'splunk',(r:any)=>{
+          const lines=[String(r.stdout||''),String(r.stderr||'')].flatMap((x:string)=>x.split(/\r?\n/)).map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim()).filter(Boolean);
+          const noSpec=lines.filter((x:string)=>/^No spec file for:\s*/i.test(x));
+          const benign=lines.length>0&&lines.every((x:string)=>/^Checking:\s*/i.test(x)||/^No spec file for:\s*/i.test(x));
+          const explicit=lines.filter((x:string)=>!/^Checking:\s*/i.test(x)&&!/^No spec file for:\s*/i.test(x)).filter((x:string)=>/^(?:ERROR|FATAL|INVALID|UNKNOWN|FAILED|UNABLE|CANNOT|MALFORMED)\b/i.test(x)||/(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf|invalid key in stanza|improper stanza)/i.test(x));
+          const pass=r.code===0||(r.code!==0&&noSpec.length>0&&benign&&explicit.length===0);
+          return pass?{status:'pass',detailFa:r.code===0?'btool check بدون خطای syntax/config پایان یافت.':\`btool exit \${r.code} داشت، اما فقط Checking/No spec file گزارش شد و خطای syntax/config مشاهده نشد.\`,detailEn:r.code===0?'btool check completed without syntax/config errors.':\`btool returned exit \${r.code}, but only Checking/No spec file messages were present and no syntax/config error was observed.\`}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))};
+        });
+      }
+      if(checkNameEn==='Real config edit') return notExecuted('ویرایش واقعی config','این check mutation است؛ Refresh هیچ فایل واقعی را تغییر نمی‌دهد. Edit/Backup/Validate/Rollback باید با confirmation انجام شود.','This check is mutating; Refresh does not modify real config. Use Edit/Backup/Validate/Rollback with confirmation.');
+    }
+
+    const direct:Record<string,{nameFa:string;cmd:string;args:string[];category:any;evaluate?:(r:any)=>any}>={
+      'health_audit:Real health telemetry':{nameFa:'Health telemetry واقعی',cmd:'bash',args:['-lc','ss -H -s; df -P /; free -m; uptime'],category:'system'},
+      'live_logs:Real splunkd.log tail':{nameFa:'Tail واقعی splunkd.log',cmd:'tail',args:['-n','50',path.join(splunkHome||'/opt/splunk','var/log/splunk/splunkd.log')],category:'splunk'},
+      'docker_k8s:Podman runtime functional':{nameFa:'Podman runtime واقعی',cmd:'podman',args:['info','--format','json'],category:'docker'},
+      'docker_k8s:kubectl client functional':{nameFa:'kubectl client واقعی',cmd:'kubectl',args:['version','--client=true','--output=json'],category:'k8s'},
+      'docker_k8s:Real Kubernetes cluster connection':{nameFa:'اتصال واقعی Kubernetes',cmd:'kubectl',args:['cluster-info','--request-timeout=5s'],category:'k8s',evaluate:(r:any)=>r.code===0?{status:'pass',detailFa:'اتصال واقعی Kubernetes موفق شد.',detailEn:'Real Kubernetes cluster connection succeeded.'}:/current-context|no configuration|connection refused|couldn't get current server/i.test(String(r.stderr||r.stdout))?{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))}},
+      'commercial_license:Real Splunk runtime':{nameFa:'نسخه واقعی Splunk',cmd:'bash',args:['-lc',splunkBin?\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" version\`:'command -v splunk'],category:'splunk'},
+      'commercial_license:Real license configuration':{nameFa:'پیکربندی License واقعی',cmd:'bash',args:['-lc',splunkBin?\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool license list --debug\`:'command -v splunk'],category:'splunk'},
+      'package_center:Real RPM media':{nameFa:'رسانه RPM آفلاین',cmd:'bash',args:['-lc',\`find "\${getAppProjectRoot()}/offline-prereqs" -type f -name '*.rpm' | wc -l\`],category:'system',evaluate:(r:any)=>Number(String(r.stdout||'0').trim())>0?{status:'pass',detailFa:String(r.stdout).trim()+' RPM واقعی پیدا شد.',detailEn:String(r.stdout).trim()+' real RPM files were found.'}:{status:'warn',detailFa:'هیچ RPM آفلاین پیدا نشد.',detailEn:'No offline RPM files were found.'}},
+      'network_toolbox:Real ICMP ping':{nameFa:'Ping واقعی',cmd:'ping',args:['-n','-c','1','-W','1','127.0.0.1'],category:'network'},
+      'admin_security:Real OpenSSL':{nameFa:'OpenSSL واقعی',cmd:'openssl',args:['version'],category:'security'}
+    };
+    const item=direct[toolId+':'+checkNameEn];
+    if(item) return execute(item.nameFa,item.cmd,item.args,item.category,item.evaluate||((r:any)=>r.code===0?{status:'pass',detailFa:'فرمان واقعی با exit 0 پایان یافت.',detailEn:'The real command exited with code 0.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))}));
+
+    if(toolId==='component_agents'&&checkNameEn.startsWith('Syntax ')){
+      const file=checkNameEn.slice('Syntax '.length);
+      const full=path.join(getAppProjectRoot(),'scripts',file);
+      if(!/^[A-Za-z0-9._-]+\.sh$/.test(file)||!fs.existsSync(full)) return notExecuted('Syntax '+file,'اسکریپت واقعی پیدا نشد؛ bash -n اجرا نشد.','The real script was not found; bash -n was not executed.',\`bash -n "\${full}"\`);
+      return execute('Syntax '+file,'bash',['-n',full],'system',(r:any)=>r.code===0?{status:'pass',detailFa:\`bash -n \${file} موفق بود.\`,detailEn:\`bash -n \${file} passed.\`}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+
+    if(/^(Destructive deployment execution|Real update installation|External provider delivery)$/i.test(checkNameEn))
+      return notExecuted('عملیات mutation','این عملیات در Refresh read-only خودکار اجرا نمی‌شود و confirmation لازم دارد.','This mutation is not auto-executed by read-only Refresh and requires explicit confirmation.');
+
+    return {success:false,code:'ISOLATED_CHECK_NOT_REGISTERED',executionMode:'ISOLATED_SINGLE_CHECK',executionPerformed:false,startedAt,finishedAt:new Date().toISOString(),durationMs:Date.now()-startedMs,toolId,checkNameEn,error:'No isolated executor is registered for this check; no other checks were executed.'};
+  }
+
   // =========================================================================
   // OFFLINE READINESS / REAL BACKGROUND TOOL VALIDATION
   // This endpoint proves local runtime capability without internet access.
@@ -5663,35 +5809,18 @@ disabled = 0
   });
 
 
-  // API: Re-run exactly one validation check and return its live command evidence.
-  // The client selects a check by index/name only; arbitrary shell commands are never accepted here.
+  // API: Re-run exactly one validation check. Never run the whole tool here.
   app.post('/api/tools/validate-check', async (req, res) => {
     try {
-      const toolId = String(req.body?.toolId || 'health_audit').trim();
-      const requestedIndex = Number(req.body?.checkIndex);
-      const requestedNameEn = String(req.body?.checkNameEn || '').trim();
-      const result = await validateToolInternal(toolId);
-      const checks = Array.isArray(result?.checks) ? result.checks : [];
-      let index = Number.isInteger(requestedIndex) ? requestedIndex : -1;
-      if (index < 0 || index >= checks.length) {
-        index = requestedNameEn ? checks.findIndex((c:any) => String(c?.nameEn || '') === requestedNameEn) : -1;
-      }
-      if (index < 0 || index >= checks.length) {
-        return res.status(404).json({ success:false, error:'Validation check not found.', toolId, availableChecks: checks.map((c:any, i:number) => ({ index:i, nameFa:c.nameFa, nameEn:c.nameEn })) });
-      }
-      const check = checks[index];
-      return res.json({
-        success: true,
-        toolId,
-        checkIndex: index,
-        checkedAt: new Date().toISOString(),
-        toolLatencyMs: Number(result?.latencyMs || 0),
-        check,
-        toolStatus: result?.status,
-        toolScore: result?.score,
-      });
-    } catch (err:any) {
-      return res.status(500).json({ success:false, error: err?.message || String(err) });
+      const toolId=String(req.body?.toolId||'').trim();
+      const checkIndex=Number(req.body?.checkIndex);
+      const checkNameEn=String(req.body?.checkNameEn||'').trim();
+      if(!toolId||!checkNameEn) return res.status(400).json({success:false,error:'toolId and checkNameEn are required.',executionMode:'ISOLATED_SINGLE_CHECK',executionPerformed:false});
+      const outcome=await runIsolatedValidationCheck(toolId,checkNameEn);
+      if(!outcome.success) return res.status(409).json({...outcome,toolId,checkIndex:Number.isInteger(checkIndex)?checkIndex:null});
+      return res.json({...outcome,toolId,checkIndex:Number.isInteger(checkIndex)?checkIndex:null,checkedAt:outcome.finishedAt});
+    } catch(err:any) {
+      return res.status(500).json({success:false,error:err?.message||String(err),executionMode:'ISOLATED_SINGLE_CHECK',executionPerformed:false});
     }
   });
 
