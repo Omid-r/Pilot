@@ -178,9 +178,13 @@ jobs:
           # Explicitly restore executable bits after copy/normalization.
           # Git checkouts may not preserve script mode in all packaging paths.
           # Every file shipped under scripts/ must remain runnable by the offline installer.
-          find release/splunk-doctor/scripts -type f -exec chmod 0755 {} +
+          chmod -R 0755 release/splunk-doctor/scripts
           chmod 0755 release/splunk-doctor/setup.sh
-          find release/splunk-doctor/scripts -type f -exec test -x {} \;
+          bad_build_script="$(find release/splunk-doctor/scripts -type f ! -perm /111 -print -quit)"
+          if [ -n "${bad_build_script}" ]; then
+            stat -c 'BAD_BUILD_SCRIPT mode=%a path=%n' "${bad_build_script}"
+            exit 1
+          fi
 
           # Keep non-executable application/config files readable.
           find release/splunk-doctor -type f ! -path 'release/splunk-doctor/scripts/*' \
@@ -234,11 +238,12 @@ jobs:
           tar -xzf "${archive}" -C /tmp/pilot-archive-perms
           test -x /tmp/pilot-archive-perms/splunk-doctor/setup.sh
           test -x /tmp/pilot-archive-perms/splunk-doctor/node-runtime/bin/node
-          missing_script="$(find /tmp/pilot-archive-perms/splunk-doctor/scripts -type f ! -perm -u+x -print -quit)"
+          missing_script="$(find /tmp/pilot-archive-perms/splunk-doctor/scripts -type f ! -perm /111 -print -quit)"
           if [ -n "${missing_script}" ]; then
-            echo "Bundled script lost executable bit: ${missing_script}"
+            stat -c 'BAD_ARCHIVE_SCRIPT mode=%a path=%n' "${missing_script}"
             exit 1
           fi
+          echo "Archive script executable-bit verification passed."
 
       - name: Execute complete offline media on Rocky Linux
         working-directory: ${{ env.APP_ROOT }}
