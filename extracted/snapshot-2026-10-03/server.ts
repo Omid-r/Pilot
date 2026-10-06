@@ -5305,7 +5305,7 @@ disabled = 0
         const updaterDirsReady = [updaterRoot, path.join(updaterRoot, 'inbox'), path.join(updaterRoot, 'stage'), path.join(updaterRoot, 'backups')].every(p => {
           try { fs.mkdirSync(p, { recursive:true, mode:0o700 }); fs.accessSync(p, fs.constants.R_OK | fs.constants.W_OK); return true; } catch (_) { return false; }
         });
-        const finalizer = path.join(splunkHome || process.cwd(), 'scripts', 'update-finalizer.cjs');
+        const finalizer = path.join(process.cwd(), 'scripts', 'update-finalizer.cjs');
         add(
           'functional',
           'زیرساخت Update Manager',
