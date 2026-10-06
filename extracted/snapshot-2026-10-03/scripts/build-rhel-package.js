@@ -371,26 +371,19 @@ if [ -d "\${TARGET_DIR}/data" ]; then
   done
 fi
 
-# Check / find Node.js binary path
-NODE_BIN="$(command -v node 2>/dev/null || which node 2>/dev/null || echo "")"
-if [ -z "\$NODE_BIN" ]; then
-  if [ -f "/usr/bin/node" ]; then NODE_BIN="/usr/bin/node";
-  elif [ -f "/usr/local/bin/node" ]; then NODE_BIN="/usr/local/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs18/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs18/root/usr/bin/node";
-  elif [ -f "/opt/rh/rh-nodejs16/root/usr/bin/node" ]; then NODE_BIN="/opt/rh/rh-nodejs16/root/usr/bin/node";
-  elif [ -f "/opt/splunk/bin/node" ]; then NODE_BIN="/opt/splunk/bin/node";
-  fi
-fi
-
-if [ -z "\$NODE_BIN" ]; then
-  echo "[-] اخطار: نود جی‌اس (Node.js) یافت نشد."
-  echo "[!] لطفاً با یکی از دستورات زیر Node.js را نصب کنید و مجدداً setup.sh را اجرا نمایید:"
-  echo "    sudo dnf install -y nodejs   (RHEL 8 / RHEL 9 / Rocky Linux)"
-  echo "    sudo yum install -y nodejs   (RHEL 7 / CentOS 7)"
+# Stage and use the bundled Node.js runtime only.
+BUNDLED_NODE="${SOURCE_DIR}/node-runtime/bin/node"
+NODE_BIN="/usr/local/bin/splunk-doctor-node"
+if [ ! -x "${BUNDLED_NODE}" ]; then
+  echo "[-] اخطار: runtime داخلی Node.js در بسته موجود نیست یا executable نیست."
   exit 1
 fi
-echo "  -> مسیر شناسایی‌شده Node.js: \$NODE_BIN"
-
+install -d -m 0755 /usr/local/bin
+install -m 0755 "${BUNDLED_NODE}" "${NODE_BIN}"
+if command -v restorecon >/dev/null 2>&1; then restorecon -F "${NODE_BIN}" >/dev/null 2>&1 || true; fi
+chmod 0755 "${NODE_BIN}"
+"${NODE_BIN}" --version >/dev/null
+echo "  -> runtime داخلی Node.js: ${NODE_BIN}"
 # 6. Configure Systemd Service dynamically
 echo "==> [۵/۶] پیکربندی و فعال‌سازی سرویس دائمی Systemd (splunk-doctor.service)..."
 cat << EOF > /etc/systemd/system/splunk-doctor.service
