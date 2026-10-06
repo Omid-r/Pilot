@@ -234,6 +234,15 @@ for executable in "$TARGET_DIR/node-runtime/bin/node" "$TARGET_DIR/kubectl" "$TA
   [ -f "$executable" ] && chmod 755 "$executable" 2>/dev/null || true
 done
 chmod +x "$TARGET_DIR"/*.sh "$TARGET_DIR"/scripts/*.sh 2>/dev/null || true
+
+# Runtime state and signing material never become package/application-tree secrets.
+# If a legacy data/ directory exists, keep it private and never relax secret permissions.
+if [ -d "$TARGET_DIR/data" ]; then
+  chmod 700 "$TARGET_DIR/data" 2>/dev/null || true
+  for secret in "$TARGET_DIR/data/master-signing.key" "$TARGET_DIR/data/security-db.json" "$TARGET_DIR/data/bootstrap-admin-password"; do
+    [ -f "$secret" ] && chmod 600 "$secret" 2>/dev/null || true
+  done
+fi
 mkdir -p /var/lib/splunk-doctor
 chmod 700 /var/lib/splunk-doctor
 if command -v restorecon >/dev/null 2>&1; then
@@ -333,6 +342,15 @@ for executable in \
   [ -f "\${executable}" ] && chmod 755 "\${executable}" 2>/dev/null || true
 done
 chmod +x "\${TARGET_DIR}"/*.sh "\${TARGET_DIR}"/scripts/*.sh 2>/dev/null || true
+
+# Runtime state and signing material never become package/application-tree secrets.
+# If a legacy data/ directory exists, keep it private and never relax secret permissions.
+if [ -d "\${TARGET_DIR}/data" ]; then
+  chmod 700 "\${TARGET_DIR}/data" 2>/dev/null || true
+  for secret in "\${TARGET_DIR}/data/master-signing.key" "\${TARGET_DIR}/data/security-db.json" "\${TARGET_DIR}/data/bootstrap-admin-password"; do
+    [ -f "\${secret}" ] && chmod 600 "\${secret}" 2>/dev/null || true
+  done
+fi
 
 # Check / find Node.js binary path
 NODE_BIN="$(command -v node 2>/dev/null || which node 2>/dev/null || echo "")"
