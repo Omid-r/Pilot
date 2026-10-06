@@ -229,7 +229,6 @@ async function startServer() {
       writeUpdateStatus(jobId,{state:'restarting',status:'service_restart_pending',currentVersion,targetVersion,backupPath});
       const child = spawn(process.execPath,[finalizerPath],{ detached:true, stdio:'ignore', env:{...process.env,PILOT_UPDATE_JOB:jobId,PILOT_UPDATE_ROOT:UPDATE_ROOT,PILOT_UPDATE_APP_ROOT:process.cwd(),PILOT_UPDATE_BACKUP:backupPath,PILOT_UPDATE_TARGET:targetVersion,PILOT_UPDATE_INBOX:inboxPath} });
 child.unref();
-      child.unref();
       return res.json({success:true,jobId,state:'restarting',currentVersion,targetVersion,backupPath,messageFa:'Update نصب شد؛ سرویس در حال Restart و بررسی سلامت نسخه جدید است.',messageEn:'Update installed; the service is restarting and the new version is being verified.'});
     } catch (err:any) {
       try { if (fs.existsSync(stagePath)) fs.rmSync(stagePath,{recursive:true,force:true}); } catch (_) {}
