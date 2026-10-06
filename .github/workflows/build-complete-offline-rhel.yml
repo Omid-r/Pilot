@@ -42,6 +42,8 @@ jobs:
         run: |
           set -euo pipefail
           npm run lint
+          node --check scripts/update-finalizer.cjs
+          bash -n scripts/*.sh
           npm run build
           npm run smoke
 
