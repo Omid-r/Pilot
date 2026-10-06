@@ -56,6 +56,7 @@ import { SplunkWebModal } from './components/SplunkWebModal';
 import { BentoGridConsole } from './components/BentoGridConsole';
 import { VirtualServerWipeModal } from './components/VirtualServerWipeModal';
 import { ToolValidationModal } from './components/ToolValidationModal';
+import { UpdateManager } from './components/UpdateManager';
 import { PuTTYLiveShellConsole } from './components/PuTTYLiveShellConsole';
 import { BackendOperationInspectorModal, BackendOperationRecord } from './components/BackendOperationInspectorModal';
 import { FloatingMiniWindow } from './components/FloatingMiniWindow';
@@ -445,6 +446,21 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
     descriptionEn: 'TCP socket probing, port reachability checks and latency tests',
     isEnabled: true,
     order: 21
+  },
+  {
+    id: 'system_update',
+    category: 'tools_security',
+    categoryNameFa: 'ابزارها و امنیت',
+    categoryNameEn: 'Tools & Security',
+    domainColor: 'purple',
+    iconName: 'Package',
+    titleFa: 'مدیریت بروزرسانی Pilot',
+    titleEn: 'Pilot Update Manager',
+    badge: 'Update',
+    descriptionFa: 'بارگذاری فایل Update، اعتبارسنجی نسخه، بک‌آپ، نصب، Restart و Rollback خودکار',
+    descriptionEn: 'Upload update packages, verify version/checksums, backup, restart and automatic rollback',
+    isEnabled: true,
+    order: 22.5
   },
   {
     id: 'admin_security',
@@ -2601,6 +2617,8 @@ export default function App() {
             lang={lang}
           />
         );
+      case 'system_update':
+        return <UpdateManager isFa={isFa} />;
       case 'admin_security':
         return currentUser ? (
           <AdminSecurityPanel
