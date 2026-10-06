@@ -50,9 +50,9 @@ export const DOCKER_COMPOSE_TEMPLATES: DockerComposeTemplate[] = [
     architectureSummaryEn: 'Ideal for test/dev, sandbox PoC, and dedicated lightweight logging nodes.',
     envExplanation: [
       { key: 'SPLUNK_START_ARGS', value: '--accept-license', descFa: 'پذیرش خودکار توافق‌نامه لایسنس اسپلانک', descEn: 'Automatically accept Splunk license agreement' },
-      { key: 'SPLUNK_PASSWORD', value: 'SplunkAdminPass123!', descFa: 'رمز عبور کاربر ادمین (حداقل ۸ کاراکتر و پیچیده)', descEn: 'Admin password (min 8 chars, complex)' },
+      { key: 'SPLUNK_PASSWORD', value: '<SET_VIA_SECRET_MANAGER>', descFa: 'رمز عبور کاربر ادمین (حداقل ۸ کاراکتر و پیچیده)', descEn: 'Admin password (min 8 chars, complex)' },
       { key: 'SPLUNK_ROLE', value: 'splunk_standalone', descFa: 'نقش کانتینر به عنوان سرور منفرد جامع', descEn: 'Container role as standalone node' },
-      { key: 'SPLUNK_HEC_TOKEN', value: 'b2803b90-1c95-46f9-8687-d7d8e0638541', descFa: 'ایجاد خودکار توکن HTTP Event Collector برای دریافت لاگ', descEn: 'Auto-provision HEC token for incoming events' }
+      { key: 'SPLUNK_HEC_TOKEN', value: '<GENERATED_HEC_TOKEN>', descFa: 'ایجاد خودکار توکن HTTP Event Collector برای دریافت لاگ', descEn: 'Auto-provision HEC token for incoming events' }
     ],
     dockerComposeYaml: `version: '3.8'
 
@@ -70,9 +70,9 @@ services:
       - "514:514/udp" # Syslog UDP (Optional)
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkAdminPass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_standalone
-      - SPLUNK_HEC_TOKEN=b2803b90-1c95-46f9-8687-d7d8e0638541
+      - SPLUNK_HEC_TOKEN=<GENERATED_HEC_TOKEN>
       - SPLUNK_HEC_SSL=true
       - SPLUNK_ENABLE_LISTEN=9997
     volumes:
@@ -135,7 +135,7 @@ services:
       - "8088:8088" # HEC Ingestion
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkClusterPass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_indexer
       - SPLUNK_ENABLE_LISTEN=9997
     volumes:
@@ -155,7 +155,7 @@ services:
       - "8089:8089" # REST API
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkClusterPass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_search_head
       - SPLUNK_INDEXER_URL=splunk-indexer-01:8089
       - SPLUNK_SEARCH_HEAD_CAPTAIN_URL=https://splunk-searchhead-01:8089
@@ -175,7 +175,7 @@ services:
     restart: unless-stopped
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkClusterPass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_FORWARD_SERVER=splunk-indexer-01:9997
       - SPLUNK_ADD=monitor /var/log/docker_logs
     volumes:
@@ -221,7 +221,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       - MINIO_ROOT_USER=splunk_s3_admin
-      - MINIO_ROOT_PASSWORD=SplunkMinioPass2026!
+      - MINIO_ROOT_PASSWORD=<SET_VIA_SECRET_MANAGER>
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -237,11 +237,11 @@ services:
     hostname: splunk-cm
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkEnterprisePass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_cluster_master
       - SPLUNK_REPLICATION_FACTOR=3
       - SPLUNK_SEARCH_FACTOR=2
-      - SPLUNK_SECRET=SplunkClusterSecretKey99!
+      - SPLUNK_SECRET=<SET_VIA_SECRET_MANAGER>
     ports:
       - "8089:8089"
     volumes:
@@ -256,10 +256,10 @@ services:
     hostname: splunk-idx-01
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkEnterprisePass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_indexer
       - SPLUNK_CLUSTER_MASTER_URL=https://cluster-manager:8089
-      - SPLUNK_SECRET=SplunkClusterSecretKey99!
+      - SPLUNK_SECRET=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ENABLE_LISTEN=9997
     ports:
       - "9997:9997"
@@ -277,10 +277,10 @@ services:
     hostname: splunk-idx-02
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkEnterprisePass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_indexer
       - SPLUNK_CLUSTER_MASTER_URL=https://cluster-manager:8089
-      - SPLUNK_SECRET=SplunkClusterSecretKey99!
+      - SPLUNK_SECRET=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ENABLE_LISTEN=9997
     volumes:
       - idx2-var:/opt/splunk/var
@@ -296,10 +296,10 @@ services:
     hostname: splunk-idx-03
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkEnterprisePass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_indexer
       - SPLUNK_CLUSTER_MASTER_URL=https://cluster-manager:8089
-      - SPLUNK_SECRET=SplunkClusterSecretKey99!
+      - SPLUNK_SECRET=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ENABLE_LISTEN=9997
     volumes:
       - idx3-var:/opt/splunk/var
@@ -315,10 +315,10 @@ services:
     hostname: splunk-sh-01
     environment:
       - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_PASSWORD=SplunkEnterprisePass123!
+      - SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>
       - SPLUNK_ROLE=splunk_search_head
       - SPLUNK_CLUSTER_MASTER_URL=https://cluster-manager:8089
-      - SPLUNK_SECRET=SplunkClusterSecretKey99!
+      - SPLUNK_SECRET=<SET_VIA_SECRET_MANAGER>
     ports:
       - "8000:8000"
     depends_on:
