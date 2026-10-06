@@ -610,7 +610,7 @@ export const K8S_TROUBLESHOOTING_GUIDE: K8sTroubleshootingItem[] = [
 export const SPLUNK_DOCKER_CLI_COMMANDS = [
   {
     category: 'اجرا و مدیریت پایه داکر',
-    cmd: 'docker run -d --name splunk -p 8000:8000 -p 8089:8089 -p 9997:9997 -e "SPLUNK_START_ARGS=--accept-license" -e "SPLUNK_PASSWORD=AdminPass123!" -v splunk_etc:/opt/splunk/etc -v splunk_var:/opt/splunk/var splunk/splunk:latest',
+    cmd: 'docker run -d --name splunk -p 8000:8000 -p 8089:8089 -p 9997:9997 -e "SPLUNK_START_ARGS=--accept-license" -e "SPLUNK_PASSWORD=<SET_VIA_SECRET_MANAGER>" -v splunk_etc:/opt/splunk/etc -v splunk_var:/opt/splunk/var splunk/splunk:latest',
     descFa: 'اجرای کانتینر رسمی اسپلانک با پورت‌های وب، REST و ایندکسینگ و Volumeهای ماندگار'
   },
   {
@@ -630,7 +630,7 @@ export const SPLUNK_DOCKER_CLI_COMMANDS = [
   },
   {
     category: 'بارگذاری مجدد تنظیمات بدون ریستارت',
-    cmd: 'docker exec -it splunk /opt/splunk/bin/splunk _internal call /services/admin/config-reload -auth admin:AdminPass123!',
+    cmd: 'docker exec -it splunk /opt/splunk/bin/splunk _internal call /services/admin/config-reload -auth admin:<SET_VIA_SECRET_MANAGER>',
     descFa: 'اعمال فوری تغییرات inputs.conf و props.conf بدون قطع سرویس کانتینر'
   }
 ];
