@@ -2,10 +2,11 @@
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 
 const PORT = 3100;
 const base = `http://127.0.0.1:${PORT}`;
-const password = 'CI-R3al-Test-2026!';
+const password = process.env.SPLUNK_DOCTOR_BOOTSTRAP_PASSWORD || crypto.randomBytes(24).toString('base64url');
 const dataDir = '/tmp/pilot-splunk-doctor-data';
 const splunkHome = '/tmp/pilot-no-real-splunk';
 fs.rmSync(dataDir,{recursive:true,force:true});
