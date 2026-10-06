@@ -311,6 +311,43 @@ export const ToolValidationModal: React.FC<Props> = ({
           )}
         </div>
       </div>
+        {checkInspector && (
+    <div className='fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm' dir={isFa ? 'rtl' : 'ltr'}>
+      <div className='bg-[#080c16] border border-cyan-500/30 rounded-2xl max-w-4xl w-full max-h-[88vh] overflow-hidden shadow-[0_30px_120px_rgba(0,0,0,.7)]'>
+        <div className='p-4 border-b border-white/[0.08] flex items-center justify-between gap-3'>
+          <div className='min-w-0'>
+            <div className='flex items-center gap-2'><Terminal className='w-4 h-4 text-cyan-400' /><span className='text-sm font-black text-white'>{isFa ? 'اجرای واقعی Check روی سرور' : 'Live Server Check Execution'}</span></div>
+            <div className='text-[10px] text-slate-400 mt-1 truncate'>{checkInspector.check.nameEn} · {checkInspector.toolId} · #{checkInspector.checkIndex + 1}</div>
+          </div>
+          <button type='button' onClick={() => setCheckInspector(null)} className='p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400'><X className='w-4 h-4' /></button>
+        </div>
+        <div className='p-4 overflow-y-auto max-h-[calc(88vh-70px)] space-y-3'>
+          <div className='grid grid-cols-2 md:grid-cols-4 gap-2'>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'وضعیت' : 'Status'}</div><div className={'mt-1 text-xs font-black ' + (checkInspector.check.status === 'pass' ? 'text-emerald-300' : 'text-amber-300')}>{checkInspector.check.status.toUpperCase()}</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Exit Code</div><div className='mt-1 text-xs font-black text-white'>{checkInspector.check.exitCode ?? '—'}</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'Latency' : 'Latency'}</div><div className='mt-1 text-xs font-black text-white flex items-center gap-1'><Clock className='w-3 h-3 text-cyan-400' />{checkInspector.toolLatencyMs}ms</div></div>
+            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'زمان' : 'Checked at'}</div><div className='mt-1 text-[10px] font-mono text-slate-300'>{new Date(checkInspector.checkedAt).toLocaleTimeString()}</div></div>
+          </div>
+          <div className='rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3'>
+            <div className='flex items-center justify-between gap-2 mb-2'><div className='text-[10px] font-bold text-cyan-200'>{isFa ? 'دستور دقیق اجراشده روی سرور' : 'Exact command executed on the server'}</div><button type='button' onClick={() => { if (checkInspector.check.command) { navigator.clipboard.writeText(checkInspector.check.command).then(() => { setCopiedCommand(true); window.setTimeout(() => setCopiedCommand(false), 1500); }).catch(() => {}); } }} className='text-[9px] text-slate-300 hover:text-white inline-flex items-center gap-1'>{copiedCommand ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}{copiedCommand ? (isFa ? 'کپی شد' : 'Copied') : 'Copy'}</button></div>
+            <pre className='text-[11px] text-cyan-300 whitespace-pre-wrap break-words font-mono'>{checkInspector.check.command || (isFa ? 'فرمان مستقیمی برای این check ثبت نشده است.' : 'No direct command was recorded for this check.')}</pre>
+          </div>
+          <div className='rounded-xl border border-white/[0.06] bg-black/30 p-3'>
+            <div className='text-[10px] font-bold text-slate-200 mb-2'>{isFa ? 'پاسخ / STDOUT' : 'Response / STDOUT'}</div>
+            <pre className='text-[10px] text-slate-300 whitespace-pre-wrap break-words min-h-[90px]'>{checkInspector.check.stdout || (isFa ? '(بدون stdout)' : '(no stdout)')}</pre>
+          </div>
+          <div className='rounded-xl border border-rose-500/20 bg-rose-950/10 p-3'>
+            <div className='text-[10px] font-bold text-rose-200 mb-2'>{isFa ? 'STDERR / ERROR' : 'STDERR / ERROR'}</div>
+            <pre className='text-[10px] text-rose-300 whitespace-pre-wrap break-words min-h-[60px]'>{checkInspector.check.stderr || (isFa ? '(بدون stderr)' : '(no stderr)')}</pre>
+          </div>
+          <div className='rounded-xl border border-white/[0.06] bg-white/[0.02] p-3'>
+            <div className='text-[10px] font-bold text-white mb-1'>{isFa ? 'شرح check' : 'Check detail'}</div>
+            <div className='text-[10px] text-slate-400'>{isFa ? checkInspector.check.detailFa : checkInspector.check.detailEn}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
     </div>
   );
 };
@@ -351,43 +388,5 @@ const ResultCard: React.FC<{
   </div>
 );
 
-
-  {checkInspector && (
-    <div className='fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm' dir={isFa ? 'rtl' : 'ltr'}>
-      <div className='bg-[#080c16] border border-cyan-500/30 rounded-2xl max-w-4xl w-full max-h-[88vh] overflow-hidden shadow-[0_30px_120px_rgba(0,0,0,.7)]'>
-        <div className='p-4 border-b border-white/[0.08] flex items-center justify-between gap-3'>
-          <div className='min-w-0'>
-            <div className='flex items-center gap-2'><Terminal className='w-4 h-4 text-cyan-400' /><span className='text-sm font-black text-white'>{isFa ? 'اجرای واقعی Check روی سرور' : 'Live Server Check Execution'}</span></div>
-            <div className='text-[10px] text-slate-400 mt-1 truncate'>{checkInspector.check.nameEn} · {checkInspector.toolId} · #{checkInspector.checkIndex + 1}</div>
-          </div>
-          <button type='button' onClick={() => setCheckInspector(null)} className='p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400'><X className='w-4 h-4' /></button>
-        </div>
-        <div className='p-4 overflow-y-auto max-h-[calc(88vh-70px)] space-y-3'>
-          <div className='grid grid-cols-2 md:grid-cols-4 gap-2'>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'وضعیت' : 'Status'}</div><div className={'mt-1 text-xs font-black ' + (checkInspector.check.status === 'pass' ? 'text-emerald-300' : 'text-amber-300')}>{checkInspector.check.status.toUpperCase()}</div></div>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>Exit Code</div><div className='mt-1 text-xs font-black text-white'>{checkInspector.check.exitCode ?? '—'}</div></div>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'Latency' : 'Latency'}</div><div className='mt-1 text-xs font-black text-white flex items-center gap-1'><Clock className='w-3 h-3 text-cyan-400' />{checkInspector.toolLatencyMs}ms</div></div>
-            <div className='rounded-xl border border-white/[0.06] bg-white/[0.03] p-3'><div className='text-[9px] text-slate-500'>{isFa ? 'زمان' : 'Checked at'}</div><div className='mt-1 text-[10px] font-mono text-slate-300'>{new Date(checkInspector.checkedAt).toLocaleTimeString()}</div></div>
-          </div>
-          <div className='rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3'>
-            <div className='flex items-center justify-between gap-2 mb-2'><div className='text-[10px] font-bold text-cyan-200'>{isFa ? 'دستور دقیق اجراشده روی سرور' : 'Exact command executed on the server'}</div><button type='button' onClick={() => { if (checkInspector.check.command) { navigator.clipboard.writeText(checkInspector.check.command).then(() => { setCopiedCommand(true); window.setTimeout(() => setCopiedCommand(false), 1500); }).catch(() => {}); } }} className='text-[9px] text-slate-300 hover:text-white inline-flex items-center gap-1'>{copiedCommand ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}{copiedCommand ? (isFa ? 'کپی شد' : 'Copied') : 'Copy'}</button></div>
-            <pre className='text-[11px] text-cyan-300 whitespace-pre-wrap break-words font-mono'>{checkInspector.check.command || (isFa ? 'فرمان مستقیمی برای این check ثبت نشده است.' : 'No direct command was recorded for this check.')}</pre>
-          </div>
-          <div className='rounded-xl border border-white/[0.06] bg-black/30 p-3'>
-            <div className='text-[10px] font-bold text-slate-200 mb-2'>{isFa ? 'پاسخ / STDOUT' : 'Response / STDOUT'}</div>
-            <pre className='text-[10px] text-slate-300 whitespace-pre-wrap break-words min-h-[90px]'>{checkInspector.check.stdout || (isFa ? '(بدون stdout)' : '(no stdout)')}</pre>
-          </div>
-          <div className='rounded-xl border border-rose-500/20 bg-rose-950/10 p-3'>
-            <div className='text-[10px] font-bold text-rose-200 mb-2'>{isFa ? 'STDERR / ERROR' : 'STDERR / ERROR'}</div>
-            <pre className='text-[10px] text-rose-300 whitespace-pre-wrap break-words min-h-[60px]'>{checkInspector.check.stderr || (isFa ? '(بدون stderr)' : '(no stderr)')}</pre>
-          </div>
-          <div className='rounded-xl border border-white/[0.06] bg-white/[0.02] p-3'>
-            <div className='text-[10px] font-bold text-white mb-1'>{isFa ? 'شرح check' : 'Check detail'}</div>
-            <div className='text-[10px] text-slate-400'>{isFa ? checkInspector.check.detailFa : checkInspector.check.detailEn}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )}
 
 export default ToolValidationModal;
