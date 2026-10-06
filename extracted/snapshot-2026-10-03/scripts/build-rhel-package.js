@@ -260,9 +260,17 @@ if command -v restorecon >/dev/null 2>&1; then
   restorecon -RF "$TARGET_DIR" /var/lib/splunk-doctor || true
 fi
 
-# Dynamic Node.js path discovery
-NODE_PATH="$(command -v node 2>/dev/null || echo "/usr/bin/node")"
-sed -i "s|ExecStart=.*|ExecStart=\${NODE_PATH} /opt/splunk-doctor/dist/server.cjs|g" "$TARGET_DIR/systemd/splunk-doctor.service" 2>/dev/null || true
+# Always use the bundled Node.js runtime installed by this package.
+if [ -x "$TARGET_DIR/node-runtime/bin/node" ]; then
+  install -d -m 0755 /usr/local/bin
+  install -m 0755 "$TARGET_DIR/node-runtime/bin/node" /usr/local/bin/splunk-doctor-node
+fi
+NODE_PATH="/usr/local/bin/splunk-doctor-node"
+if [ ! -x "$NODE_PATH" ]; then
+  echo "[-] Bundled Node.js runtime is missing or not executable: $NODE_PATH"
+  exit 1
+fi
+sed -i "s|ExecStart=.*|ExecStart=${NODE_PATH} /opt/splunk-doctor/dist/server.cjs|g" "$TARGET_DIR/systemd/splunk-doctor.service"
 
 echo "[+] Installing systemd service: /etc/systemd/system/splunk-doctor.service"
 cp "$TARGET_DIR/systemd/splunk-doctor.service" /etc/systemd/system/splunk-doctor.service
