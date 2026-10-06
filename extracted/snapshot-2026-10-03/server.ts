@@ -5481,6 +5481,38 @@ disabled = 0
   });
 
 
+  // API: Re-run exactly one validation check and return its live command evidence.
+  // The client selects a check by index/name only; arbitrary shell commands are never accepted here.
+  app.post('/api/tools/validate-check', async (req, res) => {
+    try {
+      const toolId = String(req.body?.toolId || 'health_audit').trim();
+      const requestedIndex = Number(req.body?.checkIndex);
+      const requestedNameEn = String(req.body?.checkNameEn || '').trim();
+      const result = await validateToolInternal(toolId);
+      const checks = Array.isArray(result?.checks) ? result.checks : [];
+      let index = Number.isInteger(requestedIndex) ? requestedIndex : -1;
+      if (index < 0 || index >= checks.length) {
+        index = requestedNameEn ? checks.findIndex((c:any) => String(c?.nameEn || '') === requestedNameEn) : -1;
+      }
+      if (index < 0 || index >= checks.length) {
+        return res.status(404).json({ success:false, error:'Validation check not found.', toolId, availableChecks: checks.map((c:any, i:number) => ({ index:i, nameFa:c.nameFa, nameEn:c.nameEn })) });
+      }
+      const check = checks[index];
+      return res.json({
+        success: true,
+        toolId,
+        checkIndex: index,
+        checkedAt: new Date().toISOString(),
+        toolLatencyMs: Number(result?.latencyMs || 0),
+        check,
+        toolStatus: result?.status,
+        toolScore: result?.score,
+      });
+    } catch (err:any) {
+      return res.status(500).json({ success:false, error: err?.message || String(err) });
+    }
+  });
+
   // API: Real notification-channel test. Never fabricate delivery success.
   app.post('/api/alerts/test-dispatch', async (req, res) => {
     const started = Date.now();
