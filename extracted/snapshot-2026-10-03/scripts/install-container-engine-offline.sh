@@ -36,6 +36,18 @@ else
     dnf --disablerepo='*' -y install "$PKG_DIR"/podman-rpms/*.rpm
     podman --version >/dev/null
   else
+    # Fall back to the bundled RHEL RPM repository shipped with this release.
+    RHEL_MAJOR="$(rpm -E %{rhel} 2>/dev/null || true)"
+    if [[ -z "$RHEL_MAJOR" || "$RHEL_MAJOR" == "%{rhel}" ]]; then
+      RHEL_MAJOR="$(rpm -E %rhel 2>/dev/null || true)"
+    fi
+    if [[ "$RHEL_MAJOR" == "8" || "$RHEL_MAJOR" == "9" ]]; then
+      RPM_DIR="/opt/splunk-doctor/offline-prereqs/rhel${RHEL_MAJOR}/x86_64/rpms"
+      if [ -f "$RPM_DIR/repodata/repomd.xml" ]; then
+        echo "  -> Installing Podman from the bundled offline RHEL repository..."
+        dnf --disablerepo='*' --repofrompath="splunk-doctor-offline,file://${RPM_DIR}" --enablerepo="splunk-doctor-offline" -y install podman
+        podman --version >/dev/null
+      else
     echo "[-] No real Docker/Podman offline artifact was found."
     echo "[!] Expected: Docker RPMs/static bundle or Podman RPMs under $PKG_DIR."
     exit 1
