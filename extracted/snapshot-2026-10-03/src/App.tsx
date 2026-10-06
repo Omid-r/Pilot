@@ -691,6 +691,7 @@ export default function App() {
   const [isGlobalTerminalOpen, setIsGlobalTerminalOpen] = useState<boolean>(false);
   const [controllerHealth, setControllerHealth] = useState<{ version: string; buildId: string } | null>(null);
   const [validatingToolId, setValidatingToolId] = useState<string>('bento_overview');
+  const [validationInitialTab, setValidationInitialTab] = useState<'current' | 'all'>('current');
 
   // Splunk System Debugger & Telemetry Modal State
   const [isDebugModalOpen, setIsDebugModalOpen] = useState<boolean>(false);
@@ -3390,6 +3391,20 @@ export default function App() {
                   })}
                 </div>
 
+                {/* Per-tool live server diagnostic refresh */}
+                <button
+                  onClick={() => {
+                    setValidatingToolId(activeTab);
+                    setValidationInitialTab('current');
+                    setIsToolValidationModalOpen(true);
+                  }}
+                  className="apple-btn-secondary text-xs"
+                  title={isFa ? 'اجرای مجدد همین ابزار و نمایش دستور و پاسخ واقعی سرور در Popup' : 'Re-run this tool and inspect the exact server command/output in a popup'}
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">{isFa ? 'Refresh / اجرای واقعی' : 'Refresh / Live Inspect'}</span>
+                </button>
+
                 {/* Picture-in-Picture Button */}
                 <button
                   onClick={() => handleToggleFloatingTool(activeTab)}
@@ -3549,6 +3564,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setValidatingToolId('bento_overview');
+                  setValidationInitialTab('all');
                   setIsToolValidationModalOpen(true);
                 }}
                 className="flex items-center gap-1.5 hover:text-[#30d158] transition cursor-pointer text-[#30d158]"
