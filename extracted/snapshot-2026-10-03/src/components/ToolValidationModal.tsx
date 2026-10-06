@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, FileCheck, Layers, RefreshCw, ShieldCheck, X, Clock, Copy, Check } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, FileCheck, Layers, RefreshCw, ShieldCheck, X, Clock, Copy, Check, Terminal } from 'lucide-react';
 
 interface ToolValidationCheck {
   nameFa: string; nameEn: string; status: 'pass' | 'warn'; detailFa: string; detailEn: string;
@@ -357,7 +357,7 @@ const ResultCard: React.FC<{
       <div className='bg-[#080c16] border border-cyan-500/30 rounded-2xl max-w-4xl w-full max-h-[88vh] overflow-hidden shadow-[0_30px_120px_rgba(0,0,0,.7)]'>
         <div className='p-4 border-b border-white/[0.08] flex items-center justify-between gap-3'>
           <div className='min-w-0'>
-            <div className='flex items-center gap-2'><TerminalLike /><span className='text-sm font-black text-white'>{isFa ? 'اجرای واقعی Check روی سرور' : 'Live Server Check Execution'}</span></div>
+            <div className='flex items-center gap-2'><Terminal className='w-4 h-4 text-cyan-400' /><span className='text-sm font-black text-white'>{isFa ? 'اجرای واقعی Check روی سرور' : 'Live Server Check Execution'}</span></div>
             <div className='text-[10px] text-slate-400 mt-1 truncate'>{checkInspector.check.nameEn} · {checkInspector.toolId} · #{checkInspector.checkIndex + 1}</div>
           </div>
           <button type='button' onClick={() => setCheckInspector(null)} className='p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400'><X className='w-4 h-4' /></button>
