@@ -5429,7 +5429,7 @@ disabled = 0
     const execute=async(nameFa:string,cmd:string,args:string[],category:any,evaluate:(r:any)=>any)=>{
       const rendered=args.map((a:string)=>/^[A-Za-z0-9_./:@%+=,-]+$/.test(a)?a:JSON.stringify(a)).join(' ');
       const displayCommand=rendered?cmd+' '+rendered:cmd;
-      if(!commandExists(cmd)) return notExecuted(nameFa,\`فرمان \${cmd} روی سرور موجود نیست؛ اجرا نشد.\`,\`Command \${cmd} is not available on the server; it was not executed.\`,displayCommand);
+      if(!commandExists(cmd)) return notExecuted(nameFa,`فرمان ${cmd} روی سرور موجود نیست؛ اجرا نشد.`,`Command ${cmd} is not available on the server; it was not executed.`,displayCommand);
       const before=new Date().toISOString();
       const r=await runCommand(cmd,args,{toolId,toolNameFa:nameFa,toolNameEn:checkNameEn,category,timeoutMs:20000});
       const entry=serverCommandLogs.find((e:any)=>e.id===r.entryId);
@@ -5452,22 +5452,22 @@ disabled = 0
 
     if(toolId==='architecture_auditor'){
       if(checkNameEn==='Real Splunk runtime'){
-        if(!splunkBin) return notExecuted('اجرای واقعی Splunk','Splunk واقعی پیدا نشد؛ version اجرا نشد.','Real Splunk was not found; version was not executed.',\`SPLUNK_HOME="/opt/splunk" "/opt/splunk/bin/splunk" version\`);
-        return execute('اجرای واقعی Splunk','bash',['-lc',\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" version\`],'splunk',(r:any)=>r.code===0
+        if(!splunkBin) return notExecuted('اجرای واقعی Splunk','Splunk واقعی پیدا نشد؛ version اجرا نشد.','Real Splunk was not found; version was not executed.',`SPLUNK_HOME="/opt/splunk" "/opt/splunk/bin/splunk" version`);
+        return execute('اجرای واقعی Splunk','bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" version`],'splunk',(r:any)=>r.code===0
           ?{status:'pass',detailFa:String(r.stdout||r.stderr||'').trim().slice(0,800)||'Splunk version با exit 0 اجرا شد.',detailEn:String(r.stdout||r.stderr||'').trim().slice(0,800)||'Splunk version exited 0.'}
           :{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
       }
       if(checkNameEn==='Real Splunk config validation'){
         if(!splunkBin) return notExecuted('اعتبارسنجی واقعی کانفیگ Splunk','Splunk واقعی پیدا نشد؛ btool اجرا نشد.','Real Splunk was not found; btool was not executed.');
-        return execute('اعتبارسنجی واقعی کانفیگ Splunk','bash',['-lc',\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`],'splunk',(r:any)=>{
+        return execute('اعتبارسنجی واقعی کانفیگ Splunk','bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'splunk',(r:any)=>{
           const lines=[String(r.stdout||''),String(r.stderr||'')].flatMap((x:string)=>x.split(/\r?\n/)).map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim()).filter(Boolean);
           const noSpec=lines.filter((x:string)=>/^No spec file for:\s*/i.test(x));
           const benign=lines.length>0&&lines.every((x:string)=>/^Checking:\s*/i.test(x)||/^No spec file for:\s*/i.test(x));
           const explicit=lines.filter((x:string)=>!/^Checking:\s*/i.test(x)&&!/^No spec file for:\s*/i.test(x)).filter((x:string)=>/^(?:ERROR|FATAL|INVALID|UNKNOWN|FAILED|UNABLE|CANNOT|MALFORMED)\b/i.test(x)||/(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf|invalid key in stanza|improper stanza)/i.test(x));
           const pass=r.code===0||(r.code!==0&&noSpec.length>0&&benign&&explicit.length===0);
           return pass
-            ?{status:'pass',detailFa:r.code===0?'btool check بدون خطای syntax/config پایان یافت.':\`btool exit \${r.code} داشت، اما فقط Checking/No spec file گزارش شد و خطای syntax/config مشاهده نشد.\`,detailEn:r.code===0?'btool check completed without syntax/config errors.':\`btool returned exit \${r.code}, but only Checking/No spec file messages were present and no syntax/config error was observed.\`}
-            :{status:'fail',detailFa:\`btool خطای واقعی گزارش کرد: \${explicit.join(' | ')||String(r.stderr||r.stdout||('exit '+r.code))}\`,detailEn:\`btool reported a real error: \${explicit.join(' | ')||String(r.stderr||r.stdout||('exit '+r.code))}\`};
+            ?{status:'pass',detailFa:r.code===0?'btool check بدون خطای syntax/config پایان یافت.':`btool exit ${r.code} داشت، اما فقط Checking/No spec file گزارش شد و خطای syntax/config مشاهده نشد.`,detailEn:r.code===0?'btool check completed without syntax/config errors.':`btool returned exit ${r.code}, but only Checking/No spec file messages were present and no syntax/config error was observed.`}
+            :{status:'fail',detailFa:`btool خطای واقعی گزارش کرد: ${explicit.join(' | ')||String(r.stderr||r.stdout||('exit '+r.code))}`,detailEn:`btool reported a real error: ${explicit.join(' | ')||String(r.stderr||r.stdout||('exit '+r.code))}`};
         });
       }
       if(checkNameEn==='Real config file inspection'){
@@ -5489,13 +5489,13 @@ disabled = 0
       }
       if(checkNameEn==='Splunk config syntax'){
         if(!splunkBin) return notExecuted('Syntax کانفیگ Splunk','Splunk واقعی پیدا نشد؛ btool اجرا نشد.','Real Splunk was not found; btool was not executed.');
-        return execute('Syntax کانفیگ Splunk','bash',['-lc',\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool check --debug\`],'splunk',(r:any)=>{
+        return execute('Syntax کانفیگ Splunk','bash',['-lc',`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`],'splunk',(r:any)=>{
           const lines=[String(r.stdout||''),String(r.stderr||'')].flatMap((x:string)=>x.split(/\r?\n/)).map((x:string)=>x.replace(/\u001b\[[0-9;]*m/g,'').trim()).filter(Boolean);
           const noSpec=lines.filter((x:string)=>/^No spec file for:\s*/i.test(x));
           const benign=lines.length>0&&lines.every((x:string)=>/^Checking:\s*/i.test(x)||/^No spec file for:\s*/i.test(x));
           const explicit=lines.filter((x:string)=>!/^Checking:\s*/i.test(x)&&!/^No spec file for:\s*/i.test(x)).filter((x:string)=>/^(?:ERROR|FATAL|INVALID|UNKNOWN|FAILED|UNABLE|CANNOT|MALFORMED)\b/i.test(x)||/(syntax error|invalid configuration|error parsing|failed to parse|malformed .*conf|invalid key in stanza|improper stanza)/i.test(x));
           const pass=r.code===0||(r.code!==0&&noSpec.length>0&&benign&&explicit.length===0);
-          return pass?{status:'pass',detailFa:r.code===0?'btool check بدون خطای syntax/config پایان یافت.':\`btool exit \${r.code} داشت، اما فقط Checking/No spec file گزارش شد و خطای syntax/config مشاهده نشد.\`,detailEn:r.code===0?'btool check completed without syntax/config errors.':\`btool returned exit \${r.code}, but only Checking/No spec file messages were present and no syntax/config error was observed.\`}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))};
+          return pass?{status:'pass',detailFa:r.code===0?'btool check بدون خطای syntax/config پایان یافت.':`btool exit ${r.code} داشت، اما فقط Checking/No spec file گزارش شد و خطای syntax/config مشاهده نشد.`,detailEn:r.code===0?'btool check completed without syntax/config errors.':`btool returned exit ${r.code}, but only Checking/No spec file messages were present and no syntax/config error was observed.`}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))};
         });
       }
       if(checkNameEn==='Real config edit') return notExecuted('ویرایش واقعی config','این check mutation است؛ Refresh هیچ فایل واقعی را تغییر نمی‌دهد. Edit/Backup/Validate/Rollback باید با confirmation انجام شود.','This check is mutating; Refresh does not modify real config. Use Edit/Backup/Validate/Rollback with confirmation.');
@@ -5507,9 +5507,9 @@ disabled = 0
       'docker_k8s:Podman runtime functional':{nameFa:'Podman runtime واقعی',cmd:'podman',args:['info','--format','json'],category:'docker'},
       'docker_k8s:kubectl client functional':{nameFa:'kubectl client واقعی',cmd:'kubectl',args:['version','--client=true','--output=json'],category:'k8s'},
       'docker_k8s:Real Kubernetes cluster connection':{nameFa:'اتصال واقعی Kubernetes',cmd:'kubectl',args:['cluster-info','--request-timeout=5s'],category:'k8s',evaluate:(r:any)=>r.code===0?{status:'pass',detailFa:'اتصال واقعی Kubernetes موفق شد.',detailEn:'Real Kubernetes cluster connection succeeded.'}:/current-context|no configuration|connection refused|couldn't get current server/i.test(String(r.stderr||r.stdout))?{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))}},
-      'commercial_license:Real Splunk runtime':{nameFa:'نسخه واقعی Splunk',cmd:'bash',args:['-lc',splunkBin?\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" version\`:'command -v splunk'],category:'splunk'},
-      'commercial_license:Real license configuration':{nameFa:'پیکربندی License واقعی',cmd:'bash',args:['-lc',splunkBin?\`SPLUNK_HOME="\${splunkHome}" "\${splunkBin}" btool license list --debug\`:'command -v splunk'],category:'splunk'},
-      'package_center:Real RPM media':{nameFa:'رسانه RPM آفلاین',cmd:'bash',args:['-lc',\`find "\${getAppProjectRoot()}/offline-prereqs" -type f -name '*.rpm' | wc -l\`],category:'system',evaluate:(r:any)=>Number(String(r.stdout||'0').trim())>0?{status:'pass',detailFa:String(r.stdout).trim()+' RPM واقعی پیدا شد.',detailEn:String(r.stdout).trim()+' real RPM files were found.'}:{status:'warn',detailFa:'هیچ RPM آفلاین پیدا نشد.',detailEn:'No offline RPM files were found.'}},
+      'commercial_license:Real Splunk runtime':{nameFa:'نسخه واقعی Splunk',cmd:'bash',args:['-lc',splunkBin?`SPLUNK_HOME="${splunkHome}" "${splunkBin}" version`:'command -v splunk'],category:'splunk'},
+      'commercial_license:Real license configuration':{nameFa:'پیکربندی License واقعی',cmd:'bash',args:['-lc',splunkBin?`SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool license list --debug`:'command -v splunk'],category:'splunk'},
+      'package_center:Real RPM media':{nameFa:'رسانه RPM آفلاین',cmd:'bash',args:['-lc',`find "${getAppProjectRoot()}/offline-prereqs" -type f -name '*.rpm' | wc -l`],category:'system',evaluate:(r:any)=>Number(String(r.stdout||'0').trim())>0?{status:'pass',detailFa:String(r.stdout).trim()+' RPM واقعی پیدا شد.',detailEn:String(r.stdout).trim()+' real RPM files were found.'}:{status:'warn',detailFa:'هیچ RPM آفلاین پیدا نشد.',detailEn:'No offline RPM files were found.'}},
       'network_toolbox:Real ICMP ping':{nameFa:'Ping واقعی',cmd:'ping',args:['-n','-c','1','-W','1','127.0.0.1'],category:'network'},
       'admin_security:Real OpenSSL':{nameFa:'OpenSSL واقعی',cmd:'openssl',args:['version'],category:'security'}
     };
@@ -5519,8 +5519,8 @@ disabled = 0
     if(toolId==='component_agents'&&checkNameEn.startsWith('Syntax ')){
       const file=checkNameEn.slice('Syntax '.length);
       const full=path.join(getAppProjectRoot(),'scripts',file);
-      if(!/^[A-Za-z0-9._-]+\.sh$/.test(file)||!fs.existsSync(full)) return notExecuted('Syntax '+file,'اسکریپت واقعی پیدا نشد؛ bash -n اجرا نشد.','The real script was not found; bash -n was not executed.',\`bash -n "\${full}"\`);
-      return execute('Syntax '+file,'bash',['-n',full],'system',(r:any)=>r.code===0?{status:'pass',detailFa:\`bash -n \${file} موفق بود.\`,detailEn:\`bash -n \${file} passed.\`}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+      if(!/^[A-Za-z0-9._-]+\.sh$/.test(file)||!fs.existsSync(full)) return notExecuted('Syntax '+file,'اسکریپت واقعی پیدا نشد؛ bash -n اجرا نشد.','The real script was not found; bash -n was not executed.',`bash -n "${full}"`);
+      return execute('Syntax '+file,'bash',['-n',full],'system',(r:any)=>r.code===0?{status:'pass',detailFa:`bash -n ${file} موفق بود.`,detailEn:`bash -n ${file} passed.`}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
 
     if(/^(Destructive deployment execution|Real update installation|External provider delivery)$/i.test(checkNameEn))
