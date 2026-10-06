@@ -5554,6 +5554,102 @@ disabled = 0
       return execute('خطاهای اخیر واقعی Splunk در لاگ','bash',['-lc','test -f "'+logFile+'" && tail -n 500 "'+logFile+'" | grep -Ei "ERROR|Connection refused|timed out|malformed" | tail -n 50 || true'],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'لاگ واقعی Splunk بررسی شد؛ خروجی خطاهای اخیر در popup آمده است.',detailEn:'The real Splunk log was inspected; recent error output is shown in the popup.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
     
+    const tcpProbeScript="const net=require('net'),h=process.argv[1],p=Number(process.argv[2]),s=net.connect({host:h,port:p},()=>{console.log('open');s.destroy();process.exit(0)});s.setTimeout(1800,()=>{console.error('timeout');s.destroy();process.exit(1)});s.on('error',e=>{console.error(e.message);process.exit(1)});";
+    const discoverRemoteTarget=async()=>{
+      if(!splunkHome)return '';
+      const files=await execute('کشف مقصد واقعی Remote','find',[path.join(splunkHome,'etc'),'-type','f','(', '-name','outputs.conf','-o','-name','deploymentclient.conf','-o','-name','server.conf',')','-print'],'splunk',(r:any)=>({status:r.code===0&&String(r.stdout||'').trim()?'pass':'warn',detailFa:String(r.stdout||'').trim()||'فایل config مقصد پیدا نشد.',detailEn:String(r.stdout||'').trim()||'No target config file was found.'}));
+      let text=String(files?.check?.stdout||'');
+      const extract=(value:string)=>{for(const line of value.split(/\r?\n/)){const m=line.match(/(?:manager_uri|master_uri|target-broker|server)\s*=\s*(https?:\/\/)?([^\s,#]+)/i);if(m){const v=String(m[2]||'').replace(/[:/]$/,'');if(v&&!isClearlyPlaceholderHost(v))return normalizeTargetEndpoint(v,8089);}}return '';};
+      let target=extract(text);
+      if(target)return target;
+      if(splunkBin){
+        const b=await runCommand('bash',['-lc','SPLUNK_HOME="'+splunkHome+'" "'+splunkBin+'" btool outputs list tcpout --debug; SPLUNK_HOME="'+splunkHome+'" "'+splunkBin+'" btool deploymentclient list --debug; SPLUNK_HOME="'+splunkHome+'" "'+splunkBin+'" btool server list --debug'],{toolId,toolNameFa:'کشف مقصد واقعی Remote',toolNameEn:'Real Remote target discovery',category:'splunk',timeoutMs:20000});
+        target=extract(String(b.stdout||''));
+      }
+      return target;
+    };
+
+    if(toolId==='architect_overseer'&&checkNameEn==='سرویس Pilot'){
+      return execute('سرویس Pilot','systemctl',['show','splunk-doctor.service','--property=ActiveState,SubState','--no-pager'],'system',(r:any)=>r.code===0&&/ActiveState=active/.test(r.stdout)?{status:'pass',detailFa:'splunk-doctor واقعاً active است.',detailEn:'splunk-doctor is actually active.'}:{status:'fail',detailFa:String(r.stdout||r.stderr||('exit '+r.code)),detailEn:String(r.stdout||r.stderr||('exit '+r.code))});
+    }
+
+    if(toolId==='ai_diagnostics'&&checkNameEn==='تشخیص جامع host'){
+      return execute('تشخیص جامع host','bash',['-lc','uname -a; free -m; df -P /; ss -H -s; journalctl -u splunk-doctor.service -n 20 --no-pager'],'system',(r:any)=>r.code===0?{status:'pass',detailFa:'Kernel/RAM/Disk/Socket و log کنترلر واقعی جمع‌آوری شد.',detailEn:'Kernel/RAM/Disk/Socket and controller logs were collected.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+
+    if((toolId==='parallel_provisioning'||toolId==='cluster_deployer')&&checkNameEn==='Dry-run استقرار SSH'){
+      return execute('Dry-run استقرار SSH','ssh',['-G','localhost'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'پیکربندی SSH مقصد local resolve شد؛ deploy write اجرا نشد.',detailEn:'Local SSH configuration resolved; no write/deploy was executed.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if((toolId==='parallel_provisioning'||toolId==='cluster_deployer')&&checkNameEn==='Destructive deployment execution') return notExecuted('اجرای تخریبی استقرار','deploy واقعی از Test read-only اجرا نمی‌شود و confirmation لازم دارد.','Real deployment is not executed by read-only Test and requires confirmation.');
+
+    if(toolId==='network_sources'&&checkNameEn==='Topology واقعی host'){
+      return execute('Topology واقعی host','bash',['-lc','ip -j route; ip -j neigh; ss -H -lnt'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'route/neighbor/listener واقعی host جمع‌آوری شد.',detailEn:'Real host route/neighbor/listener telemetry was collected.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='heartbeat_radar'&&checkNameEn==='Link telemetry'){
+      return execute('Link telemetry واقعی','ip',['-s','link'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'وضعیت interfaceهای واقعی خوانده شد.',detailEn:'Real interface link state was collected.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='heartbeat_radar'&&(checkNameEn==='Heartbeat '||checkNameEn.startsWith('Heartbeat '))){
+      const target=await discoverRemoteTarget();
+      if(!target)return notExecuted('Heartbeat نودهای واقعی','هیچ endpoint واقعی از config مؤثر/پایه پیدا نشد؛ node ساختگی ایجاد نشد.','No real endpoint was found from effective/base config; no synthetic node was created.');
+      const parsed=parseTarget(target,8089);
+      return execute('Heartbeat '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Heartbeat TCP واقعی برای '+parsed.host+':'+parsed.port+' موفق شد.',detailEn:'Real TCP heartbeat succeeded for '+parsed.host+':'+parsed.port+'.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='heartbeat_radar'&&checkNameEn==='Real node heartbeat'){
+      const target=await discoverRemoteTarget();
+      if(!target)return notExecuted('Heartbeat نودهای واقعی','هیچ endpoint واقعی پیدا نشد.','No real endpoint was found.');
+      const parsed=parseTarget(target,8089);
+      return execute('Heartbeat '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Heartbeat واقعی موفق شد.',detailEn:'Real heartbeat succeeded.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+
+    if(toolId==='remote_gateway'&&checkNameEn==='Real SSH target'){
+      const target=await discoverRemoteTarget();
+      return target?finish({nameFa:'مقصد SSH واقعی',nameEn:checkNameEn,status:'pass',result:'PASS',detailFa:'مقصد واقعی از config Splunk پیدا شد: '+target,detailEn:'A real target was discovered from Splunk config: '+target,command:'find '+path.join(splunkHome||'/opt/splunk','etc')+' -type f -name outputs.conf -o -name deploymentclient.conf -o -name server.conf',stdout:target,stderr:'',exitCode:0},true):notExecuted('مقصد SSH واقعی','هیچ target واقعی از config Splunk پیدا نشد.','No real SSH target was found from Splunk config.');
+    }
+    if(toolId==='remote_gateway'&&checkNameEn==='Resolve پیکربندی SSH'){
+      const target=await discoverRemoteTarget(); if(!target)return notExecuted('Resolve پیکربندی SSH','target واقعی وجود ندارد؛ ssh -G اجرا نشد.','No real target exists; ssh -G was not executed.');
+      const parsed=parseTarget(target,8089); return execute('Resolve پیکربندی SSH','ssh',['-G',parsed.host],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'SSH config واقعی resolve شد برای '+parsed.host+'.',detailEn:'Real SSH config resolved for '+parsed.host+'.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='remote_gateway'&&(checkNameEn==='پورت SSH واقعی'||checkNameEn==='Real SSH transport')){
+      const target=await discoverRemoteTarget(); if(!target)return notExecuted('پورت SSH واقعی','target واقعی وجود ندارد؛ TCP probe اجرا نشد.','No real target exists; the TCP probe was not executed.');
+      const host=parseTarget(target,8089).host; return execute('SSH TCP '+host+':22','node',['-e',tcpProbeScript,host,'22'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'پورت SSH '+host+':22 در دسترس است.',detailEn:'SSH port '+host+':22 is reachable.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='remote_gateway'&&(checkNameEn==='Remote SSH credentials'||checkNameEn==='احراز هویت SSH واقعی')){
+      const target=await discoverRemoteTarget(); if(!target)return notExecuted('Credential SSH ریموت','target واقعی وجود ندارد؛ authentication اجرا نشد.','No real target exists; authentication was not executed.');
+      const host=parseTarget(target,8089).host; return execute('احراز هویت SSH واقعی','ssh',['-o','BatchMode=yes','-o','ConnectTimeout=3','-o','StrictHostKeyChecking=accept-new',host,'true'],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'SSH non-interactive authentication موفق شد.',detailEn:'Non-interactive SSH authentication succeeded.'}:{status:'warn',detailFa:'SSH transport/credential evidence: '+String(r.stderr||r.stdout||('exit '+r.code)),detailEn:'SSH transport/credential evidence: '+String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='remote_gateway'&&checkNameEn==='پورت Management Splunk واقعی'){
+      const target=await discoverRemoteTarget(); if(!target)return notExecuted('پورت Management Splunk واقعی','target واقعی وجود ندارد؛ TCP probe اجرا نشد.','No real target exists; TCP probe was not executed.');
+      const parsed=parseTarget(target,8089); return execute('Splunk Management '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Management port واقعی قابل دسترسی است.',detailEn:'The real management port is reachable.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+
+    if(toolId==='health_audit'&&checkNameEn==='Health telemetry واقعی'){
+      return execute('Health telemetry واقعی','bash',['-lc','ss -H -s; df -P /; free -m; uptime'],'system',(r:any)=>r.code===0?{status:'pass',detailFa:'socket/disk/memory/uptime telemetry واقعی خوانده شد.',detailEn:'Real socket/disk/memory/uptime telemetry was collected.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='live_logs'&&checkNameEn==='خواندن واقعی لاگ'){
+      const logFile=path.join(splunkHome||'/opt/splunk','var/log/splunk/splunkd.log');
+      return execute('خواندن واقعی لاگ','tail',['-n','50',logFile],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'لاگ واقعی Splunk خوانده شد.',detailEn:'The real Splunk log was read.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='config_editor'&&(checkNameEn==='خواندن config واقعی'||checkNameEn==='خواندن کانفیگ واقعی')){
+      if(!cfgDir||!fs.existsSync(cfgDir))return notExecuted('خواندن config واقعی','system/local واقعی پیدا نشد.','The real system/local directory was not found.');
+      return execute('خواندن config واقعی','find',[cfgDir,'-maxdepth','1','-type','f','-name','*.conf'],'splunk',(r:any)=>String(r.stdout||'').trim()?{status:'pass',detailFa:String(r.stdout).trim().split(/\r?\n/).filter(Boolean).length+' فایل .conf واقعی پیدا شد.',detailEn:String(r.stdout).trim().split(/\r?\n/).filter(Boolean).length+' real .conf files were found.'}:{status:'fail',detailFa:'config واقعی پیدا نشد.',detailEn:'No real config file was found.'});
+    }
+    if(toolId==='config_editor'&&checkNameEn==='Splunk config syntax' ){
+      if(!splunkBin)return notExecuted('Syntax کانفیگ Splunk','Splunk واقعی پیدا نشد؛ btool اجرا نشد.','Real Splunk was not found; btool was not executed.');
+      return execute('Syntax کانفیگ Splunk','bash',['-lc','SPLUNK_HOME="'+splunkHome+'" "'+splunkBin+'" btool check --debug'],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'btool syntax/config check با exit 0 پایان یافت.',detailEn:'btool syntax/config check exited 0.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='config_editor'&&checkNameEn==='Real config edit') return notExecuted('ویرایش واقعی config','mutation است؛ Refresh read-only هیچ فایل config را تغییر نمی‌دهد.','This is a mutation; read-only Refresh does not modify config files.');
+
+    if(toolId==='alert_manager'&&checkNameEn==='External provider delivery') return notExecuted('تحویل Provider خارجی','Slack/Teams/SMS/SMTP در read-only ارسال واقعی نمی‌شوند؛ Test Dispatch provider جداست.','Slack/Teams/SMS/SMTP are not contacted by read-only diagnostics; use provider Test Dispatch.');
+    if(toolId==='commercial_license'&&checkNameEn==='پیکربندی License واقعی'){
+      if(!splunkBin)return notExecuted('پیکربندی License واقعی','Splunk واقعی پیدا نشد؛ btool license اجرا نشد.','Real Splunk was not found; btool license was not executed.');
+      return execute('پیکربندی License واقعی','bash',['-lc','SPLUNK_HOME="'+splunkHome+'" "'+splunkBin+'" btool license list --debug'],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'License configuration واقعی خوانده شد.',detailEn:'Real license configuration was read.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='system_update'&&checkNameEn==='Functional coverage'){
+      const finalizer=path.join(process.cwd(),'scripts','update-finalizer.cjs');
+      return execute('Update Manager functional coverage','bash',['-lc','test -f "'+finalizer+'" && test -d "'+path.join(process.env.SPLUNK_DOCTOR_DATA_DIR||'/var/lib/splunk-doctor','updates')+'"'],'system',(r:any)=>r.code===0?{status:'pass',detailFa:'زیرساخت Update Manager واقعاً قابل دسترسی است.',detailEn:'Update Manager infrastructure is actually accessible.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
+    }
+    if(toolId==='system_update'&&checkNameEn==='Real update installation') return notExecuted('نصب واقعی Update','نصب/Restart/rollback در Test read-only اجرا نمی‌شود.','Install/restart/rollback is not executed by read-only Test.');
+    if(toolId==='alert_manager'&&checkNameEn==='Round-trip واقعی Alert Dispatcher') return notExecuted('Round-trip واقعی Alert Dispatcher','executor مستقل این round-trip هنوز به receiver ephemeral متصل نشده؛ هیچ PASS ساختگی صادر نمی‌شود.','The isolated round-trip executor is not wired to the ephemeral receiver yet; no synthetic PASS is returned.');
     const direct:Record<string,{nameFa:string;cmd:string;args:string[];category:any;evaluate?:(r:any)=>any}>={
       'health_audit:Real health telemetry':{nameFa:'Health telemetry واقعی',cmd:'bash',args:['-lc','ss -H -s; df -P /; free -m; uptime'],category:'system'},
       'live_logs:Real splunkd.log tail':{nameFa:'Tail واقعی splunkd.log',cmd:'tail',args:['-n','50',path.join(splunkHome||'/opt/splunk','var/log/splunk/splunkd.log')],category:'splunk'},
