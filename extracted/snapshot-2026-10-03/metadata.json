@@ -1,6 +1,12 @@
 {
-  "name": "Cyber Attacks Threat Monitoring Dashboard",
-  "description": "Enterprise SOC Threat Intelligence and Cyber Attack Monitoring Dashboard with real-time global attack visualization, incident triage, bandwidth analytics, vulnerability defense, and active mitigation.",
+  "name": "Splunk Cluster Doctor & Architecture Studio",
+  "description": "Standalone operational diagnostics, configuration management, deployment, update, backup, and real-time health tooling for Splunk environments.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "REAL_SERVER_SIDE_DIAGNOSTICS",
+    "SPLUNK_CONFIGURATION_MANAGEMENT",
+    "SAFE_DEPLOYMENT_AND_ROLLBACK",
+    "OFFLINE_RHEL_INSTALLATION",
+    "SELF_CONTAINED_UPDATES"
+  ]
 }
