@@ -35,7 +35,16 @@ jobs:
         working-directory: ${{ env.APP_ROOT }}
         run: |
           set -euo pipefail
-          npm install --no-audit --no-fund --no-package-lock
+          local_node_modules="$(find offline-cache/npm-cache -maxdepth 1 -type f -name 'node_modules-*.tar.gz' -print -quit 2>/dev/null || true)"
+          if [ -n "${local_node_modules}" ]; then
+            echo "[+] Using bundled npm dependency archive: ${local_node_modules}"
+            rm -rf node_modules
+            mkdir -p node_modules
+            tar -xzf "${local_node_modules}" -C .
+            test -d node_modules/express
+          else
+            npm install --no-audit --no-fund --no-package-lock
+          fi
 
       - name: Lint, build, and real smoke
         working-directory: ${{ env.APP_ROOT }}
