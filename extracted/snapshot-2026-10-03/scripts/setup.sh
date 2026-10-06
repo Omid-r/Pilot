@@ -121,22 +121,13 @@ systemctl daemon-reload
 systemctl enable splunk-doctor.service
 systemctl restart splunk-doctor.service
 
-# 7. Configure Firewall rules
-echo "==> [۶/۶] تنظیم قوانین فایروال لینوکس برای پورت ۳۰۰۰ و پورت‌های موازی..."
-if systemctl is-active --quiet firewalld 2>/dev/null; then
-  firewall-cmd --permanent --zone=public --add-port=3000/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=trusted --add-port=3000/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=8001/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=8090/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=9998/tcp 2>/dev/null || true
-  firewall-cmd --permanent --zone=public --add-port=8193/tcp 2>/dev/null || true
-  firewall-cmd --reload 2>/dev/null || true
-  echo "  [✓] رول‌های Firewalld با موفقیت اعمال شدند."
-fi
-
-if command -v iptables >/dev/null 2>&1; then
-  iptables -I INPUT -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-fi
+# 7. Firewall: do not open management or Splunk ports globally.
+# The application itself only needs TCP/3000 for its web UI/API. Operators can
+# explicitly allow a single management workstation/subnet with
+# scripts/restrict-web-access.sh after installation.
+echo "==> [۶/۶] پورت شبکه: هیچ Rule ورودی عمومی به‌صورت پیش‌فرض اضافه نمی‌شود."
+echo "  [i] برای دسترسی محدود، پس از نصب اجرا کنید:"
+echo "      sudo bash \${TARGET_DIR}/scripts/restrict-web-access.sh <CLIENT_IP_OR_CIDR>"
 
 # 8. Health Check Verification Probe
 sleep 2
