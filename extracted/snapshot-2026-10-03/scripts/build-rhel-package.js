@@ -323,7 +323,7 @@ cp -rf "\${SOURCE_DIR}"/* "\${TARGET_DIR}/"
 echo "==> [۴/۶] اعمال و تثبیت مجوزهای نصب و فایل‌های اجرایی..."
 find "\${TARGET_DIR}" -type d -exec chmod 755 {} +
 find "\${TARGET_DIR}" -type f -exec chmod 644 {} +
-find "${TARGET_DIR}" -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \) -exec chmod 755 {} +
+find "\${TARGET_DIR}" -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \) -exec chmod 755 {} +
 for executable in \
   "\${TARGET_DIR}/node-runtime/bin/node" \
   "\${TARGET_DIR}/kubectl" \
