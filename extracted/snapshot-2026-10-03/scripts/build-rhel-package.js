@@ -385,6 +385,9 @@ chmod 0755 "${NODE_BIN}"
 "${NODE_BIN}" --version >/dev/null
 echo "  -> runtime داخلی Node.js: ${NODE_BIN}"
 # 6. Configure Systemd Service dynamically
+mkdir -p /var/lib/splunk-doctor
+chmod 700 /var/lib/splunk-doctor
+if command -v restorecon >/dev/null 2>&1; then restorecon -RF /var/lib/splunk-doctor >/dev/null 2>&1 || true; fi
 echo "==> [۵/۶] پیکربندی و فعال‌سازی سرویس دائمی Systemd (splunk-doctor.service)..."
 cat << EOF > /etc/systemd/system/splunk-doctor.service
 [Unit]
@@ -404,6 +407,8 @@ KillMode=process
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=SPLUNK_HOME=/opt/splunk
+Environment=SPLUNK_DOCTOR_DATA_DIR=/var/lib/splunk-doctor
+UMask=0077
 
 LimitNOFILE=65536
 LimitNPROC=65536
