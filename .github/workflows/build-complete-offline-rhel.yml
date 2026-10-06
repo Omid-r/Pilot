@@ -201,6 +201,8 @@ jobs:
           grep -Fq 'splunk-doctor/setup.sh' "${manifest}"
           grep -Fq 'splunk-doctor/node-runtime/bin/node' "${manifest}"
           grep -Fq 'splunk-doctor/node_modules/express/' "${manifest}"
+          grep -Fq 'splunk-doctor/metadata.json' "${manifest}"
+          grep -Fq 'splunk-doctor/package.json' "${manifest}"
           grep -Eq 'splunk-doctor/offline-prereqs/rhel8/x86_64/rpms/[^[:space:]]+\.rpm$' "${manifest}"
           grep -Eq 'splunk-doctor/offline-prereqs/rhel9/x86_64/rpms/[^[:space:]]+\.rpm$' "${manifest}"
           grep -Fq 'splunk-doctor/offline-prereqs/rhel8/x86_64/bin/kubectl' "${manifest}"
