@@ -67,7 +67,7 @@ export function queryOfflineAiConsultant(
     return {
       answerFa: `جهت ارتقای امنیت کلاستر مطابق استانداردهای سخت‌گیرانه بانکی و SOC، باید نسخه‌های ناامن TLS 1.0 و TLS 1.1 غیرفعال شده و از الگوریتم‌های مدرن TLS 1.2 و TLS 1.3 همراه با سرتیفیکت رسمی CA استفاده گردد.`,
       answerEn: `To harden enterprise cluster communications according to SOC compliance, legacy TLS 1.0/1.1 must be disabled, enforcing TLS 1.2 and TLS 1.3 with custom enterprise CA certificates.`,
-      codeSnippet: `# server.conf [sslConfig]\n[sslConfig]\nenableSplunkdSSL = true\nsslVersionsToSupport = tls1.2, tls1.3\nserverCert = $SPLUNK_HOME/etc/auth/myEnterpriseCert.pem\nsslPassword = SecurePassword2026!\nsslVerifyServerCert = true`,
+      codeSnippet: `# server.conf [sslConfig]\n[sslConfig]\nenableSplunkdSSL = true\nsslVersionsToSupport = tls1.2, tls1.3\nserverCert = $SPLUNK_HOME/etc/auth/myEnterpriseCert.pem\nsslPassword = <REAL_SSL_PASSWORD>\nsslVerifyServerCert = true`,
       suggestedFollowUpsFa: ['نحوه ساخت سرتیفیکت با OpenSSL', 'امن‌سازی پورت ۹۹۹۷ ارسال داده'],
       suggestedFollowUpsEn: ['Generate cert with OpenSSL', 'Secure forwarder port 9997'],
       docCategory: 'Security & Encryption'
@@ -79,7 +79,7 @@ export function queryOfflineAiConsultant(
     return {
       answerFa: `در شبکه‌های ایزوله بدون اینترنت (Air-Gapped)، ایمیج‌های داکر از رجیستری‌های لوکال یا فایل‌های tar بارگذاری می‌شوند. برای جلوگیری از تداخل پورت با هاست اصلی، از Network Bridge یا پورت‌مپینگ اختصاصی (${webPort}:8000 و ${restPort}:8089) استفاده می‌شود.`,
       answerEn: `In air-gapped environments without internet access, container images are loaded from local tarballs or private offline registries. Port mapping isolates container ports from host services.`,
-      codeSnippet: `# Docker Run Air-Gapped Standalone Instance:\ndocker run -d --name splunk-staging \\\n  -p ${webPort}:8000 -p ${restPort}:8089 -p ${tcpPort}:9997 \\\n  -e "SPLUNK_START_ARGS=--accept-license" \\\n  -e "SPLUNK_PASSWORD=changeme" \\\n  -v /var/lib/splunk_container_data:/opt/splunk/var \\\n  splunk/splunk:latest`,
+      codeSnippet: `# Docker Run Air-Gapped Standalone Instance:\ndocker run -d --name splunk-staging \\\n  -p ${webPort}:8000 -p ${restPort}:8089 -p ${tcpPort}:9997 \\\n  -e "SPLUNK_START_ARGS=--accept-license" \\\n  -e "SPLUNK_PASSWORD=<REAL_SPLUNK_PASSWORD>" \\\n  -v /var/lib/splunk_container_data:/opt/splunk/var \\\n  splunk/splunk:latest`,
       suggestedFollowUpsFa: ['نحوه اجرای مانیفست K3s آفلاین', 'پیکربندی ولوم‌های دیسک کانتینر'],
       suggestedFollowUpsEn: ['Run offline K3s manifest', 'Configure persistent container volumes'],
       docCategory: 'Containers & Kubernetes'
