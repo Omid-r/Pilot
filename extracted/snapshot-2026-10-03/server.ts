@@ -5554,12 +5554,15 @@ disabled = 0
       return execute('خطاهای اخیر واقعی Splunk در لاگ','bash',['-lc','test -f "'+logFile+'" && tail -n 500 "'+logFile+'" | grep -Ei "ERROR|Connection refused|timed out|malformed" | tail -n 50 || true'],'splunk',(r:any)=>r.code===0?{status:'pass',detailFa:'لاگ واقعی Splunk بررسی شد؛ خروجی خطاهای اخیر در popup آمده است.',detailEn:'The real Splunk log was inspected; recent error output is shown in the popup.'}:{status:'fail',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
     
+    const isolatedNormalizeTargetEndpoint=(raw:string,defaultPort=8089)=>{let value=String(raw||'').trim().replace(/^['"]|['"]$/g,'');value=value.replace(/^https?:\/\//i,'').replace(/^tcp:\/\//i,'').replace(/^ssh:\/\//i,'');value=value.split(/[/?# ,\t]+/)[0].trim().replace(/\/$/,'');if(/^[A-Za-z0-9_.-]+:\d+$/.test(value))return value;if(/^[A-Za-z0-9_.-]+$/.test(value))return value+':'+defaultPort;return '';};
+    const isolatedIsPlaceholderHost=(host:string)=>/^(?:your|replace|example|changeme|hostname|host|server|self|node|target|indexer|searchhead|manager|master)[A-Za-z0-9_.-]*$/i.test(host)||/^<[^>]+>$/.test(host)||/(?:\.example\.|\.corp\.net$|\.cluster\.splunk$)/i.test(host);
+    const isolatedParseTarget=(target:string,defaultPort=8089)=>{const normalized=isolatedNormalizeTargetEndpoint(target,defaultPort);const m=normalized.match(/^(.+):(\d+)$/);return {raw:normalized,host:normalized.replace(/:\d+$/,''),port:m?Number(m[2]):defaultPort};};
     const tcpProbeScript="const net=require('net'),h=process.argv[1],p=Number(process.argv[2]),s=net.connect({host:h,port:p},()=>{console.log('open');s.destroy();process.exit(0)});s.setTimeout(1800,()=>{console.error('timeout');s.destroy();process.exit(1)});s.on('error',e=>{console.error(e.message);process.exit(1)});";
     const discoverRemoteTarget=async()=>{
       if(!splunkHome)return '';
       const files=await execute('کشف مقصد واقعی Remote','find',[path.join(splunkHome,'etc'),'-type','f','(', '-name','outputs.conf','-o','-name','deploymentclient.conf','-o','-name','server.conf',')','-print'],'splunk',(r:any)=>({status:r.code===0&&String(r.stdout||'').trim()?'pass':'warn',detailFa:String(r.stdout||'').trim()||'فایل config مقصد پیدا نشد.',detailEn:String(r.stdout||'').trim()||'No target config file was found.'}));
       let text=String(files?.check?.stdout||'');
-      const extract=(value:string)=>{for(const line of value.split(/\r?\n/)){const m=line.match(/(?:manager_uri|master_uri|target-broker|server)\s*=\s*(https?:\/\/)?([^\s,#]+)/i);if(m){const v=String(m[2]||'').replace(/[:/]$/,'');if(v&&!isClearlyPlaceholderHost(v))return normalizeTargetEndpoint(v,8089);}}return '';};
+      const extract=(value:string)=>{for(const line of value.split(/\r?\n/)){const m=line.match(/(?:manager_uri|master_uri|target-broker|server)\s*=\s*(https?:\/\/)?([^\s,#]+)/i);if(m){const v=String(m[2]||'').replace(/[:/]$/,'');if(v&&!isolatedIsPlaceholderHost(v))return isolatedNormalizeTargetEndpoint(v,8089);}}return '';};
       let target=extract(text);
       if(target)return target;
       if(splunkBin){
@@ -5591,7 +5594,7 @@ disabled = 0
     if(toolId==='heartbeat_radar'&&(checkNameEn==='Heartbeat '||checkNameEn.startsWith('Heartbeat '))){
       const target=await discoverRemoteTarget();
       if(!target)return notExecuted('Heartbeat نودهای واقعی','هیچ endpoint واقعی از config مؤثر/پایه پیدا نشد؛ node ساختگی ایجاد نشد.','No real endpoint was found from effective/base config; no synthetic node was created.');
-      const parsed=parseTarget(target,8089);
+      const parsed=isolatedParseTarget(target,8089);
       return execute('Heartbeat '+parsed.host+':'+parsed.port,'node',['-e',tcpProbeScript,parsed.host,String(parsed.port)],'network',(r:any)=>r.code===0?{status:'pass',detailFa:'Heartbeat TCP واقعی برای '+parsed.host+':'+parsed.port+' موفق شد.',detailEn:'Real TCP heartbeat succeeded for '+parsed.host+':'+parsed.port+'.'}:{status:'warn',detailFa:String(r.stderr||r.stdout||('exit '+r.code)),detailEn:String(r.stderr||r.stdout||('exit '+r.code))});
     }
     if(toolId==='heartbeat_radar'&&checkNameEn==='Real node heartbeat'){
