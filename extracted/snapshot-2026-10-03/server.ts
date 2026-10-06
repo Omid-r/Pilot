@@ -3,6 +3,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { exec, execSync, execFile } from 'child_process';
 import net from 'net';
 import * as dgram from 'dgram';
@@ -93,6 +94,157 @@ async function startServer() {
     });
   });
 
+  // =========================================================================
+  // IN-APP UPDATE MANAGER
+  // =========================================================================
+  const UPDATE_ROOT = path.join(process.env.SPLUNK_DOCTOR_DATA_DIR || '/var/lib/splunk-doctor', 'updates');
+  const UPDATE_INBOX = path.join(UPDATE_ROOT, 'inbox');
+  const UPDATE_STAGE = path.join(UPDATE_ROOT, 'stage');
+  const UPDATE_BACKUP = path.join(UPDATE_ROOT, 'backups');
+  try {
+    fs.mkdirSync(UPDATE_INBOX, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(UPDATE_STAGE, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(UPDATE_BACKUP, { recursive: true, mode: 0o700 });
+  } catch (_) {}
+
+  const updateVersionParts = (value: string) => {
+    const m = String(value || '').trim().match(/^(\\d+)\\.(\\d+)\\.(\\d+)(?:[-+].*)?$/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const compareUpdateVersions = (a: string, b: string) => {
+    const aa = updateVersionParts(a), bb = updateVersionParts(b);
+    if (!aa || !bb) return NaN;
+    for (let i = 0; i < 3; i++) {
+      if (aa[i] !== bb[i]) return aa[i] > bb[i] ? 1 : -1;
+    }
+    return 0;
+  };
+  const sha256File = (filePath: string) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(fs.readFileSync(filePath));
+    return hash.digest('hex');
+  };
+  const writeUpdateStatus = (jobId: string, patch: Record<string, any>) => {
+    const statusPath = path.join(UPDATE_ROOT, jobId + '.json');
+    let current: any = {};
+    try { current = JSON.parse(fs.readFileSync(statusPath, 'utf8')); } catch (_) {}
+    const next = { ...current, ...patch, jobId, checkedAt: new Date().toISOString() };
+    try { fs.writeFileSync(statusPath, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 }); } catch (_) {}
+    return next;
+  };
+  const readUpdateStatus = (jobId: string) => {
+    try { return JSON.parse(fs.readFileSync(path.join(UPDATE_ROOT, jobId + '.json'), 'utf8')); }
+    catch (_) { return null; }
+  };
+  const pushUpdateLog = (jobId: string, line: string) => {
+    const current = readUpdateStatus(jobId) || { logs: [] };
+    const logs = Array.isArray(current.logs) ? current.logs.slice(-199) : [];
+    logs.push(String(line));
+    return writeUpdateStatus(jobId, { logs });
+  };
+  const findUpdateManifest = (rootDir: string) => {
+    const direct = path.join(rootDir, 'update-manifest.json');
+    if (fs.existsSync(direct)) return direct;
+    const dirs = fs.readdirSync(rootDir, { withFileTypes: true }).filter(x => x.isDirectory() && !x.name.startsWith('.'));
+    for (const dir of dirs.slice(0, 8)) {
+      const nested = path.join(rootDir, dir.name, 'update-manifest.json');
+      if (fs.existsSync(nested)) return nested;
+    }
+    return '';
+  };
+  const isSafeArchiveEntry = (entry: string) => {
+    const normalized = String(entry || '').replace(/\\/g, '/').replace(/^\.\//, '');
+    return Boolean(normalized) && !normalized.startsWith('/') && !normalized.split('/').includes('..');
+  };
+  const updateBackupItems = ['dist','scripts','systemd','node-runtime','package.json','VERSION','start.sh','setup.sh','install-service.sh','uninstall.sh'];
+
+  app.post('/api/system/update/upload', express.raw({ type: ['application/gzip','application/x-gzip','application/octet-stream'], limit: '512mb' }), async (req, res) => {
+    const jobId = 'upd-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    let filename = String(req.headers['x-update-filename'] || 'pilot-update.tar.gz');
+    try { filename = decodeURIComponent(filename); } catch (_) {}
+    filename = path.basename(filename).replace(/[^A-Za-z0-9._-]/g, '_');
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+    if (!buffer.length) return res.status(400).json({ success:false, error:'Update archive is empty.' });
+    if (!/\\.(?:tar\\.gz|tgz)$/i.test(filename)) return res.status(400).json({ success:false, error:'Only .tar.gz or .tgz Pilot update archives are accepted.' });
+    const inboxPath = path.join(UPDATE_INBOX, jobId + '.tar.gz');
+    const stagePath = path.join(UPDATE_STAGE, jobId);
+    const backupPath = path.join(UPDATE_BACKUP, jobId);
+    try {
+      fs.mkdirSync(stagePath, { recursive:true, mode:0o700 });
+      fs.writeFileSync(inboxPath, buffer, { mode:0o600 });
+      writeUpdateStatus(jobId, { state:'staging', status:'received', filename, bytes:buffer.length, logs:[`[RECEIVED] ${filename} (${buffer.length} bytes)`] });
+
+      const listing = await runCommand('tar',['-tzf',inboxPath],{ toolId:'system_update', toolNameFa:'مدیریت بروزرسانی Pilot', toolNameEn:'Pilot Update Manager', category:'system', timeoutMs:20000 });
+      if (listing.code !== 0) throw new Error(listing.stderr || 'tar archive listing failed.');
+      const entries = String(listing.stdout || '').split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
+      if (!entries.length || entries.length > 5000 || entries.some((entry:string)=>!isSafeArchiveEntry(entry))) throw new Error('Unsafe or invalid update archive layout.');
+      pushUpdateLog(jobId, `[VALIDATE] Archive entries: ${entries.length}`);
+      const extracted = await runCommand('tar',['-xzf',inboxPath,'-C',stagePath],{ toolId:'system_update', toolNameFa:'استخراج بسته بروزرسانی', toolNameEn:'Extract update package', category:'system', timeoutMs:60000 });
+      if (extracted.code !== 0) throw new Error(extracted.stderr || 'Update extraction failed.');
+
+      const manifestPath = findUpdateManifest(stagePath);
+      if (!manifestPath) throw new Error('update-manifest.json was not found in the update archive.');
+      const manifest = JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+      if (manifest?.format !== 'PILOT_UPDATE' || Number(manifest?.formatVersion) !== 1) throw new Error('Unsupported Pilot update format.');
+      const targetVersion = String(manifest.version || '');
+      if (!updateVersionParts(targetVersion)) throw new Error('Invalid update version in manifest.');
+
+      let currentVersion = 'unknown';
+      try { currentVersion = String(JSON.parse(fs.readFileSync(path.join(process.cwd(),'package.json'),'utf8')).version || 'unknown'); } catch (_) {}
+      const cmp = compareUpdateVersions(targetVersion,currentVersion);
+      if (!Number.isFinite(cmp) || cmp <= 0) throw new Error('Update ' + targetVersion + ' is not newer than installed version ' + currentVersion + '.');
+      const minVersion = String(manifest.minBaseVersion || '0.0.0');
+      if (compareUpdateVersions(currentVersion,minVersion) < 0) throw new Error('Installed version ' + currentVersion + ' is below update minimum ' + minVersion + '.');
+
+      const payloadRoot = path.dirname(manifestPath);
+      const files = Array.isArray(manifest.files) ? manifest.files : [];
+      if (!files.length) throw new Error('Update manifest contains no payload files.');
+      for (const item of files) {
+        const rel = String(item.path || '');
+        if (!rel || !isSafeArchiveEntry(rel)) throw new Error('Unsafe manifest path: ' + rel);
+        const target = path.resolve(payloadRoot, rel);
+        if (!target.startsWith(path.resolve(payloadRoot) + path.sep)) throw new Error('Manifest path escaped payload root.');
+        if (!fs.existsSync(target) || !fs.statSync(target).isFile()) throw new Error('Missing update payload file: ' + rel);
+        if (sha256File(target) !== String(item.sha256 || '').toLowerCase()) throw new Error('Checksum mismatch for update file: ' + rel);
+      }
+      pushUpdateLog(jobId, `[VALIDATE] Version ${currentVersion} -> ${targetVersion}; ${files.length} payload files verified.`);
+
+      fs.mkdirSync(backupPath,{recursive:true,mode:0o700});
+      for (const item of updateBackupItems) {
+        const src = path.join(process.cwd(),item);
+        if (fs.existsSync(src)) fs.cpSync(src,path.join(backupPath,item),{recursive:true,force:true});
+      }
+      if (!fs.existsSync(path.join(backupPath,'package.json'))) throw new Error('Current installation backup could not be created.');
+      pushUpdateLog(jobId, `[BACKUP] Saved runnable installation to ${backupPath}`);
+
+      writeUpdateStatus(jobId,{state:'staging',status:'applying',currentVersion,targetVersion,backupPath});
+      fs.cpSync(payloadRoot,process.cwd(),{recursive:true,force:true,filter:(src:string)=>path.basename(src)!=='update-manifest.json'});
+      pushUpdateLog(jobId, `[APPLY] Verified update ${targetVersion} copied into ${process.cwd()}.`);
+
+      const finalizerPath = path.join(UPDATE_ROOT,jobId+'-finalizer.js');
+      const finalizerSource = path.join(process.cwd(),'scripts','update-finalizer.cjs');
+      if (!fs.existsSync(finalizerSource)) throw new Error('Update finalizer is missing from the running installation.');
+      fs.copyFileSync(finalizerSource,finalizerPath);
+      fs.chmodSync(finalizerPath,0o700);
+      writeUpdateStatus(jobId,{state:'restarting',status:'service_restart_pending',currentVersion,targetVersion,backupPath});
+      const child = execFile(process.execPath,[finalizerPath],{ detached:true, stdio:'ignore', env:{...process.env,PILOT_UPDATE_JOB:jobId,PILOT_UPDATE_ROOT:UPDATE_ROOT,PILOT_UPDATE_APP_ROOT:process.cwd(),PILOT_UPDATE_BACKUP:backupPath,PILOT_UPDATE_TARGET:targetVersion,PILOT_UPDATE_INBOX:inboxPath} });
+      child.unref();
+      return res.json({success:true,jobId,state:'restarting',currentVersion,targetVersion,backupPath,messageFa:'Update نصب شد؛ سرویس در حال Restart و بررسی سلامت نسخه جدید است.',messageEn:'Update installed; the service is restarting and the new version is being verified.'});
+    } catch (err:any) {
+      try { if (fs.existsSync(stagePath)) fs.rmSync(stagePath,{recursive:true,force:true}); } catch (_) {}
+      try { if (fs.existsSync(inboxPath)) fs.unlinkSync(inboxPath); } catch (_) {}
+      writeUpdateStatus(jobId,{state:'error',status:'failed',error:err?.message || String(err)});
+      return res.status(400).json({success:false,jobId,error:err?.message || String(err)});
+    }
+  });
+
+  app.get('/api/system/update/status/:jobId',(req,res)=>{
+    const jobId=String(req.params.jobId || '');
+    if(!/^upd-[0-9]{10,}-[a-f0-9]{8}$/.test(jobId)) return res.status(400).json({success:false,error:'Invalid update job id.'});
+    const status=readUpdateStatus(jobId);
+    if(!status) return res.status(404).json({success:false,error:'Update job not found.'});
+    return res.json({success:true,...status});
+  });
   // PuTTY Live SSH Stream for all UI Button Clicks & Web API Actions
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/') && !req.path.includes('/command-stream') && !req.path.includes('/status-poll')) {
