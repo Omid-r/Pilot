@@ -334,7 +334,7 @@ export const ROLE_REMEDIATION_WORKFLOWS: Record<SplunkAgentComponentRole, NodeRo
           '[STEP 3: Validating SC4S Configuration & Parsers]',
           '$ grep -E "SPLUNK_HEC|SC4S_LISTEN" /opt/sc4s/env_file',
           'SPLUNK_HEC_URL=https://10.20.30.50:8088,https://10.20.30.51:8088',
-          'SPLUNK_HEC_TOKEN=************************************',
+          'SPLUNK_HEC_TOKEN=<REAL_HEC_TOKEN>',
           'SC4S_LISTEN_CISCO_ASA_UDP_PORT=514',
           'SC4S_LISTEN_PALOALTO_PANOS_TLS_PORT=6514',
           'Environment validation passed: All endpoints syntax validated.'
