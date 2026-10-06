@@ -221,12 +221,12 @@ jobs:
           tar -xzf "${archive}" -C /tmp/pilot-archive-perms
           test -x /tmp/pilot-archive-perms/splunk-doctor/setup.sh
           test -x /tmp/pilot-archive-perms/splunk-doctor/node-runtime/bin/node
-          find /tmp/pilot-archive-perms/splunk-doctor/scripts -type f \( \
+          if find /tmp/pilot-archive-perms/splunk-doctor/scripts -type f \\( \
             -name '*.sh' -o -name '*.bash' -o -name '*.py' -o -name '*.pl' -o -name '*.rb' \
-          \) ! -perm /111 -print -quit | grep -q . && {
+          \\) ! -perm /111 -print -quit | grep -q .; then
             echo "Bundled script lost executable bit."
             exit 1
-          } || true
+          fi
 
       - name: Execute complete offline media on Rocky Linux
         working-directory: ${{ env.APP_ROOT }}
