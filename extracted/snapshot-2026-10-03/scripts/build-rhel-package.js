@@ -2,8 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import crypto from 'crypto';
 
-const PACKAGE_VERSION = '1.5.0';
+const PACKAGE_VERSION = '1.5.1';
 const BUILD_DATE = new Date().toISOString();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -518,7 +519,7 @@ fs.writeFileSync(path.join(stagingDir, 'README_RHEL.md'), readme, 'utf8');
 // 9. Create VERSION and CHANGELOG
 const versionInfo = `VERSION=${PACKAGE_VERSION}
 BUILD_DATE=${BUILD_DATE}
-FEATURES=ARROW_9997_REVERSED,ACTIVE_PORT_INSPECTOR,TCP_PROBE_API,DYNAMIC_NODES
+FEATURES=ARROW_9997_REVERSED,ACTIVE_PORT_INSPECTOR,TCP_PROBE_API,DYNAMIC_NODES,IN_APP_UPDATE_MANAGER,LIVE_SECTION_REFRESH
 `;
 fs.writeFileSync(path.join(stagingDir, 'VERSION'), versionInfo, 'utf8');
 
@@ -537,6 +538,64 @@ for (const executable of [
     try { fs.chmodSync(executable, 0o755); } catch (_) {}
   }
 }
+
+
+// 10b. Create a small, separately installable Update package.
+// This contains only the runnable application surface; offline prerequisite
+// media is deliberately excluded so routine application upgrades stay small.
+const updatePayloadRoot = path.join('/tmp', 'pilot_update_payload');
+if (fs.existsSync(updatePayloadRoot)) fs.rmSync(updatePayloadRoot, { recursive: true, force: true });
+fs.mkdirSync(updatePayloadRoot, { recursive: true });
+
+const updateItems = [
+  'dist',
+  'scripts',
+  'systemd',
+  'node-runtime',
+  'package.json',
+  'VERSION',
+  'start.sh',
+  'setup.sh',
+  'install-service.sh',
+  'uninstall.sh'
+];
+for (const item of updateItems) {
+  const src = path.join(stagingDir, item);
+  if (fs.existsSync(src)) fs.cpSync(src, path.join(updatePayloadRoot, item), { recursive: true, force: true });
+}
+const updateFiles = [];
+const walkUpdateFiles = (root, rel = '') => {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const entryRel = rel ? path.join(rel, entry.name) : entry.name;
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) walkUpdateFiles(full, entryRel);
+    else if (entry.isFile()) {
+      const hash = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+      updateFiles.push({ path: entryRel.split(path.sep).join('/'), sha256: hash });
+    }
+  }
+};
+walkUpdateFiles(updatePayloadRoot);
+
+const updateManifest = {
+  format: 'PILOT_UPDATE',
+  formatVersion: 1,
+  app: 'splunk-doctor',
+  version: PACKAGE_VERSION,
+  minBaseVersion: '1.5.0',
+  buildId: BUILD_DATE,
+  createdAt: BUILD_DATE,
+  files: updateFiles
+};
+fs.writeFileSync(path.join(updatePayloadRoot, 'update-manifest.json'), JSON.stringify(updateManifest, null, 2), 'utf8');
+
+const updateWrapper = path.join('/tmp', 'pilot_update_wrapper');
+if (fs.existsSync(updateWrapper)) fs.rmSync(updateWrapper, { recursive: true, force: true });
+fs.mkdirSync(path.join(updateWrapper, 'pilot-update'), { recursive: true });
+execSync(`cp -r "${updatePayloadRoot}"/* "${path.join(updateWrapper, 'pilot-update')}/"`);
+const updateTar = path.join(publicDir, `pilot_update_v${PACKAGE_VERSION}.tar.gz`);
+execSync(`tar -czf "${updateTar}" -C "${updateWrapper}" pilot-update`);
+console.log(`[RHEL Packager] Generated update package: ${updateTar} (${fs.statSync(updateTar).size} bytes)`);
 
 console.log('[RHEL Packager] Archiving tar.gz...');
 const targetTar1 = path.join(publicDir, 'splunk_doctor_standalone_ui.tar.gz');
