@@ -150,8 +150,17 @@ jobs:
           set -euo pipefail
           for rhel in 8 9; do
             target="offline-prereqs/rhel${rhel}/x86_64/bin"
-            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${target}/kubectl"
-            curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" -o "${target}/kubectl.sha256"
+            local_bin="offline-cache/kubectl/${KUBECTL_VERSION}/linux-amd64/kubectl"
+            local_sha="offline-cache/kubectl/${KUBECTL_VERSION}/linux-amd64/kubectl.sha256"
+            if [ -f "${local_bin}" ] && [ -f "${local_sha}" ]; then
+              echo "[+] Using local kubectl cache for RHEL ${rhel}."
+              cp "${local_bin}" "${target}/kubectl"
+              cp "${local_sha}" "${target}/kubectl.sha256"
+            else
+              echo "[i] kubectl cache missing; downloading from dl.k8s.io."
+              curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${target}/kubectl"
+              curl -fL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" -o "${target}/kubectl.sha256"
+            fi
             expected="$(tr -d '[:space:]' < "${target}/kubectl.sha256")"
             actual="$(sha256sum "${target}/kubectl" | cut -d' ' -f1)"
             test "${#expected}" -eq 64
@@ -278,11 +287,22 @@ jobs:
           set -euo pipefail
           archive="release/splunk-doctor-offline-rhel-1.5.1-complete.tar.gz"
           for rhel in 8 9; do
-            docker pull "rockylinux:${rhel}"
+            image="rockylinux:${rhel}"
+            local_image=""
+            for candidate in "offline-cache/rocky/rockylinux-${rhel}.tar.gz" "offline-cache/rocky/rockylinux-${rhel}.tar" "offline-cache/rocky/Rocky-${rhel}-Container-Base.latest.x86_64.tar.xz"; do
+              if [ -f "${candidate}" ]; then local_image="${candidate}"; break; fi
+            done
+            if [ -n "${local_image}" ]; then
+              echo "[+] Loading local Rocky Linux ${rhel} image: ${local_image}"
+              docker load -i "${local_image}"
+            else
+              echo "[i] Local Rocky Linux ${rhel} image missing; pulling from Docker Hub."
+              docker pull "${image}"
+            fi
             docker run --rm --network none \
               -e "RHEL_VERSION=${rhel}" \
               -v "${PWD}/${archive}:/media/app.tar.gz:ro" \
-              "rockylinux:${rhel}" \
+              "${image}" \
               bash -lc '
                 set -euo pipefail
                 rm -rf /work
