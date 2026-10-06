@@ -4,7 +4,7 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { exec, execSync, execFile } from 'child_process';
+import { exec, execSync, execFile, spawn } from 'child_process';
 import net from 'net';
 import * as dgram from 'dgram';
 import os from 'os';
@@ -227,7 +227,8 @@ async function startServer() {
       fs.copyFileSync(finalizerSource,finalizerPath);
       fs.chmodSync(finalizerPath,0o700);
       writeUpdateStatus(jobId,{state:'restarting',status:'service_restart_pending',currentVersion,targetVersion,backupPath});
-      const child = execFile(process.execPath,[finalizerPath],{ detached:true, stdio:'ignore', env:{...process.env,PILOT_UPDATE_JOB:jobId,PILOT_UPDATE_ROOT:UPDATE_ROOT,PILOT_UPDATE_APP_ROOT:process.cwd(),PILOT_UPDATE_BACKUP:backupPath,PILOT_UPDATE_TARGET:targetVersion,PILOT_UPDATE_INBOX:inboxPath} },() => {});
+      const child = spawn(process.execPath,[finalizerPath],{ detached:true, stdio:'ignore', env:{...process.env,PILOT_UPDATE_JOB:jobId,PILOT_UPDATE_ROOT:UPDATE_ROOT,PILOT_UPDATE_APP_ROOT:process.cwd(),PILOT_UPDATE_BACKUP:backupPath,PILOT_UPDATE_TARGET:targetVersion,PILOT_UPDATE_INBOX:inboxPath} });
+child.unref();
       child.unref();
       return res.json({success:true,jobId,state:'restarting',currentVersion,targetVersion,backupPath,messageFa:'Update نصب شد؛ سرویس در حال Restart و بررسی سلامت نسخه جدید است.',messageEn:'Update installed; the service is restarting and the new version is being verified.'});
     } catch (err:any) {
