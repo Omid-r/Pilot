@@ -3523,10 +3523,7 @@ export default function App() {
           <SplunkWebModal
             isOpen={isWebModalOpen}
             onClose={() => setIsWebModalOpen(false)}
-            parallelClusterState={{
-              ...parallelClusterState,
-              webPort: webModalPort
-            }}
+            webPort={webModalPort}
             hostIp={clusterSettings.hfIp || '127.0.0.1'}
             isFa={isFa}
           />
