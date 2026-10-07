@@ -190,6 +190,34 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
           </div>
         </div>
 
+        {/* Real Splunk Web target. The controls below remain available only as diagnostics fallback. */}
+        <div className="relative flex-1 min-h-[420px] bg-white">
+          {!iframeLoaded && !iframeBlocked && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090d14] text-xs text-emerald-300 font-mono">
+              Connecting to real Splunk Web at {hostIp}:8001...
+            </div>
+          )}
+          {iframeBlocked && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#090d14] text-center p-6">
+              <div className="text-sm font-bold text-amber-300">Splunk Web could not be embedded in this view.</div>
+              <div className="text-xs text-slate-400 max-w-lg">
+                The target may reject iframe embedding via X-Frame-Options/CSP. Use “New Tab” above to open the real Splunk Web instance directly.
+              </div>
+              <a href={webUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl">
+                Open real Splunk Web
+              </a>
+            </div>
+          )}
+          <iframe
+            title="Real Splunk Web"
+            src={webUrl}
+            className="w-full h-full min-h-[420px] border-0 bg-white"
+            referrerPolicy="no-referrer"
+            onLoad={() => setIframeLoaded(true)}
+            onError={() => setIframeBlocked(true)}
+          />
+        </div>
+
         {/* Legacy simulated controls are retained below as a diagnostics fallback only. */}
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#090d14]">
