@@ -50,6 +50,8 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeBlocked, setIframeBlocked] = useState(false);
 
+  const webUrl = `http://${hostIp}:8001/en-US/app/launcher/home`;
+
   useEffect(() => {
     if (!isOpen) return;
     setIframeLoaded(false);
@@ -57,8 +59,6 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   }, [isOpen, webUrl]);
 
   if (!isOpen) return null;
-
-  const webUrl = `http://${hostIp}:8001/en-US/app/launcher/home`;
 
   const handleRunSearch = () => {
     setIsSearching(true);
