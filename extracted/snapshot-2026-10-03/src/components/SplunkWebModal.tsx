@@ -7,12 +7,9 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { ParallelClusterState } from '../types';
-
 interface SplunkWebModalProps {
   isOpen: boolean;
   onClose: () => void;
-  parallelClusterState: ParallelClusterState;
   hostIp?: string;
   isFa?: boolean;
 }
@@ -23,17 +20,9 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   hostIp = '10.20.30.45',
   isFa = true
 }) => {
-  const [activeSplunkApp, setActiveSplunkApp] = useState<'search' | 'indexes' | 'inputs' | 'server_info'>('search');
-  const [searchQuery, setSearchQuery] = useState('index=_internal | head 25 | stats count by sourcetype, log_level');
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Array<{ id: number; timestamp: string; sourcetype: string; level: string; message: string }>>([
-    { id: 1, timestamp: '2026-09-22 00:32:10.451', sourcetype: 'splunkd', level: 'INFO', message: 'Parallel instance Splunk Enterprise 9.2.1 web server started on port 8001.' },
-    { id: 2, timestamp: '2026-09-22 00:32:11.102', sourcetype: 'splunkd', level: 'INFO', message: 'TCP Input processor listening on parallel port 9998 (isolated pipeline).' },
-    { id: 3, timestamp: '2026-09-22 00:32:11.890', sourcetype: 'splunkd_access', level: 'INFO', message: '127.0.0.1 - admin "GET /en-US/api/sva/status HTTP/1.1" 200 482 - - - 3ms' },
-    { id: 4, timestamp: '2026-09-22 00:32:12.304', sourcetype: 'metrics', level: 'INFO', message: 'group=queue, name=parsingQueue, current_size_kb=0, max_size_kb=10240, status=HEALTHY' },
-    { id: 5, timestamp: '2026-09-22 00:32:13.011', sourcetype: 'license_usage', level: 'INFO', message: 'License Master slave connection established. Allocation pool: Active.' },
-  ]);
-  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [iframeBlocked, setIframeBlocked] = useState(false);
+
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeBlocked, setIframeBlocked] = useState(false);
 
