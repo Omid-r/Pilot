@@ -3,9 +3,7 @@ import {
   Globe, 
   ExternalLink, 
   X, 
-  ShieldCheck,
-  Copy,
-  Check
+  ShieldCheck
 } from 'lucide-react';
 interface SplunkWebModalProps {
   isOpen: boolean;
@@ -20,9 +18,6 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   hostIp = '10.20.30.45',
   isFa = true
 }) => {
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [iframeBlocked, setIframeBlocked] = useState(false);
-
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeBlocked, setIframeBlocked] = useState(false);
 
@@ -65,16 +60,6 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
               <span className="text-slate-400">/en-US/app/launcher/home</span>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={handleCopyUrl}
-                className="p-1 text-slate-400 hover:text-white rounded transition"
-                title={isFa ? 'کپی آدرس پورت ۸۰۰۱' : 'Copy URL'}
-              >
-                {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -110,33 +95,6 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
               </span>
             </div>
 
-            {/* Splunk Internal Apps Menu */}
-            <div className="hidden md:flex items-center gap-1 text-slate-300">
-              <button 
-                onClick={() => setActiveSplunkApp('search')}
-                className={`px-2.5 py-1 rounded transition font-medium ${activeSplunkApp === 'search' ? 'bg-black/30 text-white font-bold' : 'hover:bg-slate-700'}`}
-              >
-                Search & Reporting
-              </button>
-              <button 
-                onClick={() => setActiveSplunkApp('indexes')}
-                className={`px-2.5 py-1 rounded transition font-medium ${activeSplunkApp === 'indexes' ? 'bg-black/30 text-white font-bold' : 'hover:bg-slate-700'}`}
-              >
-                Settings &gt; Indexes
-              </button>
-              <button 
-                onClick={() => setActiveSplunkApp('inputs')}
-                className={`px-2.5 py-1 rounded transition font-medium ${activeSplunkApp === 'inputs' ? 'bg-black/30 text-white font-bold' : 'hover:bg-slate-700'}`}
-              >
-                Data Inputs (:9998)
-              </button>
-              <button 
-                onClick={() => setActiveSplunkApp('server_info')}
-                className={`px-2.5 py-1 rounded transition font-medium ${activeSplunkApp === 'server_info' ? 'bg-black/30 text-white font-bold' : 'hover:bg-slate-700'}`}
-              >
-                Server Controls
-              </button>
-            </div>
           </div>
 
           <div className="flex items-center gap-3 text-xs">
