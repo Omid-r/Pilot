@@ -111,7 +111,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
         <div className="relative flex-1 min-h-[420px] bg-white">
           {!iframeLoaded && !iframeBlocked && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090d14] text-xs text-emerald-300 font-mono">
-              Connecting to real Splunk Web at {hostIp}:8001...
+              Connecting to real Splunk Web at {targetHost}:8001...
             </div>
           )}
           {iframeBlocked && (
