@@ -1,0 +1,72 @@
+name: Build Fast Dev Patch
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pilot-production-rebuild-20261003
+    paths:
+      - "extracted/snapshot-2026-10-03/src/**"
+      - "extracted/snapshot-2026-10-03/server.ts"
+      - "extracted/snapshot-2026-10-03/package.json"
+      - "extracted/snapshot-2026-10-03/index.html"
+      - "extracted/snapshot-2026-10-03/public/**"
+      - "extracted/snapshot-2026-10-03/scripts/**"
+
+permissions:
+  contents: read
+
+jobs:
+  fast-patch:
+    runs-on: ubuntu-24.04
+    env:
+      APP_ROOT: extracted/snapshot-2026-10-03
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ${{ env.APP_ROOT }}/package.json
+
+      - name: Install application dependencies
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund --no-package-lock
+
+      - name: Lint and build
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run build
+
+      - name: Verify deployable dist
+        working-directory: ${{ env.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          test -s dist/index.html
+          test -s dist/server.cjs
+          node --check dist/server.cjs
+          mkdir -p fast-patch
+          cp -a dist fast-patch/dist
+          printf '%s\n' "${GITHUB_SHA}" > fast-patch/COMMIT_SHA
+          printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > fast-patch/BUILD_UTC
+          tar -czf fast-patch/splunk-doctor-dist-${GITHUB_SHA}.tar.gz -C fast-patch dist COMMIT_SHA BUILD_UTC
+          sha256sum fast-patch/splunk-doctor-dist-${GITHUB_SHA}.tar.gz > fast-patch/splunk-doctor-dist-${GITHUB_SHA}.tar.gz.sha256
+
+      - name: Upload fast patch
+        uses: actions/upload-artifact@v6
+        with:
+          name: pilot-fast-dist-${{ github.sha }}
+          path: |
+            ${{ env.APP_ROOT }}/fast-patch/splunk-doctor-dist-${{ github.sha }}.tar.gz
+            ${{ env.APP_ROOT }}/fast-patch/splunk-doctor-dist-${{ github.sha }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
