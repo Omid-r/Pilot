@@ -15,13 +15,14 @@ interface SplunkWebModalProps {
 export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   isOpen,
   onClose,
-  hostIp = '10.20.30.45',
+  hostIp,
   isFa = true
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeBlocked, setIframeBlocked] = useState(false);
 
-  const webUrl = `http://${hostIp}:8001/en-US/app/launcher/home`;
+  const targetHost = hostIp || (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1');
+  const webUrl = `http://${targetHost}:8001/en-US/app/launcher/home`;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,7 +56,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
           <div className="flex-1 max-w-xl mx-2 bg-[#080c13] border border-emerald-500/30 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2 text-xs font-mono text-emerald-400 shadow-inner">
             <div className="flex items-center gap-2 truncate">
               <span className="text-slate-500 font-bold">🔒 http://</span>
-              <span className="text-white font-semibold">{hostIp}:</span>
+              <span className="text-white font-semibold">{targetHost}:</span>
               <span className="text-amber-400 font-black">8001</span>
               <span className="text-slate-400">/en-US/app/launcher/home</span>
             </div>
@@ -146,7 +147,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition"
           >
-            {isFa ? 'بستن شبیه‌ساز وب' : 'Close Web View'}
+            {isFa ? 'بستن Splunk Web' : 'Close Splunk Web'}
           </button>
         </div>
       </div>
