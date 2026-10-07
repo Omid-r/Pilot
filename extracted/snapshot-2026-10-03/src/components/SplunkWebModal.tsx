@@ -9,6 +9,7 @@ interface SplunkWebModalProps {
   isOpen: boolean;
   onClose: () => void;
   hostIp?: string;
+  webPort?: number;
   isFa?: boolean;
 }
 
@@ -16,13 +17,14 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   isOpen,
   onClose,
   hostIp,
+  webPort = 8001,
   isFa = true
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeBlocked, setIframeBlocked] = useState(false);
 
   const targetHost = hostIp || (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1');
-  const webUrl = `http://${targetHost}:8001/en-US/app/launcher/home`;
+  const webUrl = `http://${targetHost}:${webPort}/en-US/app/launcher/home`;
 
   useEffect(() => {
     if (!isOpen) return;
