@@ -84,30 +84,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
           </div>
         </div>
 
-        {/* Splunk Web Internal Top Navigation Bar */}
-        <div className="bg-[#1f2937] text-white px-4 py-2 flex items-center justify-between border-b border-slate-700 text-xs shrink-0 select-none">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 font-black text-sm tracking-tight text-white">
-              <span className="text-amber-400 font-mono text-base">&gt;</span>
-              <span>splunk</span>
-              <span className="text-emerald-400 font-bold">&gt;enterprise</span>
-              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] px-1.5 py-0.2 rounded font-mono">
-                PARALLEL :8001
-              </span>
-            </div>
-
-          </div>
-
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-slate-400 font-mono hidden sm:inline">User: <strong className="text-white">admin</strong></span>
-            <span className="text-emerald-400 flex items-center gap-1 font-mono text-[11px]">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>Online</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Real Splunk Web target. The controls below remain available only as diagnostics fallback. */}
+        {/* Real Splunk Web target. No simulated Splunk chrome or session state is rendered here. */}
         <div className="relative flex-1 min-h-[420px] bg-white">
           {!iframeLoaded && !iframeBlocked && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090d14] text-xs text-emerald-300 font-mono">
@@ -118,7 +95,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#090d14] text-center p-6">
               <div className="text-sm font-bold text-amber-300">Splunk Web could not be embedded in this view.</div>
               <div className="text-xs text-slate-400 max-w-lg">
-                The target may reject iframe embedding via X-Frame-Options/CSP. Use “New Tab” above to open the real Splunk Web instance directly.
+                The browser may have blocked this embedded view (for example because of frame-embedding policy). Use “New Tab” above to open the real Splunk Web instance directly.
               </div>
               <a href={webUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl">
                 Open real Splunk Web
@@ -135,7 +112,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
           />
         </div>
 
-        {/* Real Splunk Web is the primary browser surface. Legacy simulated controls are intentionally removed. */}
+        {/* The iframe is the only Splunk Web surface; legacy simulated controls are intentionally absent. */}
         {/* Footer */}
         <div className="bg-[#121926] border-t border-slate-800 p-3 sm:px-5 flex items-center justify-between text-xs shrink-0">
           <div className="flex items-center gap-2 text-slate-400">
