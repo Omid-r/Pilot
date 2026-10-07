@@ -448,6 +448,21 @@ const DEFAULT_MODULES_CONFIG: AppModuleConfig[] = [
     order: 21
   },
   {
+    id: 'real_tool_audit',
+    category: 'tools_security',
+    categoryNameFa: 'ابزارها و امنیت',
+    categoryNameEn: 'Tools & Security',
+    domainColor: 'purple',
+    iconName: 'FileText',
+    titleFa: 'ممیزی و گزارش واقعی ابزارها',
+    titleEn: 'Real Tool Audit & Reporting',
+    badge: 'READ-ONLY',
+    descriptionFa: 'ممیزی واقعی وضعیت سرور، سوکت‌ها، نودها و شاخص‌های Splunk با گزارش قابل بررسی؛ بدون اجرای عملیات تغییردهنده',
+    descriptionEn: 'Read-only live audit of host, sockets, nodes and Splunk signals with reviewable reports; no mutating actions',
+    isEnabled: true,
+    order: 22
+  },
+  {
     id: 'system_update',
     category: 'tools_security',
     categoryNameFa: 'ابزارها و امنیت',
@@ -497,7 +512,12 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const next = [...parsed];
+          const auditModule = DEFAULT_MODULES_CONFIG.find(m => m.id === 'real_tool_audit');
+          if (auditModule && !next.some(m => m.id === auditModule.id)) next.push({ ...auditModule });
+          return next;
+        }
       } catch (_) {}
     }
     return DEFAULT_MODULES_CONFIG;
@@ -554,6 +574,7 @@ export default function App() {
     package_center: 'agents_gateway',
     backup_archive: 'tools_security',
     network_toolbox: 'tools_security',
+    real_tool_audit: 'tools_security',
     admin_security: 'tools_security',
     server_terminal: 'tools_security',
   };
@@ -2657,6 +2678,8 @@ export default function App() {
             </button>
           </div>
         );
+      case 'real_tool_audit':
+        return renderToolContent('bento_overview', isMiniView);
       case 'bento_overview':
         return (
           <BentoGridConsole
