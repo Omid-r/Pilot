@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Globe, 
   ExternalLink, 
@@ -47,6 +47,14 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
     { id: 5, timestamp: '2026-09-22 00:32:13.011', sourcetype: 'license_usage', level: 'INFO', message: 'License Master slave connection established. Allocation pool: Active.' },
   ]);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [iframeBlocked, setIframeBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setIframeLoaded(false);
+    setIframeBlocked(false);
+  }, [isOpen, webUrl]);
 
   if (!isOpen) return null;
 
@@ -182,6 +190,7 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
           </div>
         </div>
 
+        {/* Legacy simulated controls are retained below as a diagnostics fallback only. */}
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#090d14]">
           {/* App 1: Search & Reporting */}
