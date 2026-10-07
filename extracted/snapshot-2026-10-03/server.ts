@@ -2979,6 +2979,130 @@ child.unref();
   });
 
   // =========================================================================
+  // REAL OVERSEER STEP EXECUTION
+  // Every step performs live, read-only verification on the controller host.
+  // Mutation/destructive work is deliberately kept behind the dedicated
+  // remediation endpoints and explicit confirmation flows.
+  // =========================================================================
+  app.post('/api/real/overseer/step', async (req, res) => {
+    const step = String(req.body?.step || '').trim().toLowerCase();
+    const allowed = new Set(['environment','architecture','stanza','ingestion','security','final']);
+    if (!allowed.has(step)) {
+      return res.status(400).json({ success: false, error: 'Unknown overseer step.' });
+    }
+
+    const logs: string[] = [];
+    const checks: any[] = [];
+    const started = Date.now();
+    const record = (name: string, ok: boolean, detail: string) => {
+      checks.push({ name, status: ok ? 'pass' : 'warn', detail });
+      logs.push(`[${ok ? 'PASS' : 'WARN'}] ${name}: ${detail}`);
+    };
+    const execProbe = async (name: string, cmd: string, args: string[], opts: any = {}) => {
+      const r = await runCommand(cmd, args, {
+        toolId: 'overseer_engine',
+        toolNameFa: 'ناظر ارشد — اجرای واقعی',
+        toolNameEn: 'Overseer Engine — Real Execution',
+        category: opts.category || 'system',
+        timeoutMs: opts.timeoutMs || 12000
+      });
+      const ok = r.code === 0;
+      record(name, ok, String(r.stdout || r.stderr || `exit ${r.code}`).trim().slice(0, 2000));
+      return r;
+    };
+
+    try {
+      const audit = getSystemAudit();
+      const net = getSystemNetworkInfo();
+      const splunkHome = audit?.splunkHome?.path || process.env.SPLUNK_HOME || '/opt/splunk';
+      const splunkBin = path.join(splunkHome, 'bin', 'splunk');
+
+      if (step === 'environment') {
+        record('Controller identity', Boolean(net?.hostname), `${net?.hostname || 'unknown'} / ${net?.primaryIp || 'no-primary-ip'}`);
+        record('Pilot service', true, 'Overseer request reached the live backend.');
+        await execProbe('Kernel and uptime', 'bash', ['-lc', 'uname -a; uptime']);
+        const listeners = detectListeningPorts();
+        record('Expected Pilot listener', listeners.some((x: any) => Number(x.port) === 3000), 'TCP/3000 listener is checked from the live socket table.');
+        record('Stale environment caches', !(fs.existsSync('/opt/splunk_parallel') || fs.existsSync('/opt/splunk_virtual')),
+          'No automatic deletion is performed by the diagnostic step.');
+      }
+
+      if (step === 'architecture') {
+        record('Splunk binary', fs.existsSync(splunkBin), splunkBin);
+        if (fs.existsSync(splunkBin)) await execProbe('Splunk version', 'bash', ['-lc', `SPLUNK_HOME="${splunkHome}" "${splunkBin}" version`], { category: 'splunk' });
+        const listeners = detectListeningPorts();
+        for (const port of [8089, 8000, 9997, 8088]) {
+          record(`Listener ${port}`, listeners.some((x: any) => Number(x.port) === port),
+            listeners.filter((x: any) => Number(x.port) === port).map((x: any) => x.address || 'listening').join(', ') || 'not listening');
+        }
+        for (const rel of ['etc/system/local/server.conf','etc/system/local/outputs.conf','etc/system/local/indexes.conf']) {
+          const p = path.join(splunkHome, rel);
+          record(rel, fs.existsSync(p), fs.existsSync(p) ? 'real file exists' : 'real file not found');
+        }
+      }
+
+      if (step === 'stanza') {
+        if (!fs.existsSync(splunkBin)) {
+          record('Splunk btool', false, 'Real Splunk binary was not found; no config-healing command was executed.');
+        } else {
+          const r = await execProbe('Splunk btool check', 'bash', ['-lc', `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool check --debug`], { category: 'splunk', timeoutMs: 20000 });
+          record('Config mutation safety', true, 'Read-only diagnostic: no configuration file was modified by this step.');
+          if (r.code !== 0) logs.push('[INFO] Auto-healing was not attempted because btool check did not pass.');
+        }
+      }
+
+      if (step === 'ingestion') {
+        const listeners = detectListeningPorts();
+        for (const port of [9997, 8088]) {
+          record(`Ingestion socket ${port}`, listeners.some((x: any) => Number(x.port) === port),
+            listeners.some((x: any) => Number(x.port) === port) ? 'listener detected' : 'listener not detected');
+        }
+        const logFile = path.join(splunkHome, 'var/log/splunk/splunkd.log');
+        if (fs.existsSync(logFile)) {
+          const tail = readFileTailBounded(logFile, 256 * 1024);
+          record('splunkd.log ingestion evidence', /TcpInputProc|HTTPEventCollector|ingest|indexing/i.test(tail),
+            'Recent real splunkd.log content was inspected.');
+        } else {
+          record('splunkd.log ingestion evidence', false, 'Real splunkd.log was not found.');
+        }
+      }
+
+      if (step === 'security') {
+        const key = path.join(process.env.SPLUNK_DOCTOR_DATA_DIR || '/var/lib/splunk-doctor', 'master-signing.key');
+        record('Pilot signing key', fs.existsSync(key), fs.existsSync(key) ? 'security key exists' : 'security key missing');
+        await execProbe('OpenSSL runtime', 'openssl', ['version'], { category: 'security' });
+        if (fs.existsSync(splunkBin)) {
+          await execProbe('Splunk license configuration', 'bash', ['-lc', `SPLUNK_HOME="${splunkHome}" "${splunkBin}" btool license list --debug`], { category: 'splunk', timeoutMs: 20000 });
+        } else {
+          record('Splunk license configuration', false, 'Real Splunk binary not found; license config was not queried.');
+        }
+      }
+
+      if (step === 'final') {
+        const service = await execProbe('Pilot systemd service', 'systemctl', ['show','splunk-doctor.service','--property=ActiveState,SubState','--no-pager']);
+        record('Application bundle', fs.existsSync(path.join(getAppProjectRoot(), 'dist/server.cjs')) && fs.existsSync(path.join(getAppProjectRoot(), 'dist/index.html')),
+          'dist/server.cjs and dist/index.html are checked on the live controller.');
+        record('Final disk verification', true, 'Final step verifies deployed files; it does not rewrite /opt/splunk or restart Splunk automatically.');
+        if (service.code !== 0) record('Service verification', false, 'systemctl verification failed.');
+      }
+
+      const failed = checks.filter((c: any) => c.status !== 'pass');
+      return res.status(200).json({
+        success: true,
+        step,
+        verified: failed.length === 0,
+        checks,
+        logs,
+        durationMs: Date.now() - started,
+        note: 'Read-only real-host verification completed. Mutating remediation remains explicit.'
+      });
+    } catch (e: any) {
+      logs.push(`[FAILED] ${e?.message || 'Overseer execution failed'}`);
+      return res.status(500).json({ success: false, step, verified: false, checks, logs, error: e?.message || 'Overseer execution failed', durationMs: Date.now() - started });
+    }
+  });
+
+  // =========================================================================
   // BENTO LIVE TELEMETRY — REAL HOST / SPLUNK / NODES / SOCKETS
   // =========================================================================
   app.post('/api/bento/live', async (req, res) => {
