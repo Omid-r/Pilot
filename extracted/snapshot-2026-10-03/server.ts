@@ -781,6 +781,454 @@ child.unref();
     }
   });
 
+
+  // Helper to discover Splunk installation path across common environments and process table
+  // Discover a real Splunk installation from configured/installed binaries.
+  // Process-table inspection is intentionally not used by the product.
+  function findSplunkHome(): { path: string; detected: boolean; source: string } {
+    const candidates: Array<{ path: string; source: string }> = [];
+
+    if (process.env.SPLUNK_HOME) {
+      candidates.push({ path: process.env.SPLUNK_HOME, source: 'SPLUNK_HOME environment variable' });
+    }
+
+    candidates.push(
+      { path: '/opt/splunk', source: 'standard /opt/splunk path' },
+      { path: '/opt/splunkforwarder', source: 'standard /opt/splunkforwarder path' }
+    );
+
+    try {
+      const whichOut = execSync('command -v splunk 2>/dev/null || true', { encoding: 'utf8' }).trim();
+      if (whichOut) {
+        const realPath = fs.realpathSync(whichOut);
+        candidates.push({
+          path: path.dirname(path.dirname(realPath)),
+          source: 'installed splunk executable'
+        });
+      }
+    } catch (_) {}
+
+    for (const candidate of candidates) {
+      const home = path.resolve(candidate.path);
+      const binary = path.join(home, 'bin', 'splunk');
+      if (fs.existsSync(binary)) {
+        return { path: home, detected: true, source: candidate.source };
+      }
+    }
+
+    return { path: '/opt/splunk', detected: false, source: 'no real Splunk binary found' };
+  }
+  // Detect active listening ports directly on host OS using socket state only.
+  // No process-table inspection is performed.
+  type DetectedPort = {
+    port: number;
+    protocol: 'TCP' | 'UDP';
+    address: string;
+    isSplunk: boolean;
+  };
+  function detectListeningPorts(): DetectedPort[] {
+    const results: DetectedPort[] = [];
+    const seen = new Set<string>();
+
+    // Method A: Run ss -tuln / ss -tulpn
+    try {
+      const ssOutput = execSync('ss -tuln 2>/dev/null || true', { encoding: 'utf8' });
+      const lines = ssOutput.split('\n');
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 5) continue;
+        const proto = parts[0].toUpperCase();
+        if (!proto.includes('TCP') && !proto.includes('UDP')) continue;
+        const state = parts[1];
+        if (proto.includes('TCP') && state !== 'LISTEN') continue;
+
+        const localAddr = parts[4] || '';
+        const lastColon = localAddr.lastIndexOf(':');
+        if (lastColon === -1) continue;
+        const portStr = localAddr.slice(lastColon + 1);
+        const port = parseInt(portStr, 10);
+        if (isNaN(port)) continue;
+
+        const address = localAddr.slice(0, lastColon) || '0.0.0.0';
+        const key = `${proto}:${port}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const isSplunk = [8000, 8089, 9997, 8088, 514, 1514].includes(port);
+
+        results.push({
+          port,
+          protocol: proto.includes('UDP') ? 'UDP' : 'TCP',
+          address,
+          isSplunk
+        });
+      }
+    } catch (_) {}
+
+    // Method B: Parse kernel /proc/net/tcp and /proc/net/udp
+    if (results.length === 0) {
+      const parseProcNet = (filePath: string, protocol: 'TCP' | 'UDP') => {
+        try {
+          if (!fs.existsSync(filePath)) return;
+          const content = fs.readFileSync(filePath, 'utf8');
+          const lines = content.split('\n');
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            const cols = line.split(/\s+/);
+            if (cols.length < 4) continue;
+            const st = cols[3];
+            if (protocol === 'TCP' && st !== '0A') continue; // 0A is LISTEN
+
+            const localAddress = cols[1];
+            const [ipHex, portHex] = localAddress.split(':');
+            if (!portHex) continue;
+            const port = parseInt(portHex, 16);
+            if (isNaN(port)) continue;
+
+            const key = `${protocol}:${port}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            let ip = '0.0.0.0';
+            if (ipHex.length === 8) {
+              const b1 = parseInt(ipHex.substr(6, 2), 16);
+              const b2 = parseInt(ipHex.substr(4, 2), 16);
+              const b3 = parseInt(ipHex.substr(2, 2), 16);
+              const b4 = parseInt(ipHex.substr(0, 2), 16);
+              ip = `${b1}.${b2}.${b3}.${b4}`;
+            }
+
+            results.push({
+              port,
+              protocol,
+              address: ip,
+              isSplunk: [8000, 8089, 9997, 8088, 514, 1514].includes(port)
+            });
+          }
+        } catch (_) {}
+      };
+
+      parseProcNet('/proc/net/tcp', 'TCP');
+      parseProcNet('/proc/net/tcp6', 'TCP');
+      parseProcNet('/proc/net/udp', 'UDP');
+      parseProcNet('/proc/net/udp6', 'UDP');
+    }
+
+    return results.sort((a, b) => a.port - b.port);
+  }
+
+  // System permissions, tools, and Splunk diagnostics auditor
+  function getSystemAudit() {
+    const userInfo = os.userInfo();
+    const isRoot = (typeof process.getuid === 'function') ? process.getuid() === 0 : false;
+    const username = userInfo.username || 'unknown';
+
+    let groups: string[] = [];
+    try {
+      groups = execSync('groups 2>/dev/null || id -Gn 2>/dev/null || true', { encoding: 'utf8' }).trim().split(/\s+/).filter(Boolean);
+    } catch (_) {}
+
+    const isSplunkUser = username === 'splunk' || groups.includes('splunk');
+
+    const tools = {
+      ss: false,
+      netstat: false,
+      lsof: false,
+      ip: false,
+      firewallCmd: false,
+      procfs: fs.existsSync('/proc/net/tcp')
+    };
+
+    try { tools.ss = execSync('which ss 2>/dev/null || true', { encoding: 'utf8' }).trim().length > 0; } catch (_) {}
+    try { tools.netstat = execSync('which netstat 2>/dev/null || true', { encoding: 'utf8' }).trim().length > 0; } catch (_) {}
+    try { tools.lsof = execSync('which lsof 2>/dev/null || true', { encoding: 'utf8' }).trim().length > 0; } catch (_) {}
+    try { tools.ip = execSync('which ip 2>/dev/null || true', { encoding: 'utf8' }).trim().length > 0; } catch (_) {}
+    try { tools.firewallCmd = execSync('which firewall-cmd 2>/dev/null || true', { encoding: 'utf8' }).trim().length > 0; } catch (_) {}
+
+    const splunkDiscovery = findSplunkHome();
+    const splunkHome = splunkDiscovery.path;
+
+    const checkPerm = (rel: string) => {
+      const full = path.join(splunkHome, rel);
+      if (!fs.existsSync(full)) return { exists: false, readable: false, writable: false, path: full };
+      let readable = false;
+      let writable = false;
+      try {
+        fs.accessSync(full, fs.constants.R_OK);
+        readable = true;
+      } catch (_) {}
+      try {
+        fs.accessSync(full, fs.constants.W_OK);
+        writable = true;
+      } catch (_) {}
+      return { exists: true, readable, writable, path: full };
+    };
+
+    const filePermissions = {
+      serverConf: checkPerm('etc/system/local/server.conf'),
+      outputsConf: checkPerm('etc/system/local/outputs.conf'),
+      inputsConf: checkPerm('etc/system/local/inputs.conf'),
+      splunkdLog: checkPerm('var/log/splunk/splunkd.log')
+    };
+
+    const listeningPorts = detectListeningPorts();
+    const isContainer = fs.existsSync('/.dockerenv') || !!process.env.K_SERVICE || !!process.env.GAE_SERVICE;
+
+    return {
+      isContainer,
+      user: {
+        username,
+        uid: typeof process.getuid === 'function' ? process.getuid() : null,
+        gid: typeof process.getgid === 'function' ? process.getgid() : null,
+        isRoot,
+        isSplunkUser,
+        groups
+      },
+      tools,
+      splunkHome: splunkDiscovery,
+      filePermissions,
+      listeningPorts,
+      guidance: {
+        hasRootPrivilege: isRoot,
+        hasSplunkAccess: isRoot || isSplunkUser || filePermissions.serverConf.readable,
+        isRealServer: splunkDiscovery.detected,
+        statusFa: !splunkDiscovery.detected 
+          ? 'اسپلانک در مسیرهای استاندارد (/opt/splunk یا /opt/splunkforwarder) روی این ماشین یافت نشد. داده‌های نمایش داده شده به صورت دمو و شبیه‌سازی شده هستند.'
+          : !filePermissions.outputsConf.readable
+            ? 'اسپلانک روی سرور شناسایی شد، اما دسترسی خواندن فایل‌های کانفیگ به دلیل عدم اجرای برنامه با مجوز root یا کاربر splunk مسدود است.'
+            : 'اسپلانک واقعی و فایل‌های کانفیگ با موفقیت و دسترسی کامل خوانده شدند.',
+        fixCommand: isRoot 
+          ? 'مجوز Root فعال است و ابزار دسترسی کامل به شبکه و فایل‌ها دارد.' 
+          : 'برای دسترسی کامل به پورت‌های سیستمی و کانفیگ‌ها: sudo ./start.sh یا sudo bash install-service.sh'
+      }
+    };
+  }
+
+  // Helper to parse Splunk local configurations directly from disk if present
+  function parseSplunkLocalConfigs(splunkHome: string) {
+    const localDir = path.join(splunkHome, 'etc/system/local');
+    const result: {
+      serverName?: string;
+      mgmtHostPort?: string;
+      masterUri?: string;
+      licenseMasterUri?: string;
+      outputServers?: string[];
+      deploymentServerUri?: string;
+      inputs?: Array<{ stanza: string; port?: number; protocol: string; index?: string; sourcetype?: string }>;
+    } = {
+      inputs: []
+    };
+
+    if (!fs.existsSync(localDir)) {
+      return result;
+    }
+
+    // 1. server.conf
+    const serverConfPath = path.join(localDir, 'server.conf');
+    if (fs.existsSync(serverConfPath)) {
+      const content = fs.readFileSync(serverConfPath, 'utf8');
+      const sNameMatch = content.match(/serverName\s*=\s*([^\r\n#]+)/i);
+      if (sNameMatch) result.serverName = sNameMatch[1].trim();
+
+      const mgmtMatch = content.match(/mgmtHostPort\s*=\s*([^\r\n#]+)/i);
+      if (mgmtMatch) result.mgmtHostPort = mgmtMatch[1].trim();
+
+      const masterMatch = content.match(/\[clustering\][\s\S]*?master_uri\s*=\s*([^\r\n#]+)/i) || content.match(/master_uri\s*=\s*([^\r\n#]+)/i);
+      if (masterMatch) result.masterUri = masterMatch[1].trim();
+
+      const licMatch = content.match(/\[license\][\s\S]*?(?:master_uri|manager_uri)\s*=\s*([^\r\n#]+)/i);
+      if (licMatch) result.licenseMasterUri = licMatch[1].trim();
+    }
+
+    // 2. outputs.conf
+    const outputsConfPath = path.join(localDir, 'outputs.conf');
+    if (fs.existsSync(outputsConfPath)) {
+      const content = fs.readFileSync(outputsConfPath, 'utf8');
+      const serverMatch = content.match(/server\s*=\s*([^\r\n#]+)/i);
+      if (serverMatch) {
+        result.outputServers = serverMatch[1].trim().split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    // 3. deploymentclient.conf
+    const dcConfPath = path.join(localDir, 'deploymentclient.conf');
+    if (fs.existsSync(dcConfPath)) {
+      const content = fs.readFileSync(dcConfPath, 'utf8');
+      const targetMatch = content.match(/targetUri\s*=\s*([^\r\n#]+)/i);
+      if (targetMatch) {
+        result.deploymentServerUri = targetMatch[1].trim();
+      }
+    }
+
+    // 4. inputs.conf
+    const inputsConfPath = path.join(localDir, 'inputs.conf');
+    if (fs.existsSync(inputsConfPath)) {
+      const content = fs.readFileSync(inputsConfPath, 'utf8');
+      const stanzas = content.split(/^\[/m);
+      stanzas.forEach(st => {
+        if (!st.trim()) return;
+        const stanzaHeaderMatch = st.match(/^([^\]]+)\]/);
+        if (!stanzaHeaderMatch) return;
+        const stanzaHeader = stanzaHeaderMatch[1].trim();
+        const body = st.slice(stanzaHeaderMatch[0].length);
+
+        let protocol = 'TCP';
+        let port: number | undefined;
+
+        if (stanzaHeader.startsWith('udp://')) {
+          protocol = 'UDP';
+          port = parseInt(stanzaHeader.replace('udp://', ''), 10);
+        } else if (stanzaHeader.startsWith('tcp://')) {
+          protocol = 'TCP';
+          port = parseInt(stanzaHeader.replace('tcp://', ''), 10);
+        } else if (stanzaHeader.startsWith('splunktcp://') || stanzaHeader.startsWith('splunktcp-ssl:')) {
+          protocol = 'SplunkTCP';
+          port = parseInt(stanzaHeader.split('://')[1] || stanzaHeader.split(':')[1] || '9997', 10);
+        } else if (stanzaHeader === 'http' || stanzaHeader.startsWith('http://')) {
+          protocol = 'HEC';
+          const portM = body.match(/port\s*=\s*(\d+)/i);
+          port = portM ? parseInt(portM[1], 10) : 8088;
+        } else if (stanzaHeader.startsWith('monitor://')) {
+          protocol = 'File Monitor';
+        }
+
+        const idxMatch = body.match(/index\s*=\s*([^\r\n#]+)/i);
+        const stMatch = body.match(/sourcetype\s*=\s*([^\r\n#]+)/i);
+
+        result.inputs?.push({
+          stanza: `[${stanzaHeader}]`,
+          port,
+          protocol,
+          index: idxMatch ? idxMatch[1].trim() : undefined,
+          sourcetype: stMatch ? stMatch[1].trim() : undefined
+        });
+      });
+    }
+
+    return result;
+  }
+
+  // =========================================================================
+  // SECURITY & RBAC MIDDLEWARES
+  // =========================================================================
+
+  // Authentication Middleware: Validates Bearer Token & User Expiration
+  function readSessionCookie(req: express.Request): string {
+    const raw = req.headers.cookie || '';
+    for (const part of raw.split(';')) {
+      const trimmed = part.trim();
+      if (trimmed.startsWith('splunk_doctor_session=')) {
+        return decodeURIComponent(trimmed.slice('splunk_doctor_session='.length));
+      }
+    }
+    return '';
+  }
+
+  function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const authHeader = req.headers.authorization;
+    const headerToken = authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.replace('Bearer ', '').trim()
+      : '';
+    const cookieToken = readSessionCookie(req);
+    const token = headerToken || cookieToken;
+    if (!token) {
+      return res.status(401).json({
+        error: 'احراز هویت الزامی است. لطفاً ابتدا وارد حساب کاربری خود شوید.',
+        code: 'AUTH_REQUIRED'
+      });
+    }
+    const session = verifySessionToken(token);
+    if (!session) {
+      return res.status(401).json({ 
+        error: 'نشست کاربری شما نامعتبر یا منقضی شده است. لطفاً مجدداً وارد شوید.',
+        code: 'SESSION_EXPIRED'
+      });
+    }
+
+    if (session.isExpiredAccount) {
+      logAuditEvent(
+        'AUTH',
+        'EXPIRED_ACCOUNT_ACCESS_DENIED',
+        'DENIED',
+        session.user.username,
+        req.ip || 'unknown',
+        `تلاش برای دسترسی با حساب کاربری منقضی‌شده (${session.user.expiresAt}).`
+      );
+      return res.status(403).json({ 
+        error: 'مدت زمان اعتبار این حساب کاربری منقضی شده است. لطفاً جهت تمدید اشتراک با مدیر سیستم تماس بگیرید.',
+        code: 'ACCOUNT_EXPIRED',
+        expiresAt: session.user.expiresAt
+      });
+    }
+
+    (req as any).user = session.user;
+    (req as any).sessionToken = token;
+    next();
+  }
+
+  // RBAC Middleware: Checks User Role against Allowed Roles
+  function requireRoles(...allowedRoles: UserRole[]) {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const user = (req as any).user as UserAccount | undefined;
+      if (!user) {
+        return res.status(401).json({ error: 'احراز هویت الزامی است.', code: 'AUTH_REQUIRED' });
+      }
+
+      if (!allowedRoles.includes(user.role)) {
+        logAuditEvent(
+          'SECURITY',
+          'UNAUTHORIZED_ROLE_ACCESS',
+          'DENIED',
+          user.username,
+          req.ip || 'unknown',
+          `دسترسی غیرمجاز به مسیر ${req.path}. نقش کاربر: [${user.role}] - نقش‌های مجاز: [${allowedRoles.join(', ')}]`
+        );
+        return res.status(403).json({ 
+          error: `سطح دسترسی شما (${user.role}) برای اجرای این عملیات ناکافی است. این بخش نیاز به سطح ${allowedRoles.join(' یا ')} دارد.`,
+          code: 'FORBIDDEN_ROLE'
+        });
+      }
+
+      next();
+    };
+  }
+
+  // Granular Feature Permission Middleware: Checks specific feature capability
+  function requireFeature(feature: keyof FeaturePermissions) {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const user = (req as any).user as UserAccount | undefined;
+      if (!user) {
+        return res.status(401).json({ error: 'احراز هویت الزامی است.', code: 'AUTH_REQUIRED' });
+      }
+
+      // Super Admin has full master bypass
+      if (user.role === 'super_admin') {
+        return next();
+      }
+
+      const perms = user.permissions || getDefaultPermissionsForRole(user.role);
+      if (!perms?.features?.[feature]) {
+        logAuditEvent(
+          'SECURITY',
+          'UNAUTHORIZED_FEATURE_ACCESS',
+          'DENIED',
+          user.username,
+          req.ip || 'unknown',
+          `تلاش برای اجرای قابلیت غیرمجاز [${feature}] در مسیر ${req.path}.`
+        );
+        return res.status(403).json({
+          error: `حساب کاربری شما دارای مجوز لازم برای «${feature}» نمی‌باشد. لطفاً با مدیر ارشد سیستم تماس بگیرید.`,
+          code: 'FORBIDDEN_FEATURE',
+          feature
+        });
+      }
+
+      next();
+    };
+  }
+
+
   // API: Clear Server Command Log
   app.post('/api/system/command-log/clear', (req, res) => {
     serverCommandLogs.length = 0;
