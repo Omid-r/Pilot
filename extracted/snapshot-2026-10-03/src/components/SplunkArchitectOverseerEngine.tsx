@@ -114,11 +114,11 @@ export function SplunkArchitectOverseerEngine({
     {
       id: 'step-3-stanza-diagnostics',
       titleFa: 'گام ۳: عیب‌یابی استنزاها و اصلاح اتوماتیک',
-      titleEn: 'Step 3: Stanza Diagnostics & Auto-Healing',
+      titleEn: 'Step 3: Stanza Diagnostics & Read-only Verification',
       descFa: 'شناسایی و ترمیم خودکار ۱۰ تداخل بحرانی در outputs.conf، server.conf و inputs.conf',
-      descEn: 'Detect and auto-repair critical stanza collisions across outputs.conf, server.conf, inputs.conf',
+      descEn: 'Detect and report critical stanza collisions across outputs.conf, server.conf, inputs.conf',
       actionLabelFa: 'اجرای اصلاح خودکار کانفیگ‌ها',
-      actionLabelEn: 'Run Config Auto-Healing',
+      actionLabelEn: 'Run Stanza Verification',
       targetTab: 'health_audit'
     },
     {
@@ -144,11 +144,11 @@ export function SplunkArchitectOverseerEngine({
     {
       id: 'step-6-final-verification',
       titleFa: 'گام ۶: تاییدیه معمار ارشد و ذخیره روی دیسک',
-      titleEn: 'Step 6: Master Architect Sign-off & Disk Sync',
+      titleEn: 'Step 6: Master Architect Sign-off & Final Verification',
       descFa: 'همگام‌سازی نهایی تمام تغییرات روی دیسک /opt/splunk/etc/system/local و صدور شناسنامه سلامت ۱۰۰٪',
-      descEn: 'Final disk sync to /opt/splunk/etc/system/local and issuance of 100% clean health certificate',
+      descEn: 'Final verification of deployed files, service state, and host readiness; no automatic config writes are performed',
       actionLabelFa: 'ذخیره نهایی و صدور شناسنامه',
-      actionLabelEn: 'Disk Sync & Final Sign-off',
+      actionLabelEn: 'Final Verification',
       targetTab: 'bento_overview'
     }
   ];
@@ -168,19 +168,20 @@ export function SplunkArchitectOverseerEngine({
       const data = await res.json();
       if(!res.ok || !data.success) throw new Error(data.error || `Overseer step ${step} failed`);
       setOverseerLogs(prev => [...prev, ...(data.logs || []), `[${new Date().toLocaleTimeString()}] REAL verification completed.`]);
+      const verified = data.verified !== false;
       onLogBackendOperation(
         'overseer_engine',
         'ناظر ارشد - اجرای واقعی',
         'Overseer Engine - Real Execution',
         `اجرای واقعی مرحله ${step}`,
         `Real execution of overseer step ${step}`,
-        'success',
-        'Backend execution and verification completed.',
-        'Backend execution and verification completed.',
+        verified ? 'success' : 'warning',
+        verified ? 'Backend execution and verification completed.' : 'Backend execution completed with one or more verification warnings.',
+        verified ? 'Backend execution and verification completed.' : 'Backend execution completed with one or more verification warnings.',
         JSON.stringify(data).slice(0, 4000),
         Date.now()-started
       );
-      setStepStatuses(prev => { const n=[...prev]; n[stepIdx]='success'; return n; });
+      setStepStatuses(prev => { const n=[...prev]; n[stepIdx]=verified ? 'success' : 'warning'; return n; });
     } catch(e:any) {
       setOverseerLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] FAILED: ${e.message}`]);
       onLogBackendOperation(
@@ -200,10 +201,11 @@ export function SplunkArchitectOverseerEngine({
 
     try {
       const executionLogs: string[] = [];
+      let hadWarnings = false;
       for (let i = 0; i < stepMap.length; i++) {
         const step = stepMap[i];
         const started = Date.now();
-        setStepStatuses(prev => prev.map((v, idx) => idx === i ? 'running' : (idx < i ? 'success' : 'idle')) as any);
+        setStepStatuses(prev => prev.map((v, idx) => idx === i ? 'running' : (idx < i ? v : 'idle')) as any);
         const res = await fetch('/api/real/overseer/step', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
@@ -213,17 +215,19 @@ export function SplunkArchitectOverseerEngine({
         if (!res.ok || !data.success) {
           throw new Error(data.error || `Overseer step ${step} failed`);
         }
+        const verified = data.verified !== false;
+        if (!verified) hadWarnings = true;
         const logs = Array.isArray(data.logs) ? data.logs : [];
         executionLogs.push(...logs);
         setOverseerLogs([...executionLogs]);
-        setStepStatuses(prev => prev.map((v, idx) => idx <= i ? 'success' : 'idle') as any);
+        setStepStatuses(prev => prev.map((v, idx) => idx < i ? v : (idx === i ? (verified ? 'success' : 'warning') : 'idle')) as any);
         onLogBackendOperation(
           'overseer_engine',
           `ناظر ارشد - ${step}`,
           `Overseer - ${step}`,
           `اجرای واقعی مرحله ${step}`,
           `Real execution of ${step}`,
-          'success',
+          verified ? 'success' : 'warning',
           logs.join('\n'),
           logs.join('\n'),
           '',
@@ -231,7 +235,10 @@ export function SplunkArchitectOverseerEngine({
         );
       }
       onRescanAudit(true);
-      setOverseerLogs(prev => [...prev, isFa ? '✅ تمام مراحل ناظر ارشد با نتیجه واقعی تکمیل شد.' : '✅ All Overseer stages completed with real execution results.']);
+      setOverseerLogs(prev => [...prev, hadWarnings
+        ? (isFa ? '⚠️ تمام مراحل ناظر ارشد اجرا شدند، اما یک یا چند مورد نیازمند بررسی باقی است.' : '⚠️ All Overseer stages executed, but one or more verification warnings remain.')
+        : (isFa ? '✅ تمام مراحل ناظر ارشد با نتیجهٔ verification واقعی تکمیل شد.' : '✅ All Overseer stages completed with verified real execution results.')
+      ]);
     } catch (e: any) {
       setOverseerLogs(prev => [...prev, `[FAILED] ${e?.message || 'Overseer execution failed'}`]);
       setStepStatuses(prev => {
@@ -269,8 +276,8 @@ export function SplunkArchitectOverseerEngine({
             </h1>
             <p className="text-sm text-slate-300 max-w-3xl leading-relaxed">
               {isFa 
-                ? 'سامانه هوشمند پایش لایه‌ای، عیب‌یابی خودکار کانفیگ‌ها، مدیریت کش سرورهای ازدست‌رفته و ساده‌سازی ابزارها. این ناظر کارکرد واقعی تمام بخش‌های سامانه را پایش و ترمیم می‌کند.' 
-                : 'Central supervisory engine for layer-by-layer cluster auditing, automatic config healing, decommissioned server cache purge, and UI consolidation.'}
+                ? 'سامانه پایش لایه‌ای با اجرای واقعی روی هاست، تشخیص وضعیت کانفیگ‌ها، و کنترل‌های اصلاحی صریح. این ناظر وضعیت واقعی بخش‌های سامانه را بررسی می‌کند و نتیجهٔ verification را نمایش می‌دهد.' 
+                : 'Central supervisory engine for layer-by-layer cluster auditing, real-host verification, explicit remediation controls, and UI consolidation.'}
             </p>
           </div>
 
