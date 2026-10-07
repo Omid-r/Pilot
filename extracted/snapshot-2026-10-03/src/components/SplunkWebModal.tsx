@@ -3,21 +3,9 @@ import {
   Globe, 
   ExternalLink, 
   X, 
-  Search, 
-  Play, 
-  RotateCw, 
-  Server, 
-  Database, 
-  ShieldCheck, 
-  CheckCircle2, 
-  Activity, 
-  Layers, 
-  HardDrive,
+  ShieldCheck,
   Copy,
-  Check,
-  Radio,
-  Terminal,
-  FileCode
+  Check
 } from 'lucide-react';
 import { ParallelClusterState } from '../types';
 
@@ -32,7 +20,6 @@ interface SplunkWebModalProps {
 export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   isOpen,
   onClose,
-  parallelClusterState,
   hostIp = '10.20.30.45',
   isFa = true
 }) => {
@@ -59,24 +46,6 @@ export const SplunkWebModal: React.FC<SplunkWebModalProps> = ({
   }, [isOpen, webUrl]);
 
   if (!isOpen) return null;
-
-  const handleRunSearch = () => {
-    setIsSearching(true);
-    setTimeout(() => {
-      setIsSearching(false);
-      setSearchResults([
-        { id: Date.now() + 1, timestamp: new Date().toISOString().replace('T', ' ').substring(0, 23), sourcetype: 'splunkd', level: 'INFO', message: `Query execution completed: ${searchQuery} — Processed 1,420 events in 0.042 seconds.` },
-        { id: Date.now() + 2, timestamp: new Date().toISOString().replace('T', ' ').substring(0, 23), sourcetype: 'splunkd_access', level: 'INFO', message: 'GET /services/search/jobs/1726998000.41/results HTTP/1.1 200' },
-        ...searchResults.slice(0, 5)
-      ]);
-    }, 600);
-  };
-
-  const handleCopyUrl = () => {
-    navigator.clipboard.writeText(webUrl);
-    setCopiedUrl(true);
-    setTimeout(() => setCopiedUrl(false), 2000);
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
